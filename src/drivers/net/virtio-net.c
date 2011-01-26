@@ -143,6 +143,9 @@ static void virtnet_transmit(struct nic *nic, const char *destaddr,
         unsigned int type, unsigned int len, const char *data)
 {
    struct vring_list list[2];
+   unsigned int blen = len + sizeof tx_eth_frame.hdr;
+   if (blen < 64)
+      blen = 64;
 
    /*
     * from http://www.etherboot.org/wiki/dev/devmanual :
@@ -170,7 +173,7 @@ static void virtnet_transmit(struct nic *nic, const char *destaddr,
    list[0].addr = (char*)&tx_virtio_hdr;
    list[0].length = sizeof(struct virtio_net_hdr);
    list[1].addr = (char*)&tx_eth_frame;
-   list[1].length = ETH_FRAME_LEN;
+   list[1].length = blen;
 
    vring_add_buf(&virtqueue[TX_INDEX], list, 2, 0, 0, 0);
 
