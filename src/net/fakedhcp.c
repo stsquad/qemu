@@ -112,7 +112,8 @@ int create_fakedhcpdiscover ( struct net_device *netdev,
 	int rc;
 
 	if ( ( rc = dhcp_create_request ( &dhcppkt, netdev, DHCPDISCOVER,
-					  ciaddr, data, max_len ) ) != 0 ) {
+					  dhcp_last_xid, ciaddr, data,
+					  max_len ) ) != 0 ) {
 		DBG ( "Could not create DHCPDISCOVER: %s\n",
 		      strerror ( rc ) );
 		return rc;
@@ -137,7 +138,8 @@ int create_fakedhcpack ( struct net_device *netdev,
 	int rc;
 
 	/* Create base DHCPACK packet */
-	if ( ( rc = dhcp_create_packet ( &dhcppkt, netdev, DHCPACK, NULL, 0,
+	if ( ( rc = dhcp_create_packet ( &dhcppkt, netdev, DHCPACK,
+					 dhcp_last_xid, NULL, 0,
 					 data, max_len ) ) != 0 ) {
 		DBG ( "Could not create DHCPACK: %s\n", strerror ( rc ) );
 		return rc;
@@ -188,7 +190,8 @@ int create_fakepxebsack ( struct net_device *netdev,
 	}
 
 	/* Create base DHCPACK packet */
-	if ( ( rc = dhcp_create_packet ( &dhcppkt, netdev, DHCPACK, NULL, 0,
+	if ( ( rc = dhcp_create_packet ( &dhcppkt, netdev, DHCPACK,
+					 dhcp_last_xid, NULL, 0,
 					 data, max_len ) ) != 0 ) {
 		DBG ( "Could not create PXE BS ACK: %s\n",
 		      strerror ( rc ) );
