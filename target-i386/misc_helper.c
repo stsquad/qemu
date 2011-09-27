@@ -27,8 +27,10 @@ void helper_outb(CPUX86State *env, uint32_t port, uint32_t data)
 #ifdef CONFIG_USER_ONLY
     fprintf(stderr, "outb: port=0x%04x, data=%02x\n", port, data);
 #else
+    qemu_mutex_lock_iothread();
     address_space_stb(&address_space_io, port, data,
                       cpu_get_mem_attrs(env), NULL);
+    qemu_mutex_unlock_iothread();
 #endif
 }
 
@@ -38,8 +40,13 @@ target_ulong helper_inb(CPUX86State *env, uint32_t port)
     fprintf(stderr, "inb: port=0x%04x\n", port);
     return 0;
 #else
-    return address_space_ldub(&address_space_io, port,
+    target_ulong ret;
+
+    qemu_mutex_lock_iothread();
+    ret = address_space_ldub(&address_space_io, port,
                               cpu_get_mem_attrs(env), NULL);
+    qemu_mutex_unlock_iothread();
+    return ret;
 #endif
 }
 
@@ -48,8 +55,10 @@ void helper_outw(CPUX86State *env, uint32_t port, uint32_t data)
 #ifdef CONFIG_USER_ONLY
     fprintf(stderr, "outw: port=0x%04x, data=%04x\n", port, data);
 #else
+    qemu_mutex_lock_iothread();
     address_space_stw(&address_space_io, port, data,
                       cpu_get_mem_attrs(env), NULL);
+    qemu_mutex_unlock_iothread();
 #endif
 }
 
@@ -59,8 +68,13 @@ target_ulong helper_inw(CPUX86State *env, uint32_t port)
     fprintf(stderr, "inw: port=0x%04x\n", port);
     return 0;
 #else
-    return address_space_lduw(&address_space_io, port,
+    target_ulong ret;
+
+    qemu_mutex_lock_iothread();
+    ret = address_space_lduw(&address_space_io, port,
                               cpu_get_mem_attrs(env), NULL);
+    qemu_mutex_unlock_iothread();
+    return ret;
 #endif
 }
 
@@ -69,8 +83,10 @@ void helper_outl(CPUX86State *env, uint32_t port, uint32_t data)
 #ifdef CONFIG_USER_ONLY
     fprintf(stderr, "outw: port=0x%04x, data=%08x\n", port, data);
 #else
+    qemu_mutex_lock_iothread();
     address_space_stl(&address_space_io, port, data,
                       cpu_get_mem_attrs(env), NULL);
+    qemu_mutex_unlock_iothread();
 #endif
 }
 
@@ -80,8 +96,13 @@ target_ulong helper_inl(CPUX86State *env, uint32_t port)
     fprintf(stderr, "inl: port=0x%04x\n", port);
     return 0;
 #else
-    return address_space_ldl(&address_space_io, port,
+    target_ulong ret;
+
+    qemu_mutex_lock_iothread();
+    ret = address_space_ldl(&address_space_io, port,
                              cpu_get_mem_attrs(env), NULL);
+    qemu_mutex_unlock_iothread();
+    return ret;
 #endif
 }
 
