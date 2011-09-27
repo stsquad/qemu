@@ -158,9 +158,13 @@ static inline DATA_TYPE glue(io_read, SUFFIX)(CPUArchState *env,
         cpu_io_recompile(cpu, retaddr);
     }
 
+    qemu_mutex_lock_iothread();
+
     cpu->mem_io_vaddr = addr;
     memory_region_dispatch_read(mr, physaddr, &val, 1 << SHIFT,
                                 iotlbentry->attrs);
+
+    qemu_mutex_unlock_iothread();
     return val;
 }
 #endif
@@ -378,10 +382,12 @@ static inline void glue(io_write, SUFFIX)(CPUArchState *env,
         cpu_io_recompile(cpu, retaddr);
     }
 
+    qemu_mutex_lock_iothread();
     cpu->mem_io_vaddr = addr;
     cpu->mem_io_pc = retaddr;
     memory_region_dispatch_write(mr, physaddr, val, 1 << SHIFT,
                                  iotlbentry->attrs);
+    qemu_mutex_unlock_iothread();
 }
 
 void helper_le_st_name(CPUArchState *env, target_ulong addr, DATA_TYPE val,

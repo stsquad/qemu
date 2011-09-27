@@ -1875,6 +1875,7 @@ static void check_watchpoint(int offset, int len, MemTxAttrs attrs, int flags)
             wp->hitaddr = vaddr;
             wp->hitattrs = attrs;
             if (!cpu->watchpoint_hit) {
+                qemu_mutex_unlock_iothread();
                 cpu->watchpoint_hit = wp;
                 tb_check_watchpoint(cpu);
                 if (wp->flags & BP_STOP_BEFORE_ACCESS) {
@@ -2785,6 +2786,7 @@ static inline uint32_t address_space_ldl_internal(AddressSpace *as, hwaddr addr,
     mr = address_space_translate(as, addr, &addr1, &l, false);
     if (l < 4 || !memory_access_is_direct(mr, false)) {
         /* I/O case */
+        qemu_mutex_lock_iothread();
         r = memory_region_dispatch_read(mr, addr1, &val, 4, attrs);
 #if defined(TARGET_WORDS_BIGENDIAN)
         if (endian == DEVICE_LITTLE_ENDIAN) {
@@ -2795,6 +2797,7 @@ static inline uint32_t address_space_ldl_internal(AddressSpace *as, hwaddr addr,
             val = bswap32(val);
         }
 #endif
+        qemu_mutex_unlock_iothread();
     } else {
         /* RAM case */
         ptr = qemu_get_ram_ptr((memory_region_get_ram_addr(mr)
@@ -2874,6 +2877,7 @@ static inline uint64_t address_space_ldq_internal(AddressSpace *as, hwaddr addr,
                                  false);
     if (l < 8 || !memory_access_is_direct(mr, false)) {
         /* I/O case */
+        qemu_mutex_lock_iothread();
         r = memory_region_dispatch_read(mr, addr1, &val, 8, attrs);
 #if defined(TARGET_WORDS_BIGENDIAN)
         if (endian == DEVICE_LITTLE_ENDIAN) {
@@ -2884,6 +2888,7 @@ static inline uint64_t address_space_ldq_internal(AddressSpace *as, hwaddr addr,
             val = bswap64(val);
         }
 #endif
+        qemu_mutex_unlock_iothread();
     } else {
         /* RAM case */
         ptr = qemu_get_ram_ptr((memory_region_get_ram_addr(mr)
@@ -2983,6 +2988,7 @@ static inline uint32_t address_space_lduw_internal(AddressSpace *as,
                                  false);
     if (l < 2 || !memory_access_is_direct(mr, false)) {
         /* I/O case */
+        qemu_mutex_lock_iothread();
         r = memory_region_dispatch_read(mr, addr1, &val, 2, attrs);
 #if defined(TARGET_WORDS_BIGENDIAN)
         if (endian == DEVICE_LITTLE_ENDIAN) {
@@ -2993,6 +2999,7 @@ static inline uint32_t address_space_lduw_internal(AddressSpace *as,
             val = bswap16(val);
         }
 #endif
+        qemu_mutex_unlock_iothread();
     } else {
         /* RAM case */
         ptr = qemu_get_ram_ptr((memory_region_get_ram_addr(mr)
@@ -3070,7 +3077,9 @@ void address_space_stl_notdirty(AddressSpace *as, hwaddr addr, uint32_t val,
     mr = address_space_translate(as, addr, &addr1, &l,
                                  true);
     if (l < 4 || !memory_access_is_direct(mr, true)) {
+        qemu_mutex_lock_iothread();
         r = memory_region_dispatch_write(mr, addr1, val, 4, attrs);
+        qemu_mutex_unlock_iothread();
     } else {
         addr1 += memory_region_get_ram_addr(mr) & TARGET_PAGE_MASK;
         ptr = qemu_get_ram_ptr(addr1);
@@ -3078,10 +3087,12 @@ void address_space_stl_notdirty(AddressSpace *as, hwaddr addr, uint32_t val,
 
         if (unlikely(in_migration)) {
             if (cpu_physical_memory_is_clean(addr1)) {
+                qemu_mutex_lock_iothread();
                 /* invalidate code */
                 tb_invalidate_phys_page_range(addr1, addr1 + 4, 0);
                 /* set dirty bit */
                 cpu_physical_memory_set_dirty_range_nocode(addr1, 4);
+                qemu_mutex_unlock_iothread();
             }
         }
         r = MEMTX_OK;
@@ -3123,7 +3134,9 @@ static inline void address_space_stl_internal(AddressSpace *as,
             val = bswap32(val);
         }
 #endif
+        qemu_mutex_lock_iothread();
         r = memory_region_dispatch_write(mr, addr1, val, 4, attrs);
+        qemu_mutex_unlock_iothread();
     } else {
         /* RAM case */
         addr1 += memory_region_get_ram_addr(mr) & TARGET_PAGE_MASK;
@@ -3139,7 +3152,9 @@ static inline void address_space_stl_internal(AddressSpace *as,
             stl_p(ptr, val);
             break;
         }
+        qemu_mutex_lock_iothread();
         invalidate_and_set_dirty(addr1, 4);
+        qemu_mutex_unlock_iothread();
         r = MEMTX_OK;
     }
     if (result) {
@@ -3227,7 +3242,9 @@ static inline void address_space_stw_internal(AddressSpace *as,
             val = bswap16(val);
         }
 #endif
+        qemu_mutex_lock_iothread();
         r = memory_region_dispatch_write(mr, addr1, val, 2, attrs);
+        qemu_mutex_unlock_iothread();
     } else {
         /* RAM case */
         addr1 += memory_region_get_ram_addr(mr) & TARGET_PAGE_MASK;
@@ -3243,8 +3260,10 @@ static inline void address_space_stw_internal(AddressSpace *as,
             stw_p(ptr, val);
             break;
         }
+        qemu_mutex_lock_iothread();
         invalidate_and_set_dirty(addr1, 2);
         r = MEMTX_OK;
+        qemu_mutex_unlock_iothread();
     }
     if (result) {
         *result = r;
@@ -3293,11 +3312,13 @@ void address_space_stq(AddressSpace *as, hwaddr addr, uint64_t val,
                        MemTxAttrs attrs, MemTxResult *result)
 {
     MemTxResult r;
+    qemu_mutex_lock_iothread();
     val = tswap64(val);
     r = address_space_rw(as, addr, attrs, (void *) &val, 8, 1);
     if (result) {
         *result = r;
     }
+    qemu_mutex_unlock_iothread();
 }
 
 void address_space_stq_le(AddressSpace *as, hwaddr addr, uint64_t val,
@@ -3314,11 +3335,13 @@ void address_space_stq_be(AddressSpace *as, hwaddr addr, uint64_t val,
                        MemTxAttrs attrs, MemTxResult *result)
 {
     MemTxResult r;
+    qemu_mutex_lock_iothread();
     val = cpu_to_be64(val);
     r = address_space_rw(as, addr, attrs, (void *) &val, 8, 1);
     if (result) {
         *result = r;
     }
+    qemu_mutex_unlock_iothread();
 }
 
 void stq_phys(AddressSpace *as, hwaddr addr, uint64_t val)
