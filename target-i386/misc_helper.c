@@ -24,32 +24,53 @@
 
 void helper_outb(uint32_t port, uint32_t data)
 {
+    qemu_mutex_lock_iothread();
     cpu_outb(port, data & 0xff);
+    qemu_mutex_unlock_iothread();
 }
 
 target_ulong helper_inb(uint32_t port)
 {
-    return cpu_inb(port);
+    target_ulong ret;
+
+    qemu_mutex_lock_iothread();
+    ret = cpu_inb(port);
+    qemu_mutex_unlock_iothread();
+    return ret;
 }
 
 void helper_outw(uint32_t port, uint32_t data)
 {
+    qemu_mutex_lock_iothread();
     cpu_outw(port, data & 0xffff);
+    qemu_mutex_unlock_iothread();
 }
 
 target_ulong helper_inw(uint32_t port)
 {
-    return cpu_inw(port);
+    target_ulong ret;
+
+    qemu_mutex_lock_iothread();
+    ret = cpu_inw(port);
+    qemu_mutex_unlock_iothread();
+    return ret;
 }
 
 void helper_outl(uint32_t port, uint32_t data)
 {
+    qemu_mutex_lock_iothread();
     cpu_outl(port, data);
+    qemu_mutex_unlock_iothread();
 }
 
 target_ulong helper_inl(uint32_t port)
 {
-    return cpu_inl(port);
+    target_ulong ret;
+
+    qemu_mutex_lock_iothread();
+    ret = cpu_inl(port);
+    qemu_mutex_unlock_iothread();
+    return ret;
 }
 
 void helper_into(CPUX86State *env, int next_eip_addend)
