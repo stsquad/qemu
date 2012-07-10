@@ -4316,6 +4316,15 @@ static int do_fork(CPUArchState *env, unsigned int flags, abi_ulong newsp,
         if (nptl_flags & CLONE_SETTLS)
             cpu_set_tls (new_env, newtls);
 
+        /* agraf: Pin ourselves to a single CPU when running multi-threaded.
+           This turned out to improve stability for me. */
+        {
+            cpu_set_t mask;
+            CPU_ZERO(&mask);
+            CPU_SET(0, &mask);
+            sched_setaffinity(0, sizeof(mask), &mask);
+        }
+
         /* Grab a mutex so that thread setup appears atomic.  */
         pthread_mutex_lock(&clone_lock);
 
