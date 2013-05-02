@@ -1242,6 +1242,8 @@ void kvm_arch_pre_run(CPUState *cs, struct kvm_run *run)
     int r;
     unsigned irq;
 
+    qemu_mutex_lock_iothread();
+
     /* PowerPC QEMU tracks the various core input pins (interrupt, critical
      * interrupt, reset, etc) in PPC-specific env->irq_input_state. */
     if (!cap_interrupt_level &&
@@ -1269,6 +1271,8 @@ void kvm_arch_pre_run(CPUState *cs, struct kvm_run *run)
     /* We don't know if there are more interrupts pending after this. However,
      * the guest will return to userspace in the course of handling this one
      * anyways, so we will get a chance to deliver the rest. */
+
+    qemu_mutex_unlock_iothread();
 }
 
 MemTxAttrs kvm_arch_post_run(CPUState *cs, struct kvm_run *run)

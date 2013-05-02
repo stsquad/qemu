@@ -1795,6 +1795,8 @@ int kvm_cpu_exec(CPUState *cpu)
         return EXCP_HLT;
     }
 
+    qemu_mutex_unlock_iothread();
+
     do {
         MemTxAttrs attrs;
 
@@ -1813,11 +1815,9 @@ int kvm_cpu_exec(CPUState *cpu)
              */
             qemu_cpu_kick_self();
         }
-        qemu_mutex_unlock_iothread();
 
         run_ret = kvm_vcpu_ioctl(cpu, KVM_RUN, 0);
 
-        qemu_mutex_lock_iothread();
         attrs = kvm_arch_post_run(cpu, run);
 
         if (run_ret < 0) {
@@ -1845,11 +1845,13 @@ int kvm_cpu_exec(CPUState *cpu)
             break;
         case KVM_EXIT_MMIO:
             DPRINTF("handle_mmio\n");
+            qemu_mutex_lock_iothread();
             address_space_rw(&address_space_memory,
                              run->mmio.phys_addr, attrs,
                              run->mmio.data,
                              run->mmio.len,
                              run->mmio.is_write);
+            qemu_mutex_unlock_iothread();
             ret = 0;
             break;
         case KVM_EXIT_IRQ_WINDOW_OPEN:
@@ -1858,7 +1860,9 @@ int kvm_cpu_exec(CPUState *cpu)
             break;
         case KVM_EXIT_SHUTDOWN:
             DPRINTF("shutdown\n");
+            qemu_mutex_lock_iothread();
             qemu_system_reset_request();
+            qemu_mutex_unlock_iothread();
             ret = EXCP_INTERRUPT;
             break;
         case KVM_EXIT_UNKNOWN:
@@ -1887,10 +1891,14 @@ int kvm_cpu_exec(CPUState *cpu)
             break;
         default:
             DPRINTF("kvm_arch_handle_exit\n");
+            qemu_mutex_lock_iothread();
             ret = kvm_arch_handle_exit(cpu, run);
+            qemu_mutex_unlock_iothread();
             break;
         }
     } while (ret == 0);
+
+    qemu_mutex_lock_iothread();
 
     if (ret < 0) {
         cpu_dump_state(cpu, stderr, fprintf, CPU_DUMP_CODE);
