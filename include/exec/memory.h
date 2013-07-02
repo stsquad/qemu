@@ -1150,6 +1150,8 @@ void address_space_destroy(AddressSpace *as);
  * or failed (eg unassigned memory, device rejected the transaction,
  * IOMMU fault).
  *
+ * NOTE: The iothread lock must be held when calling this function.
+ *
  * @as: #AddressSpace to be accessed
  * @addr: address within that address space
  * @attrs: memory transaction attributes
@@ -1159,6 +1161,24 @@ void address_space_destroy(AddressSpace *as);
 MemTxResult address_space_rw(AddressSpace *as, hwaddr addr,
                              MemTxAttrs attrs, uint8_t *buf,
                              int len, bool is_write);
+
+/**
+ * address_space_rw_unlocked: read from or write to an address space outside
+ * of the iothread lock.
+ *
+ * Return true if the operation hit any unassigned memory or encountered an
+ * IOMMU fault.
+ *
+ * NOTE: The iothread lock *must not* be held when calling this function.
+ *
+ * @as: #AddressSpace to be accessed
+ * @addr: address within that address space
+ * @buf: buffer with the data transferred
+ * @is_write: indicates the transfer direction
+ */
+MemTxResult address_space_rw_unlocked(AddressSpace *as, hwaddr addr,
+                                      MemTxAttrs attrs, uint8_t *buf,
+                                      int len, bool is_write);
 
 /**
  * address_space_write: write to address space.
