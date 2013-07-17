@@ -910,12 +910,7 @@ static void blk_disconnect(struct XenDevice *xendev)
     struct XenBlkDev *blkdev = container_of(xendev, struct XenBlkDev, xendev);
 
     if (blkdev->bs) {
-        if (!blkdev->dinfo) {
-            /* close/delete only if we created it ourself */
-            bdrv_close(blkdev->bs);
-            bdrv_detach_dev(blkdev->bs, blkdev);
-            bdrv_unref(blkdev->bs);
-        }
+        bdrv_detach_dev(blkdev->bs, blkdev);
         blkdev->bs = NULL;
     }
     xen_be_unbind_evtchn(&blkdev->xendev);
