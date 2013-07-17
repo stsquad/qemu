@@ -1511,6 +1511,9 @@ static void bdrv_move_feature_fields(BlockDriverState *bs_dest,
     /* dirty bitmap */
     bs_dest->dirty_bitmap       = bs_src->dirty_bitmap;
 
+    /* reference count */
+    bs_dest->refcnt             = bs_src->refcnt;
+
     /* job */
     bs_dest->in_use             = bs_src->in_use;
     bs_dest->job                = bs_src->job;
@@ -4385,15 +4388,33 @@ int64_t bdrv_get_dirty_count(BlockDriverState *bs)
     }
 }
 
-void bdrv_set_in_use(BlockDriverState *bs, int in_use)
+/* Get a reference to bs */
+void bdrv_ref(BlockDriverState *bs)
 {
-    assert(bs->in_use != in_use);
-    bs->in_use = in_use;
+    bs->refcnt++;
+}
+
+/* Release a previously grabbed reference to bs.
+ * If after releasing, reference count is zero, the BlockDriverState is
+ * deleted. */
+void bdrv_unref(BlockDriverState *bs)
+{
+    assert(bs->refcnt > 0);
+    if (--bs->refcnt == 0) {
+        bdrv_close(bs);
+        bdrv_delete(bs);
+    }
 }
 
 int bdrv_in_use(BlockDriverState *bs)
 {
     return bs->in_use;
+}
+
+void bdrv_set_in_use(BlockDriverState *bs, int in_use)
+{
+    assert(bs->in_use != in_use);
+    bs->in_use = in_use;
 }
 
 void bdrv_iostatus_enable(BlockDriverState *bs)
