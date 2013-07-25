@@ -2870,7 +2870,7 @@ EQMP
     },
     {
         .name       = "nbd-server-add",
-        .args_type  = "device:B,writable:b?",
+        .args_type  = "device:B,writable:b?,snapshot:b?",
         .mhandler.cmd_new = qmp_marshal_input_nbd_server_add,
     },
     {

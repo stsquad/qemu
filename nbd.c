@@ -877,6 +877,7 @@ NBDExport *nbd_export_new(BlockDriverState *bs, off_t dev_offset,
     exp->refcount = 1;
     QTAILQ_INIT(&exp->clients);
     exp->bs = bs;
+    bdrv_ref(bs);
     exp->dev_offset = dev_offset;
     exp->nbdflags = nbdflags;
     exp->size = size == -1 ? bdrv_getlength(bs) : size;
@@ -926,6 +927,10 @@ void nbd_export_close(NBDExport *exp)
         nbd_client_close(client);
     }
     nbd_export_set_name(exp, NULL);
+    if (exp->bs) {
+        bdrv_unref(exp->bs);
+        exp->bs = NULL;
+    }
     nbd_export_put(exp);
 }
 

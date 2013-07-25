@@ -17,6 +17,8 @@
 #include "qmp-commands.h"
 #include "trace.h"
 #include "block/nbd.h"
+#include "block/block_int.h"
+#include "block/block.h"
 #include "qemu/sockets.h"
 
 static int server_fd = -1;
@@ -69,8 +71,60 @@ static void nbd_close_notifier(Notifier *n, void *data)
     g_free(cn);
 }
 
+static void snapshot_drive_backup_cb(void *opaque, int ret)
+{
+}
+
+/* create a point-in-time snapshot BDS from an existing BDS */
+static BlockDriverState *bdrv_create_snapshot(BlockDriverState *orig_bs)
+{
+    int ret;
+    char filename[1024];
+    BlockDriver *drv;
+    BlockDriverState *bs;
+    QEMUOptionParameter *options;
+    Error *local_err = NULL;
+
+    bs = bdrv_new("");
+    ret = get_tmp_filename(filename, sizeof(filename));
+    if (ret < 0) {
+        goto err;
+    }
+    drv = bdrv_find_format("qcow2");
+    if (drv < 0) {
+        goto err;
+    }
+    options = parse_option_parameters("", drv->create_options, NULL);
+    set_option_parameter_int(options, BLOCK_OPT_SIZE, bdrv_getlength(orig_bs));
+
+    ret = bdrv_create(drv, filename, options);
+    if (ret < 0) {
+        goto err;
+    }
+    ret = bdrv_open(bs, filename, NULL, BDRV_O_RDWR, drv);
+    if (ret < 0) {
+        goto err;
+    }
+    bs->backing_hd = orig_bs;
+    bdrv_ref(orig_bs);
+    /* TODO: use sync mode none */
+    backup_start(orig_bs, bs, 1,
+            BLOCKDEV_ON_ERROR_REPORT,
+            BLOCKDEV_ON_ERROR_REPORT,
+            snapshot_drive_backup_cb, bs, &local_err);
+    if (error_is_set(&local_err)) {
+        goto err;
+    }
+    return bs;
+
+err:
+    bdrv_unref(bs);
+    unlink(filename);
+    return NULL;
+}
+
 void qmp_nbd_server_add(const char *device, bool has_writable, bool writable,
-                        Error **errp)
+                        bool has_snapshot, bool snapshot, Error **errp)
 {
     BlockDriverState *bs;
     NBDExport *exp;
@@ -95,8 +149,21 @@ void qmp_nbd_server_add(const char *device, bool has_writable, bool writable,
     if (!has_writable) {
         writable = false;
     }
+
+    if (!has_snapshot) {
+        snapshot = false;
+    }
+
     if (bdrv_is_read_only(bs)) {
         writable = false;
+    }
+
+    if (snapshot) {
+        bs = bdrv_create_snapshot(bs);
+        if (!bs) {
+            error_setg(errp, "Can't create snapshot for device");
+            return;
+        }
     }
 
     exp = nbd_export_new(bs, 0, -1, writable ? 0 : NBD_FLAG_READ_ONLY, NULL);
@@ -108,6 +175,7 @@ void qmp_nbd_server_add(const char *device, bool has_writable, bool writable,
     n->exp = exp;
     bdrv_add_close_notifier(bs, &n->n);
     QTAILQ_INSERT_TAIL(&close_notifiers, n, next);
+    return;
 }
 
 void qmp_nbd_server_stop(Error **errp)
