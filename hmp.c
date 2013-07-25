@@ -1436,7 +1436,8 @@ void hmp_nbd_server_start(Monitor *mon, const QDict *qdict)
             continue;
         }
 
-        qmp_nbd_server_add(info->value->device, true, writable, &local_err);
+        qmp_nbd_server_add(info->value->device, true, writable,
+                           true, false, &local_err);
 
         if (local_err != NULL) {
             qmp_nbd_server_stop(NULL);
@@ -1454,9 +1455,11 @@ void hmp_nbd_server_add(Monitor *mon, const QDict *qdict)
 {
     const char *device = qdict_get_str(qdict, "device");
     int writable = qdict_get_try_bool(qdict, "writable", 0);
+    int snapshot = qdict_get_try_bool(qdict, "snapshot", 0);
     Error *local_err = NULL;
 
-    qmp_nbd_server_add(device, true, writable, &local_err);
+    qmp_nbd_server_add(device, true, writable,
+                       true, snapshot, &local_err);
 
     if (local_err != NULL) {
         hmp_handle_error(mon, &local_err);

@@ -1382,8 +1382,8 @@ ETEXI
 
     {
         .name       = "nbd_server_add",
-        .args_type  = "writable:-w,device:B",
-        .params     = "nbd_server_add [-w] device",
+        .args_type  = "writable:-w,snapshot:-s,device:B",
+        .params     = "nbd_server_add [-w] [-s] device",
         .help       = "export a block device via NBD",
         .mhandler.cmd = hmp_nbd_server_add,
     },
