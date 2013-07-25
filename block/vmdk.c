@@ -215,7 +215,7 @@ static void vmdk_free_extents(BlockDriverState *bs)
         g_free(e->l2_cache);
         g_free(e->l1_backup_table);
         if (e->file != bs->file) {
-            bdrv_delete(e->file);
+            bdrv_unref(e->file);
         }
     }
     g_free(s->extents);
@@ -709,7 +709,7 @@ static int vmdk_parse_extents(const char *desc, BlockDriverState *bs,
             /* SPARSE extent */
             ret = vmdk_open_sparse(bs, extent_file, bs->open_flags);
             if (ret) {
-                bdrv_delete(extent_file);
+                bdrv_unref(extent_file);
                 return ret;
             }
         } else {
@@ -1589,15 +1589,15 @@ static int vmdk_create(const char *filename, QEMUOptionParameter *options)
         BlockDriverState *bs = bdrv_new("");
         ret = bdrv_open(bs, backing_file, NULL, 0, NULL);
         if (ret != 0) {
-            bdrv_delete(bs);
+            bdrv_unref(bs);
             return ret;
         }
         if (strcmp(bs->drv->format_name, "vmdk")) {
-            bdrv_delete(bs);
+            bdrv_unref(bs);
             return -EINVAL;
         }
         parent_cid = vmdk_read_cid(bs, 0);
-        bdrv_delete(bs);
+        bdrv_unref(bs);
         snprintf(parent_desc_line, sizeof(parent_desc_line),
                 "parentFileNameHint=\"%s\"", backing_file);
     }

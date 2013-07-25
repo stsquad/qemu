@@ -298,7 +298,7 @@ static BlockDriverState *bdrv_new_open(const char *filename,
     return bs;
 fail:
     if (bs) {
-        bdrv_delete(bs);
+        bdrv_unref(bs);
     }
     return NULL;
 }
@@ -649,7 +649,7 @@ static int img_check(int argc, char **argv)
 
 fail:
     qapi_free_ImageCheck(check);
-    bdrv_delete(bs);
+    bdrv_unref(bs);
 
     return ret;
 }
@@ -719,7 +719,7 @@ static int img_commit(int argc, char **argv)
         break;
     }
 
-    bdrv_delete(bs);
+    bdrv_unref(bs);
     if (ret) {
         return 1;
     }
@@ -1101,11 +1101,11 @@ static int img_compare(int argc, char **argv)
     ret = 0;
 
 out:
-    bdrv_delete(bs2);
+    bdrv_unref(bs2);
     qemu_vfree(buf1);
     qemu_vfree(buf2);
 out2:
-    bdrv_delete(bs1);
+    bdrv_unref(bs1);
 out3:
     qemu_progress_end();
     return ret;
@@ -1535,12 +1535,12 @@ out:
     free_option_parameters(param);
     qemu_vfree(buf);
     if (out_bs) {
-        bdrv_delete(out_bs);
+        bdrv_unref(out_bs);
     }
     if (bs) {
         for (bs_i = 0; bs_i < bs_n; bs_i++) {
             if (bs[bs_i]) {
-                bdrv_delete(bs[bs_i]);
+                bdrv_unref(bs[bs_i]);
             }
         }
         g_free(bs);
@@ -1678,7 +1678,7 @@ static ImageInfoList *collect_image_info_list(const char *filename,
         *last = elem;
         last = &elem->next;
 
-        bdrv_delete(bs);
+        bdrv_unref(bs);
 
         filename = fmt = NULL;
         if (chain) {
@@ -1892,7 +1892,7 @@ static int img_snapshot(int argc, char **argv)
     }
 
     /* Cleanup */
-    bdrv_delete(bs);
+    bdrv_unref(bs);
     if (ret) {
         return 1;
     }
@@ -2167,14 +2167,14 @@ out:
     /* Cleanup */
     if (!unsafe) {
         if (bs_old_backing != NULL) {
-            bdrv_delete(bs_old_backing);
+            bdrv_unref(bs_old_backing);
         }
         if (bs_new_backing != NULL) {
-            bdrv_delete(bs_new_backing);
+            bdrv_unref(bs_new_backing);
         }
     }
 
-    bdrv_delete(bs);
+    bdrv_unref(bs);
     if (ret) {
         return 1;
     }
@@ -2297,7 +2297,7 @@ static int img_resize(int argc, char **argv)
     }
 out:
     if (bs) {
-        bdrv_delete(bs);
+        bdrv_unref(bs);
     }
     if (ret) {
         return 1;

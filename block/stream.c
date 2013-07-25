@@ -68,7 +68,7 @@ static void close_unused_images(BlockDriverState *top, BlockDriverState *base,
         unused = intermediate;
         intermediate = intermediate->backing_hd;
         unused->backing_hd = NULL;
-        bdrv_delete(unused);
+        bdrv_unref(unused);
     }
     top->backing_hd = base;
 }

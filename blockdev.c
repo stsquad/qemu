@@ -212,7 +212,7 @@ static void bdrv_format_print(void *opaque, const char *name)
 static void drive_uninit(DriveInfo *dinfo)
 {
     qemu_opts_del(dinfo->opts);
-    bdrv_delete(dinfo->bdrv);
+    bdrv_unref(dinfo->bdrv);
     g_free(dinfo->id);
     QTAILQ_REMOVE(&drives, dinfo, next);
     g_free(dinfo->serial);
@@ -719,7 +719,7 @@ DriveInfo *drive_init(QemuOpts *all_opts, BlockInterfaceType block_default_type)
 err:
     qemu_opts_del(opts);
     QDECREF(bs_opts);
-    bdrv_delete(dinfo->bdrv);
+    bdrv_unref(dinfo->bdrv);
     g_free(dinfo->id);
     QTAILQ_REMOVE(&drives, dinfo, next);
     g_free(dinfo);
@@ -915,7 +915,7 @@ static void external_snapshot_abort(BlkTransactionState *common)
     ExternalSnapshotState *state =
                              DO_UPCAST(ExternalSnapshotState, common, common);
     if (state->new_bs) {
-        bdrv_delete(state->new_bs);
+        bdrv_unref(state->new_bs);
     }
 }
 
@@ -1503,7 +1503,7 @@ void qmp_drive_backup(const char *device, const char *target,
     target_bs = bdrv_new("");
     ret = bdrv_open(target_bs, target, NULL, flags, drv);
     if (ret < 0) {
-        bdrv_delete(target_bs);
+        bdrv_unref(target_bs);
         error_setg_file_open(errp, -ret, target);
         return;
     }
@@ -1511,7 +1511,7 @@ void qmp_drive_backup(const char *device, const char *target,
     backup_start(bs, target_bs, speed, on_source_error, on_target_error,
                  block_job_cb, bs, &local_err);
     if (local_err != NULL) {
-        bdrv_delete(target_bs);
+        bdrv_unref(target_bs);
         error_propagate(errp, local_err);
         return;
     }
@@ -1643,7 +1643,7 @@ void qmp_drive_mirror(const char *device, const char *target,
     target_bs = bdrv_new("");
     ret = bdrv_open(target_bs, target, NULL, flags | BDRV_O_NO_BACKING, drv);
     if (ret < 0) {
-        bdrv_delete(target_bs);
+        bdrv_unref(target_bs);
         error_setg_file_open(errp, -ret, target);
         return;
     }
@@ -1652,7 +1652,7 @@ void qmp_drive_mirror(const char *device, const char *target,
                  on_source_error, on_target_error,
                  block_job_cb, bs, &local_err);
     if (local_err != NULL) {
-        bdrv_delete(target_bs);
+        bdrv_unref(target_bs);
         error_propagate(errp, local_err);
         return;
     }

@@ -801,7 +801,7 @@ static int blk_connect(struct XenDevice *xendev)
                                                            readonly);
             if (bdrv_open(blkdev->bs,
                           blkdev->filename, NULL, qflags, drv) != 0) {
-                bdrv_delete(blkdev->bs);
+                bdrv_unref(blkdev->bs);
                 blkdev->bs = NULL;
             }
         }
@@ -914,7 +914,7 @@ static void blk_disconnect(struct XenDevice *xendev)
             /* close/delete only if we created it ourself */
             bdrv_close(blkdev->bs);
             bdrv_detach_dev(blkdev->bs, blkdev);
-            bdrv_delete(blkdev->bs);
+            bdrv_unref(blkdev->bs);
         }
         blkdev->bs = NULL;
     }
