@@ -1620,11 +1620,13 @@ int bdrv_attach_dev(BlockDriverState *bs, void *dev)
         return -EBUSY;
     }
     bs->dev = dev;
+    bdrv_ref(bs);
     bdrv_iostatus_reset(bs);
     return 0;
 }
 
-/* TODO qdevified devices don't use this, remove when devices are qdevified */
+/* Attach a bs to dev, and increase its refcnt.
+ * TODO qdevified devices don't use this, remove when devices are qdevified */
 void bdrv_attach_dev_nofail(BlockDriverState *bs, void *dev)
 {
     if (bdrv_attach_dev(bs, dev) < 0) {
@@ -1632,10 +1634,13 @@ void bdrv_attach_dev_nofail(BlockDriverState *bs, void *dev)
     }
 }
 
+/* Detach bs from device. This decreases its refcnt, and may consequently
+ * deletes it make bs an invalid pointer */
 void bdrv_detach_dev(BlockDriverState *bs, void *dev)
 /* TODO change to DeviceState *dev when all users are qdevified */
 {
     assert(bs->dev == dev);
+    bdrv_unref(bs);
     bs->dev = NULL;
     bs->dev_ops = NULL;
     bs->dev_opaque = NULL;
