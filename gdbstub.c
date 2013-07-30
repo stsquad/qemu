@@ -15,6 +15,9 @@
  *
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library; if not, see <http://www.gnu.org/licenses/>.
+ *
+ * The specification for the remote protocol is in the GDB User manual:
+ * http://sourceware.org/gdb/current/onlinedocs/gdb/Remote-Protocol.html#Remote-Protocol
  */
 #include "config.h"
 #include "qemu-common.h"
@@ -376,6 +379,7 @@ static inline void gdb_continue(GDBState *s)
 
 static void put_buffer(GDBState *s, const uint8_t *buf, int len)
 {
+    qemu_log_mask(LOG_GDB_STUB, "%s(%p, %p=%*s)\n", __FUNCTION__, s, buf, len, buf);
 #ifdef CONFIG_USER_ONLY
     int ret;
 
@@ -443,6 +447,8 @@ static int put_packet_binary(GDBState *s, const char *buf, int len)
     int csum, i;
     uint8_t *p;
 
+    qemu_log_mask(LOG_GDB_STUB, "%s(%p, %p=%*s)\n", __FUNCTION__, s, buf, len, buf);
+
     for(;;) {
         p = s->last_packet;
         *(p++) = '$';
@@ -455,8 +461,10 @@ static int put_packet_binary(GDBState *s, const char *buf, int len)
         *(p++) = '#';
         *(p++) = tohex((csum >> 4) & 0xf);
         *(p++) = tohex((csum) & 0xf);
+        *p = 0;
 
         s->last_packet_len = p - s->last_packet;
+        qemu_log_mask(LOG_GDB_STUB, "    %p - %p = %d\n", p, s->last_packet, s->last_packet_len);
         put_buffer(s, (uint8_t *)s->last_packet, s->last_packet_len);
 
 #ifdef CONFIG_USER_ONLY
@@ -475,10 +483,7 @@ static int put_packet_binary(GDBState *s, const char *buf, int len)
 /* return -1 if error, 0 if OK */
 static int put_packet(GDBState *s, const char *buf)
 {
-#ifdef DEBUG_GDB
-    printf("reply='%s'\n", buf);
-#endif
-
+    qemu_log_mask(LOG_GDB_STUB, "%s='%s'\n", __FUNCTION__, buf);
     return put_packet_binary(s, buf, strlen(buf));
 }
 
@@ -2069,9 +2074,7 @@ static int gdb_handle_packet(GDBState *s, const char *line_buf)
     uint8_t *registers;
     target_ulong addr, len;
 
-#ifdef DEBUG_GDB
-    printf("command='%s'\n", line_buf);
-#endif
+    qemu_log_mask(LOG_GDB_STUB, "%s: command='%s'\n", __FUNCTION__, line_buf);
     p = line_buf;
     ch = *p++;
     switch(ch) {
@@ -2367,6 +2370,10 @@ static int gdb_handle_packet(GDBState *s, const char *line_buf)
              *  the first CPU (gdb returns the first thread). */
             put_packet(s, "QC1");
             break;
+        } else if (strcmp(p,"T") == 0) {
+	    /* qT are all Tracepoint related, currently unsupported */
+            put_packet(s, "\0");
+            break;
         } else if (strcmp(p,"fThreadInfo") == 0) {
             s->query_cpu = first_cpu;
             goto report_cpuinfo;
@@ -2421,6 +2428,7 @@ static int gdb_handle_packet(GDBState *s, const char *line_buf)
             break;
         }
 #endif /* !CONFIG_USER_ONLY */
+	/* This is a GDB query packet to see what the stub supports */
         if (strncmp(p, "Supported", 9) == 0) {
             snprintf(buf, sizeof(buf), "PacketSize=%x", MAX_PACKET_LENGTH);
 #ifdef GDB_CORE_XML
@@ -2943,6 +2951,7 @@ static void gdb_monitor_output(GDBState *s, const char *msg, int len)
     if (len > (MAX_PACKET_LENGTH/2) - 1)
         len = (MAX_PACKET_LENGTH/2) - 1;
     memtohex(buf + 1, (uint8_t *)msg, len);
+    qemu_log_mask(LOG_GDB_STUB, "%s: sending %s\n", __FUNCTION__, buf);
     put_packet(s, buf);
 }
 
@@ -3029,6 +3038,8 @@ int gdbserver_start(const char *device)
     s->state = chr ? RS_IDLE : RS_INACTIVE;
     s->mon_chr = mon_chr;
     s->current_syscall_cb = NULL;
+
+    qemu_log_mask(LOG_GDB_STUB, "%s: started with GDBState @ %p\n", __FUNCTION__, s);
 
     return 0;
 }

@@ -119,6 +119,8 @@ const CPULogItem cpu_log_items[] = {
     { LOG_GUEST_ERROR, "guest_errors",
       "log when the guest OS does something invalid (eg accessing a\n"
       "non-existent register)" },
+    { LOG_GDB_STUB, "gdbstub",
+      "log activity on the gdbstub" },
     { 0, NULL, NULL },
 };
 
