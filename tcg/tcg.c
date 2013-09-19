@@ -489,10 +489,15 @@ int tcg_global_mem_new_internal(TCGType type, TCGv_ptr base,
     TCGContext *s = &tcg_ctx;
     TCGTemp *base_ts = &s->temps[GET_TCGV_PTR(base)];
     TCGTemp *ts = tcg_global_alloc(s);
-    int bigendian = 0;
+    int indirect_reg = 0, bigendian = 0;
 #ifdef HOST_WORDS_BIGENDIAN
     bigendian = 1;
 #endif
+
+    if (!base_ts->fixed_reg) {
+        indirect_reg = 1;
+        base_ts->indirect_base = 1;
+    }
 
     if (TCG_TARGET_REG_BITS == 32 && type == TCG_TYPE_I64) {
         TCGTemp *ts2 = tcg_global_alloc(s);
@@ -500,6 +505,7 @@ int tcg_global_mem_new_internal(TCGType type, TCGv_ptr base,
 
         ts->base_type = TCG_TYPE_I64;
         ts->type = TCG_TYPE_I32;
+        ts->indirect_reg = indirect_reg;
         ts->mem_allocated = 1;
         ts->mem_base = base_ts;
         ts->mem_offset = offset + bigendian * 4;
@@ -510,6 +516,7 @@ int tcg_global_mem_new_internal(TCGType type, TCGv_ptr base,
         tcg_debug_assert(ts2 == ts + 1);
         ts2->base_type = TCG_TYPE_I64;
         ts2->type = TCG_TYPE_I32;
+        ts2->indirect_reg = indirect_reg;
         ts2->mem_allocated = 1;
         ts2->mem_base = base_ts;
         ts2->mem_offset = offset + (1 - bigendian) * 4;
@@ -519,6 +526,7 @@ int tcg_global_mem_new_internal(TCGType type, TCGv_ptr base,
     } else {
         ts->base_type = type;
         ts->type = type;
+        ts->indirect_reg = indirect_reg;
         ts->mem_allocated = 1;
         ts->mem_base = base_ts;
         ts->mem_offset = offset;
@@ -1635,8 +1643,10 @@ static void temp_allocate_frame(TCGContext *s, int temp)
     s->current_frame_offset += sizeof(tcg_target_long);
 }
 
+static void temp_load(TCGContext *, TCGTemp *, TCGRegSet, TCGRegSet);
+
 /* sync register 'reg' by saving it to the corresponding temporary */
-static inline void tcg_reg_sync(TCGContext *s, TCGReg reg)
+static void tcg_reg_sync(TCGContext *s, TCGReg reg, TCGRegSet allocated_regs)
 {
     TCGTemp *ts = s->reg_to_temp[reg];
 
@@ -1644,6 +1654,11 @@ static inline void tcg_reg_sync(TCGContext *s, TCGReg reg)
     if (!ts->mem_coherent && !ts->fixed_reg) {
         if (!ts->mem_allocated) {
             temp_allocate_frame(s, temp_idx(s, ts));
+        } else if (ts->indirect_reg) {
+            tcg_regset_set_reg(allocated_regs, ts->reg);
+            temp_load(s, ts->mem_base,
+                      tcg_target_available_regs[TCG_TYPE_PTR],
+                      allocated_regs);
         }
         tcg_out_st(s, ts->type, reg, ts->mem_base->reg, ts->mem_offset);
     }
@@ -1651,25 +1666,26 @@ static inline void tcg_reg_sync(TCGContext *s, TCGReg reg)
 }
 
 /* free register 'reg' by spilling the corresponding temporary if necessary */
-static void tcg_reg_free(TCGContext *s, TCGReg reg)
+static void tcg_reg_free(TCGContext *s, TCGReg reg, TCGRegSet allocated_regs)
 {
     TCGTemp *ts = s->reg_to_temp[reg];
 
     if (ts != NULL) {
-        tcg_reg_sync(s, reg);
+        tcg_reg_sync(s, reg, allocated_regs);
         ts->val_type = TEMP_VAL_MEM;
         s->reg_to_temp[reg] = NULL;
     }
 }
 
 /* Allocate a register belonging to reg1 & ~reg2 */
-static TCGReg tcg_reg_alloc(TCGContext *s, TCGRegSet reg1, TCGRegSet reg2)
+static TCGReg tcg_reg_alloc(TCGContext *s, TCGRegSet desired_regs,
+                            TCGRegSet allocated_regs)
 {
     int i;
     TCGReg reg;
     TCGRegSet reg_ct;
 
-    tcg_regset_andnot(reg_ct, reg1, reg2);
+    tcg_regset_andnot(reg_ct, desired_regs, allocated_regs);
 
     /* first try free registers */
     for(i = 0; i < ARRAY_SIZE(tcg_target_reg_alloc_order); i++) {
@@ -1682,7 +1698,7 @@ static TCGReg tcg_reg_alloc(TCGContext *s, TCGRegSet reg1, TCGRegSet reg2)
     for(i = 0; i < ARRAY_SIZE(tcg_target_reg_alloc_order); i++) {
         reg = tcg_target_reg_alloc_order[i];
         if (tcg_regset_test_reg(reg_ct, reg)) {
-            tcg_reg_free(s, reg);
+            tcg_reg_free(s, reg, allocated_regs);
             return reg;
         }
     }
@@ -1707,6 +1723,12 @@ static void temp_load(TCGContext *s, TCGTemp *ts, TCGRegSet desired_regs,
         break;
     case TEMP_VAL_MEM:
         reg = tcg_reg_alloc(s, desired_regs, allocated_regs);
+        if (ts->indirect_reg) {
+            tcg_regset_set_reg(allocated_regs, reg);
+            temp_load(s, ts->mem_base,
+                      tcg_target_available_regs[TCG_TYPE_PTR],
+                      allocated_regs);
+        }
         tcg_out_ld(s, ts->type, reg, ts->mem_base->reg, ts->mem_offset);
         ts->mem_coherent = 1;
         break;
@@ -1744,7 +1766,7 @@ static void temp_sync(TCGContext *s, TCGTemp *ts, TCGRegSet allocated_regs)
         temp_load(s, ts, tcg_target_available_regs[ts->type], allocated_regs);
         /* fallthrough */
     case TEMP_VAL_REG:
-        tcg_reg_sync(s, ts->reg);
+        tcg_reg_sync(s, ts->reg, allocated_regs);
         break;
     case TEMP_VAL_DEAD:
     case TEMP_VAL_MEM:
@@ -1760,13 +1782,16 @@ static inline void temp_save(TCGContext *s, TCGTemp *ts,
                              TCGRegSet allocated_regs)
 {
 #ifdef USE_LIVENESS_ANALYSIS
-    /* The liveness analysis already ensures that globals are back
-       in memory. Keep an assert for safety. */
-    tcg_debug_assert(ts->val_type == TEMP_VAL_MEM || ts->fixed_reg);
-#else
+    /* ??? Liveness does not yet incorporate indirect bases.  */
+    if (!ts->indirect_base) {
+        /* The liveness analysis already ensures that globals are back
+           in memory. Keep an assert for safety. */
+        tcg_debug_assert(ts->val_type == TEMP_VAL_MEM || ts->fixed_reg);
+        return;
+    }
+#endif
     temp_sync(s, ts, allocated_regs);
     temp_dead(s, ts);
-#endif
 }
 
 /* save globals to their canonical location and assume they can be
@@ -1791,12 +1816,15 @@ static void sync_globals(TCGContext *s, TCGRegSet allocated_regs)
     for (i = 0; i < s->nb_globals; i++) {
         TCGTemp *ts = &s->temps[i];
 #ifdef USE_LIVENESS_ANALYSIS
-        tcg_debug_assert(ts->val_type != TEMP_VAL_REG
-                         || ts->fixed_reg
-                         || ts->mem_coherent);
-#else
-        temp_sync(s, ts, allocated_regs);
+        /* ??? Liveness does not yet incorporate indirect bases.  */
+        if (!ts->indirect_base) {
+            tcg_debug_assert(ts->val_type != TEMP_VAL_REG
+                             || ts->fixed_reg
+                             || ts->mem_coherent);
+            continue;
+        }
 #endif
+        temp_sync(s, ts, allocated_regs);
     }
 }
 
@@ -1812,12 +1840,15 @@ static void tcg_reg_alloc_bb_end(TCGContext *s, TCGRegSet allocated_regs)
             temp_save(s, ts, allocated_regs);
         } else {
 #ifdef USE_LIVENESS_ANALYSIS
-            /* The liveness analysis already ensures that temps are dead.
-               Keep an assert for safety. */
-            assert(ts->val_type == TEMP_VAL_DEAD);
-#else
-            temp_dead(s, ts);
+            /* ??? Liveness does not yet incorporate indirect bases.  */
+            if (!ts->indirect_base) {
+                /* The liveness analysis already ensures that temps are dead.
+                   Keep an assert for safety. */
+                assert(ts->val_type == TEMP_VAL_DEAD);
+                continue;
+            }
 #endif
+            temp_dead(s, ts);
         }
     }
 
@@ -1890,6 +1921,12 @@ static void tcg_reg_alloc_mov(TCGContext *s, const TCGOpDef *def,
         if (!ots->mem_allocated) {
             temp_allocate_frame(s, args[0]);
         }
+        if (ots->indirect_reg) {
+            tcg_regset_set_reg(allocated_regs, ts->reg);
+            temp_load(s, ots->mem_base,
+                      tcg_target_available_regs[TCG_TYPE_PTR],
+                      allocated_regs);
+        }
         tcg_out_st(s, otype, ts->reg, ots->mem_base->reg, ots->mem_offset);
         if (IS_DEAD_ARG(1)) {
             temp_dead(s, ts);
@@ -1930,7 +1967,7 @@ static void tcg_reg_alloc_mov(TCGContext *s, const TCGOpDef *def,
         ots->mem_coherent = 0;
         s->reg_to_temp[ots->reg] = ots;
         if (NEED_SYNC_ARG(0)) {
-            tcg_reg_sync(s, ots->reg);
+            tcg_reg_sync(s, ots->reg, allocated_regs);
         }
     }
 }
@@ -2030,7 +2067,7 @@ static void tcg_reg_alloc_op(TCGContext *s,
             /* XXX: permit generic clobber register list ? */ 
             for(reg = 0; reg < TCG_TARGET_NB_REGS; reg++) {
                 if (tcg_regset_test_reg(tcg_target_call_clobber_regs, reg)) {
-                    tcg_reg_free(s, reg);
+                    tcg_reg_free(s, reg, allocated_regs);
                 }
             }
         }
@@ -2087,7 +2124,7 @@ static void tcg_reg_alloc_op(TCGContext *s,
             tcg_out_mov(s, ts->type, ts->reg, reg);
         }
         if (NEED_SYNC_ARG(i)) {
-            tcg_reg_sync(s, reg);
+            tcg_reg_sync(s, reg, allocated_regs);
         }
         if (IS_DEAD_ARG(i)) {
             temp_dead(s, ts);
@@ -2158,7 +2195,7 @@ static void tcg_reg_alloc_call(TCGContext *s, int nb_oargs, int nb_iargs,
         if (arg != TCG_CALL_DUMMY_ARG) {
             ts = &s->temps[arg];
             reg = tcg_target_call_iarg_regs[i];
-            tcg_reg_free(s, reg);
+            tcg_reg_free(s, reg, allocated_regs);
 
             if (ts->val_type == TEMP_VAL_REG) {
                 if (ts->reg != reg) {
@@ -2186,7 +2223,7 @@ static void tcg_reg_alloc_call(TCGContext *s, int nb_oargs, int nb_iargs,
     /* clobber call registers */
     for(reg = 0; reg < TCG_TARGET_NB_REGS; reg++) {
         if (tcg_regset_test_reg(tcg_target_call_clobber_regs, reg)) {
-            tcg_reg_free(s, reg);
+            tcg_reg_free(s, reg, allocated_regs);
         }
     }
 
@@ -2222,7 +2259,7 @@ static void tcg_reg_alloc_call(TCGContext *s, int nb_oargs, int nb_iargs,
             ts->mem_coherent = 0;
             s->reg_to_temp[reg] = ts;
             if (NEED_SYNC_ARG(i)) {
-                tcg_reg_sync(s, reg);
+                tcg_reg_sync(s, reg, allocated_regs);
             }
             if (IS_DEAD_ARG(i)) {
                 temp_dead(s, ts);
