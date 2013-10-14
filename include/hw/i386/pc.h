@@ -239,6 +239,11 @@ int e820_add_entry(uint64_t, uint64_t, uint32_t);
 
 #define PC_COMPAT_1_6 \
         {\
+            .driver   = "PIIX4_PM",\
+            .property = "acpi-pci-hotplug-with-bridge-support",\
+            .value    = "off",\
+        }, \
+        {\
             .driver   = "e1000",\
             .property = "mitigation",\
             .value    = "off",\
