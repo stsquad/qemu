@@ -39,6 +39,7 @@
 #include "hw/pci-host/q35.h"
 #include "exec/address-spaces.h"
 #include "hw/i386/ich9.h"
+#include "hw/i386/smbios.h"
 #include "hw/ide/pci.h"
 #include "hw/ide/ahci.h"
 #include "hw/usb.h"
@@ -50,6 +51,7 @@
 static bool has_pvpanic;
 static bool has_pci_info;
 static bool has_acpi_build = true;
+static bool smbios_type1_defaults = true;
 
 /* PC hardware initialisation */
 static void pc_q35_init(QEMUMachineInitArgs *args)
@@ -113,6 +115,12 @@ static void pc_q35_init(QEMUMachineInitArgs *args)
     guest_info->has_pci_info = has_pci_info;
     guest_info->isapc_ram_fw = false;
     guest_info->has_acpi_build = has_acpi_build;
+
+    if (smbios_type1_defaults) {
+        /* These values are guest ABI, do not change */
+        smbios_set_type1_defaults("QEMU", "Standard PC (Q35 + ICH9, 2009)",
+                                  args->machine->name);
+    }
 
     /* allocate ram and load rom/bios */
     if (!xen_enabled()) {
@@ -224,6 +232,7 @@ static void pc_q35_init(QEMUMachineInitArgs *args)
 
 static void pc_compat_1_7(QEMUMachineInitArgs *args)
 {
+    smbios_type1_defaults = false;
 }
 
 static void pc_compat_1_6(QEMUMachineInitArgs *args)
