@@ -238,8 +238,13 @@ static void pc_init_pci(QEMUMachineInitArgs *args)
     pc_init1(args, 1, 1);
 }
 
+static void pc_compat_1_7(QEMUMachineInitArgs *args)
+{
+}
+
 static void pc_compat_1_6(QEMUMachineInitArgs *args)
 {
+    pc_compat_1_7(args);
     has_pci_info = false;
     rom_file_in_ram = false;
     has_acpi_build = false;
@@ -270,6 +275,12 @@ static void pc_compat_1_2(QEMUMachineInitArgs *args)
 {
     pc_compat_1_3(args);
     disable_kvm_pv_eoi();
+}
+
+static void pc_init_pci_1_7(QEMUMachineInitArgs *args)
+{
+    pc_compat_1_7(args);
+    pc_init_pci(args);
 }
 
 static void pc_init_pci_1_6(QEMUMachineInitArgs *args)
@@ -344,16 +355,24 @@ static void pc_xen_hvm_init(QEMUMachineInitArgs *args)
     .desc = "Standard PC (i440FX + PIIX, 1996)", \
     .hot_add_cpu = pc_hot_add_cpu
 
-#define PC_I440FX_1_7_MACHINE_OPTIONS PC_I440FX_MACHINE_OPTIONS
-static QEMUMachine pc_i440fx_machine_v1_7 = {
-    PC_I440FX_1_7_MACHINE_OPTIONS,
-    .name = "pc-i440fx-1.7",
+
+#define PC_I440FX_1_8_MACHINE_OPTIONS PC_I440FX_MACHINE_OPTIONS
+static QEMUMachine pc_i440fx_machine_v1_8 = {
+    PC_I440FX_1_8_MACHINE_OPTIONS,
+    .name = "pc-i440fx-1.8",
     .alias = "pc",
     .init = pc_init_pci,
     .is_default = 1,
 };
 
-#define PC_I440FX_1_6_MACHINE_OPTIONS PC_I440FX_MACHINE_OPTIONS
+#define PC_I440FX_1_7_MACHINE_OPTIONS PC_I440FX_1_8_MACHINE_OPTIONS
+static QEMUMachine pc_i440fx_machine_v1_7 = {
+    PC_I440FX_1_7_MACHINE_OPTIONS,
+    .name = "pc-i440fx-1.7",
+    .init = pc_init_pci_1_7,
+};
+
+#define PC_I440FX_1_6_MACHINE_OPTIONS PC_I440FX_1_7_MACHINE_OPTIONS
 
 static QEMUMachine pc_i440fx_machine_v1_6 = {
     PC_I440FX_1_6_MACHINE_OPTIONS,
@@ -752,6 +771,7 @@ static QEMUMachine xenfv_machine = {
 
 static void pc_machine_init(void)
 {
+    qemu_register_machine(&pc_i440fx_machine_v1_8);
     qemu_register_machine(&pc_i440fx_machine_v1_7);
     qemu_register_machine(&pc_i440fx_machine_v1_6);
     qemu_register_machine(&pc_i440fx_machine_v1_5);

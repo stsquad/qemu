@@ -222,8 +222,13 @@ static void pc_q35_init(QEMUMachineInitArgs *args)
     }
 }
 
+static void pc_compat_1_7(QEMUMachineInitArgs *args)
+{
+}
+
 static void pc_compat_1_6(QEMUMachineInitArgs *args)
 {
+    pc_compat_1_7(args);
     has_pci_info = false;
     rom_file_in_ram = false;
     has_acpi_build = false;
@@ -241,6 +246,12 @@ static void pc_compat_1_4(QEMUMachineInitArgs *args)
     has_pvpanic = false;
     x86_cpu_compat_set_features("n270", FEAT_1_ECX, 0, CPUID_EXT_MOVBE);
     x86_cpu_compat_set_features("Westmere", FEAT_1_ECX, 0, CPUID_EXT_PCLMULQDQ);
+}
+
+static void pc_q35_init_1_7(QEMUMachineInitArgs *args)
+{
+    pc_compat_1_7(args);
+    pc_q35_init(args);
 }
 
 static void pc_q35_init_1_6(QEMUMachineInitArgs *args)
@@ -266,16 +277,24 @@ static void pc_q35_init_1_4(QEMUMachineInitArgs *args)
     .desc = "Standard PC (Q35 + ICH9, 2009)", \
     .hot_add_cpu = pc_hot_add_cpu
 
-#define PC_Q35_1_7_MACHINE_OPTIONS PC_Q35_MACHINE_OPTIONS
+#define PC_Q35_1_8_MACHINE_OPTIONS PC_Q35_MACHINE_OPTIONS
 
-static QEMUMachine pc_q35_machine_v1_7 = {
-    PC_Q35_1_7_MACHINE_OPTIONS,
-    .name = "pc-q35-1.7",
+static QEMUMachine pc_q35_machine_v1_8 = {
+    PC_Q35_1_8_MACHINE_OPTIONS,
+    .name = "pc-q35-1.8",
     .alias = "q35",
     .init = pc_q35_init,
 };
 
-#define PC_Q35_1_6_MACHINE_OPTIONS PC_Q35_MACHINE_OPTIONS
+#define PC_Q35_1_7_MACHINE_OPTIONS PC_Q35_1_8_MACHINE_OPTIONS
+
+static QEMUMachine pc_q35_machine_v1_7 = {
+    PC_Q35_1_7_MACHINE_OPTIONS,
+    .name = "pc-q35-1.7",
+    .init = pc_q35_init_1_7,
+};
+
+#define PC_Q35_1_6_MACHINE_OPTIONS PC_Q35_1_7_MACHINE_OPTIONS
 
 static QEMUMachine pc_q35_machine_v1_6 = {
     PC_Q35_1_6_MACHINE_OPTIONS,
@@ -313,6 +332,7 @@ static QEMUMachine pc_q35_machine_v1_4 = {
 
 static void pc_q35_machine_init(void)
 {
+    qemu_register_machine(&pc_q35_machine_v1_8);
     qemu_register_machine(&pc_q35_machine_v1_7);
     qemu_register_machine(&pc_q35_machine_v1_6);
     qemu_register_machine(&pc_q35_machine_v1_5);
