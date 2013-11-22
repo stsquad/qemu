@@ -262,6 +262,127 @@ static inline void gen_logic_CC(int sf, TCGv_i64 result)
     tcg_gen_movi_i32(cpu_VF, 0);
 }
 
+enum sysreg_access {
+    SYSTEM_GET,
+    SYSTEM_PUT
+};
+
+/* C4.3.10 - NZVC */
+static int get_nzcv(TCGv_i64 tcg_rt)
+{
+    TCGv_i32 nzcv, tmp;
+    tmp = tcg_temp_new_i32();
+    nzcv = tcg_temp_new_i32();
+
+    /* build bit 31, N */
+    tcg_gen_andi_i32(nzcv, cpu_NF, (1 << 31));
+    /* build bit 30, Z */
+    tcg_gen_setcondi_i32(TCG_COND_EQ, tmp, cpu_ZF, 0);
+    tcg_gen_deposit_i32(nzcv, nzcv, tmp, 30, 1);
+    /* build bit 29, C */
+    tcg_gen_deposit_i32(nzcv, nzcv, cpu_CF, 29, 1);
+    /* build bit 28, V */
+    tcg_gen_shri_i32(tmp, cpu_VF, 31);
+    tcg_gen_deposit_i32(nzcv, nzcv, tmp, 28, 1);
+    /* generate result */
+    tcg_gen_extu_i32_i64(tcg_rt, nzcv);
+
+    tcg_temp_free_i32(nzcv);
+    tcg_temp_free_i32(tmp);
+    return 0;
+}
+
+static int put_nzcv(TCGv_i64 tcg_rt)
+{
+    TCGv_i32 nzcv;
+    nzcv = tcg_temp_new_i32();
+
+    /* take NZCV from R[t] */
+    tcg_gen_trunc_i64_i32(nzcv, tcg_rt);
+
+    /* bit 31, N */
+    tcg_gen_andi_i32(cpu_NF, nzcv, (1 << 31));
+    /* bit 30, Z */
+    tcg_gen_andi_i32(cpu_ZF, nzcv, (1 << 30));
+    tcg_gen_setcondi_i32(TCG_COND_EQ, cpu_ZF, cpu_ZF, 0);
+    /* bit 29, C */
+    tcg_gen_andi_i32(cpu_CF, nzcv, (1 << 29));
+    tcg_gen_shri_i32(cpu_CF, cpu_CF, 29);
+    /* bit 28, V */
+    tcg_gen_andi_i32(cpu_VF, nzcv, (1 << 28));
+    tcg_gen_shli_i32(cpu_VF, cpu_VF, 3); /* shift to position 31 */
+
+    tcg_temp_free_i32(nzcv);
+    return 0;
+}
+
+/* CTR_EL0 (D8.2.21) */
+static int get_ctr_el0(TCGv_i64 tcg_rt)
+{
+    tcg_gen_movi_i64(tcg_rt, 0x80030003);
+    return 0;
+}
+
+/* DCZID_EL0 (D8.2.23) */
+static int get_dczid_el0(TCGv_i64 tcg_rt)
+{
+    tcg_gen_movi_i64(tcg_rt, 0x10);
+    return 0;
+}
+
+/* TPIDR_EL0 (D8.2.87) */
+static int get_tpidr_el0(TCGv_i64 tcg_rt)
+{
+    tcg_gen_ld_i64(tcg_rt, cpu_env,
+                   offsetof(CPUARMState, sr.tpidr_el0));
+    return 0;
+}
+
+static int put_tpidr_el0(TCGv_i64 tcg_rt)
+{
+    tcg_gen_st_i64(tcg_rt, cpu_env,
+                   offsetof(CPUARMState, sr.tpidr_el0));
+    return 0;
+}
+
+
+/* manual: System_Get() / System_Put() */
+/* returns 0 on success, 1 on unsupported, 2 on unallocated */
+static int sysreg_access(enum sysreg_access access, DisasContext *s,
+                         unsigned int op0, unsigned int op1, unsigned int op2,
+                         unsigned int crn, unsigned int crm, unsigned int rt)
+{
+    if (op0 != 3) {
+        return 1; /* we only support non-debug system registers for now */
+    }
+
+    if (crn == 4) {
+        /* Table C4-8 Special-purpose register accesses */
+        if (op1 == 3 && crm == 2 && op2 == 0) {
+            /* NZVC C4.3.10 */
+            return access == SYSTEM_GET ?
+                get_nzcv(cpu_reg(s, rt)) : put_nzcv(cpu_reg(s, rt));
+        }
+    } else if (crn == 11 || crn == 15) {
+        /* C4.2.7 Reserved control space for IMPLEM.-DEFINED func. */
+        return 2;
+    } else {
+        /* Table C4-7 System insn encodings for System register access */
+        if (crn == 0 && op1 == 3 && crm == 0 && op2 == 1) {
+            /* CTR_EL0 (D8.2.21) */
+            return access == SYSTEM_GET ? get_ctr_el0(cpu_reg(s, rt)) : 2;
+        } else if (crn == 0 && op1 == 3 && crm == 0 && op2 == 7) {
+            /* DCZID_EL0 (D8.2.23) */
+            return access == SYSTEM_GET ? get_dczid_el0(cpu_reg(s, rt)) : 2;
+        } else if (crn == 13 && op1 == 3 && crm == 0 && op2 == 2) {
+            return access == SYSTEM_GET ?
+                get_tpidr_el0(cpu_reg(s, rt)) : put_tpidr_el0(cpu_reg(s, rt));
+        }
+    }
+
+    return 1; /* unsupported */
+}
+
 /*
  * the instruction disassembly implemented here matches
  * the instruction encoding classifications in chapter 3 (C3)
@@ -447,7 +568,23 @@ static void handle_mrs(DisasContext *s, uint32_t insn, unsigned int op0,
                        unsigned int op1, unsigned int op2,
                        unsigned int crn, unsigned int crm, unsigned int rt)
 {
-    unsupported_encoding(s, insn);
+    int rv = sysreg_access(SYSTEM_GET, s, op0, op1, op2, crn, crm, rt);
+
+    switch (rv) {
+    case 0:
+        return;
+    case 1: /* unsupported */
+        unsupported_encoding(s, insn);
+        break;
+    case 2: /* unallocated */
+        unallocated_encoding(s);
+        break;
+    default:
+        assert(FALSE);
+    }
+
+    qemu_log("MRS: [op0=%d,op1=%d,op2=%d,crn=%d,crm=%d]\n",
+             op0, op1, op2, crn, crm);
 }
 
 /* C5.6.131 MSR (register) - move to system register */
@@ -455,7 +592,23 @@ static void handle_msr(DisasContext *s, uint32_t insn, unsigned int op0,
                        unsigned int op1, unsigned int op2,
                        unsigned int crn, unsigned int crm, unsigned int rt)
 {
-    unsupported_encoding(s, insn);
+    int rv = sysreg_access(SYSTEM_PUT, s, op0, op1, op2, crn, crm, rt);
+
+    switch (rv) {
+    case 0:
+        return;
+    case 1: /* unsupported */
+        unsupported_encoding(s, insn);
+        break;
+    case 2: /* unallocated */
+        unallocated_encoding(s);
+        break;
+    default:
+        assert(FALSE);
+    }
+
+    qemu_log("MSR: [op0=%d,op1=%d,op2=%d,crn=%d,crm=%d]\n",
+             op0, op1, op2, crn, crm);
 }
 
 /* C3.2.4 System
