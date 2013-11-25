@@ -1140,10 +1140,54 @@ static void disas_ldst_excl(DisasContext *s, uint32_t insn)
     unsupported_encoding(s, insn);
 }
 
-/* Load register (literal) */
-static void disas_ld_lit(DisasContext *s, uint32_t insn)
+/*
+ * C3.3.5 Load register (literal)
+ *
+ *  31 30 29   27 26 25 24 23                5 4     0
+ * +-----+-------+--+-----+-------------------+-------+
+ * | opc | 0 1 1 |V | 0 0 |     imm19         |  Rt   |
+ * +-----+-------+--+-----+-------------------+-------+
+ *
+ * opc: 00 -> 32bit, 01 -> 64bit, 10-> 64bit signed, 11 -> prefetch
+ * V: 1 -> vector (simd/fp)
+ */
+static void handle_ld_lit(DisasContext *s, uint32_t insn)
 {
-    unsupported_encoding(s, insn);
+    int rt = extract32(insn, 0, 5);
+    int64_t imm = sextract32(insn, 5, 19) << 2;
+    bool is_vector = extract32(insn, 26, 1);
+    int opc = extract32(insn, 30, 2);
+
+    TCGv_i64 tcg_rt = cpu_reg(s, rt);
+    TCGv_i64 tcg_addr;
+    bool is_signed = false;
+    int size = 2;
+
+    switch (opc) {
+    case 0:
+        is_signed = false;
+        size = 2;
+        break;
+    case 1:
+        is_signed = false;
+        size = 3;
+        break;
+    case 2:
+        is_signed = true;
+        size = 2;
+        break;
+    case 3:
+        /* prefetch */
+        return;
+    }
+
+    if (is_vector) {
+        unsupported_encoding(s, insn);
+    } else {
+        tcg_addr = tcg_const_i64((s->pc - 4) + imm);
+        do_gpr_ld(s, tcg_rt, tcg_addr, size, is_signed, false);
+        tcg_temp_free_i64(tcg_addr);
+    }
 }
 
 /*
@@ -1587,7 +1631,7 @@ static void disas_ldst(DisasContext *s, uint32_t insn)
         disas_ldst_excl(s, insn);
         break;
     case 0x18: case 0x1c: /* Load register (literal) */
-        disas_ld_lit(s, insn);
+        handle_ld_lit(s, insn);
         break;
     case 0x28: case 0x29:
     case 0x2c: case 0x2d: /* Load/store pair (all forms) */
