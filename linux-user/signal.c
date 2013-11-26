@@ -408,8 +408,8 @@ static void QEMU_NORETURN force_sig(int target_sig)
         getrlimit(RLIMIT_CORE, &nodump);
         nodump.rlim_cur=0;
         setrlimit(RLIMIT_CORE, &nodump);
-        (void) fprintf(stderr, "qemu: uncaught target signal %d (%s) - %s\n",
-            target_sig, strsignal(host_sig), "core dumped" );
+        (void) fprintf(stderr, "qemu: uncaught target signal %d (%s) at 0x%" HWADDR_PRIx " - %s\n",
+                       target_sig, strsignal(host_sig), env->pc, "core dumped" );
     }
 
     /* The proper exit code for dying from an uncaught signal is
