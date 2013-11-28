@@ -210,6 +210,12 @@ static TCGv_i64 cpu_reg(DisasContext *s, int reg)
     }
 }
 
+/* register access for when 31 == SP */
+static TCGv_i64 cpu_reg_sp(DisasContext *s, int reg)
+{
+    return cpu_X[reg];
+}
+
 /* read a cpu register in 32bit/64bit mode. Returns a TCGv_i64
  * representing the register contents. This TCGv is an auto-freed
  * temporary so it need not be explicitly freed, and may be modified.
@@ -686,10 +692,101 @@ static void disas_add_sub_imm(DisasContext *s, uint32_t insn)
     unsupported_encoding(s, insn);
 }
 
-/* Logical (immediate) */
+static uint64_t logic_imm_replicate(uint64_t mask, unsigned int esize)
+{
+    int i;
+    uint64_t out_mask = 0;
+    for (i = 0; (i * esize) < 64; i++) {
+        out_mask = out_mask | (mask << (i * esize));
+    }
+    return out_mask;
+}
+
+static inline uint64_t logic_imm_bitmask(unsigned int len)
+{
+    if (len == 64) {
+        return -1;
+    }
+    return (1ULL << len) - 1;
+}
+
+static uint64_t logic_imm_decode_wmask(unsigned int immn,
+                                       unsigned int imms, unsigned int immr)
+{
+    uint64_t mask;
+    unsigned len, esize, levels, s, r;
+
+    len = 31 - clz32((immn << 6) | (~imms & 0x3f));
+    esize = 1 << len;
+    levels = (esize - 1) & 0x3f;
+    s = imms & levels;
+    r = immr & levels;
+
+    mask = logic_imm_bitmask(s + 1);
+    mask = (mask >> r) | (mask << (esize - r));
+    mask &= logic_imm_bitmask(esize);
+    mask = logic_imm_replicate(mask, esize);
+    return mask;
+}
+
+/* C3.4.4 Logical (immediate) */
 static void disas_logic_imm(DisasContext *s, uint32_t insn)
 {
-    unsupported_encoding(s, insn);
+    /*
+     * 31 30 29 28 27 26 25 24 23 22 21    16 15    10 9  5 4  0
+     * sf  opc   1  0  0  1  0  0  N   immr     imms    Rn   Rd
+     */
+    unsigned int sf, opc, is_n, immr, imms, rn, rd;
+    TCGv_i64 tcg_rd, tcg_rn;
+    uint64_t wmask;
+    sf = insn & (1 << 31) ? 1 : 0;
+    opc = extract32(insn, 29, 2);
+    is_n = insn & (1 << 22) ? 1 : 0;
+    immr = extract32(insn, 16, 6);
+    imms = extract32(insn, 10, 6);
+    rn = extract32(insn, 5, 5);
+    rd = extract32(insn, 0, 5);
+
+    if (!sf && is_n) {
+        unallocated_encoding(s);
+        return;
+    }
+
+    if (opc == 0x3) { /* ANDS */
+        tcg_rd = cpu_reg(s, rd);
+    } else {
+        tcg_rd = cpu_reg_sp(s, rd);
+    }
+    tcg_rn = cpu_reg(s, rn);
+
+    wmask = logic_imm_decode_wmask(is_n, imms, immr);
+    if (!sf) {
+        wmask &= 0xffffffff;
+    }
+
+    switch (opc) {
+    case 0x3: /* ANDS */
+    case 0x0: /* AND */
+        tcg_gen_andi_i64(tcg_rd, tcg_rn, wmask);
+        break;
+    case 0x1: /* ORR */
+        tcg_gen_ori_i64(tcg_rd, tcg_rn, wmask);
+        break;
+    case 0x2: /* EOR */
+        tcg_gen_xori_i64(tcg_rd, tcg_rn, wmask);
+        break;
+    default:
+        assert(FALSE); /* must handle all above */
+        break;
+    }
+
+    if (!sf) { /* zero extend final result */
+        tcg_gen_ext32u_i64(tcg_rd, tcg_rd);
+    }
+
+    if (opc == 3) { /* ANDS */
+        gen_logic_CC(sf, tcg_rd);
+    }
 }
 
 /* Move wide (immediate) */
