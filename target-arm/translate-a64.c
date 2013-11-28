@@ -111,6 +111,13 @@ void aarch64_cpu_dump_state(CPUState *cs, FILE *f,
     cpu_fprintf(f, "\n");
 }
 
+
+static int get_mem_index(DisasContext *s)
+{
+    /* XXX only user mode for now */
+    return 1;
+}
+
 void gen_a64_set_pc_im(uint64_t val)
 {
     tcg_gen_movi_i64(cpu_pc, val);
@@ -549,6 +556,80 @@ static int sysreg_access(enum sysreg_access access, DisasContext *s,
 }
 
 /*
+ * Load/Store generators
+ */
+
+/*
+  Store from GPR register to memory
+*/
+static void do_gpr_st(DisasContext *s, TCGv_i64 source, TCGv_i64 tcg_addr, int size)
+{
+    switch (size) {
+    case 0:
+        tcg_gen_qemu_st8(source, tcg_addr, get_mem_index(s));
+        break;
+    case 1:
+        tcg_gen_qemu_st16(source, tcg_addr, get_mem_index(s));
+        break;
+    case 2:
+        tcg_gen_qemu_st32(source, tcg_addr, get_mem_index(s));
+        break;
+    case 3:
+        tcg_gen_qemu_st64(source, tcg_addr, get_mem_index(s));
+        break;
+    default:
+        /* Bad size */
+        g_assert(false);
+        break;
+    }
+}
+
+/*
+ * Store from FP register to memory
+ */
+static void do_fp_st(DisasContext *s, int srcidx, TCGv_i64 tcg_addr, int size)
+{
+    /* This writes the bottom N bits of a 128 bit wide vector to memory */
+    int freg_offs = offsetof(CPUARMState, vfp.regs[srcidx * 2]);
+    TCGv_i64 tmp = tcg_temp_new_i64();
+
+    switch (size) {
+    case 0:
+        tcg_gen_ld8u_i64(tmp, cpu_env, freg_offs);
+        tcg_gen_qemu_st8(tmp, tcg_addr, get_mem_index(s));
+        break;
+    case 1:
+        tcg_gen_ld16u_i64(tmp, cpu_env, freg_offs);
+        tcg_gen_qemu_st16(tmp, tcg_addr, get_mem_index(s));
+        break;
+    case 2:
+        tcg_gen_ld32u_i64(tmp, cpu_env, freg_offs);
+        tcg_gen_qemu_st32(tmp, tcg_addr, get_mem_index(s));
+        break;
+    case 3:
+        tcg_gen_ld_i64(tmp, cpu_env, freg_offs);
+        tcg_gen_qemu_st64(tmp, tcg_addr, get_mem_index(s));
+        break;
+    case 4:
+    {
+        TCGv_i64 tcg_hiaddr = tcg_temp_new_i64();
+        tcg_gen_ld_i64(tmp, cpu_env, freg_offs);
+        tcg_gen_qemu_st64(tmp, tcg_addr, get_mem_index(s));
+        tcg_gen_ld_i64(tmp, cpu_env, freg_offs + sizeof(float64));
+        tcg_gen_addi_i64(tcg_hiaddr, tcg_addr, 8);
+        tcg_gen_qemu_st64(tmp, tcg_hiaddr, get_mem_index(s));
+        tcg_temp_free_i64(tcg_hiaddr);
+        break;
+    }
+    default:
+        g_assert(false);
+        break;
+    }
+
+    tcg_temp_free_i64(tmp);
+}
+
+/*
  * This utility function is for doing register extension with an
  * optional shift. You will likely want to pass a temporary for the
  * destination register. See DecodeRegExtend() in the aarch64 manual
@@ -595,6 +676,19 @@ static void ext_and_shift_reg(TCGv_i64 tcg_out, TCGv_i64 tcg_in,
     if (shift) {
         tcg_gen_shli_i64(tcg_out, tcg_out, shift);
     }
+}
+
+static inline void gen_check_sp_alignment(DisasContext *s)
+{
+    /* The AArch64 architecture mandates that (if enabled via PSTATE
+     * or SCTLR bits) there is a check that SP is 16-aligned on every
+     * SP-relative load or store (with an exception generated if it is not).
+     * In line with general QEMU practice regarding misaligned accesses,
+     * we omit these checks for the sake of guest program performance.
+     * This function is provided as a hook so we can more easily add these
+     * checks in future (possibly as a "favour catching guest program bugs
+     * over speed" user selectable option).
+     */
 }
 
 /*
@@ -972,10 +1066,127 @@ static void disas_ld_lit(DisasContext *s, uint32_t insn)
     unsupported_encoding(s, insn);
 }
 
-/* Load/store pair (all forms) */
+/*
+ * C5.6.177 STP (Store Pair - non vector)
+ * C6.3.284 STP (Store Pair of SIMD&FP)
+ *
+ *  31 30 29   27 26  25   23 22 21   15 14   10 9    5 4    0
+ * +-----+-------+---+-------+--+-----------------------------+
+ * | opc | 1 0 1 | V | index | 0|  imm7 |  Rt2  |  Rn  | Rt   |
+ * +-----+-------+---+-------+--+-------+-------+------+------+
+ *
+ * opc: STP           00 -> 32 bit, 10 -> 64 bit
+ *      STP (SIMD&FP) 00 -> 32 bit, 01 -> 64 bit, 10 -> 128 bit
+ * idx: 001 -> post-index, 011 -> pre-index, 010 -> signed off
+ *
+ * Rt, Rt2 = GPR or SIMD registers to be stored
+ * Rn = general purpose register containing address
+ * imm7 = signed offset (multiple of 4 or 8 depending on size)
+ */
+static void handle_gpr_stp(DisasContext *s, uint32_t insn)
+{
+    int rt = extract32(insn, 0, 5);
+    int rn = extract32(insn, 5, 5);
+    int rt2 = extract32(insn, 10, 5);
+    int64_t offset = sextract32(insn, 15, 7);
+    int type = extract32(insn, 23, 2);
+    bool is_vector = extract32(insn, 26, 1);
+    int opc = extract32(insn, 30, 2);
+
+    TCGv_i64 tcg_rt = cpu_reg(s, rt);
+    TCGv_i64 tcg_rt2 = cpu_reg(s, rt2);
+    TCGv_i64 tcg_addr; /* calculated address */
+    bool postindex = false;
+    bool wback = false;
+    int size;
+
+    if (is_vector) {
+        if (opc == 3) {
+            unallocated_encoding(s);
+            return;
+        }
+        size = 2 + opc;
+    } else {
+        size = 2 + extract32(opc, 1, 1);
+        if (opc & 1) {
+            unallocated_encoding(s);
+            return;
+        }
+    }
+
+    switch (type) {
+    case 1: /* STP (post-index) */
+        postindex = true;
+        wback = true;
+        break;
+    case 2: /* STP (signed offset), rn not updated */
+        postindex = false;
+        break;
+    case 3: /* STP (pre-index) */
+        postindex = false;
+        wback = true;
+        break;
+    default: /* Failed decoder tree? */
+        unallocated_encoding(s);
+        break;
+    }
+
+    offset <<= size;
+
+    tcg_addr = tcg_temp_new_i64();
+    if (rn == 31) {
+        gen_check_sp_alignment(s);
+    }
+    tcg_gen_mov_i64(tcg_addr, cpu_reg_sp(s, rn));
+
+    if (!postindex) {
+        tcg_gen_addi_i64(tcg_addr, tcg_addr, offset);
+    }
+
+    if (is_vector) {
+        do_fp_st(s, rt, tcg_addr, size);
+    } else {
+        do_gpr_st(s, tcg_rt, tcg_addr, size);
+    }
+    tcg_gen_addi_i64(tcg_addr, tcg_addr, 1 << size);
+    if (is_vector) {
+        do_fp_st(s, rt2, tcg_addr, size);
+    } else {
+        do_gpr_st(s, tcg_rt2, tcg_addr, size);
+    }
+
+    if (wback) {
+        if (postindex) {
+            tcg_gen_addi_i64(tcg_addr, tcg_addr, offset - (1 << size));
+        } else {
+            tcg_gen_subi_i64(tcg_addr, tcg_addr, 1 << size);
+        }
+        tcg_gen_mov_i64(cpu_reg_sp(s, rn), tcg_addr);
+    }
+
+    tcg_temp_free_i64(tcg_addr);
+}
+
+
+/* C2.2.3 Load/store pair (all non vector forms)
+ *
+ *  31 30 29   27 26  25   23  22 21   15 14   10 9    5 4    0
+ * +-----+-------+---+-------+---+-----------------------------+
+ * | opc | 1 0 1 | V | index | L |  imm7 |  Rt2  |  Rn  | Rt   |
+ * +-----+-------+---+-------+---+-------+-------+------+------+
+ *
+ * L = 0 -> Store, 1 -> Load
+ * V = 0 -> non-vector, 1 -> vector (SIMD & FP)
+ */
 static void disas_ldst_pair(DisasContext *s, uint32_t insn)
 {
-    unsupported_encoding(s, insn);
+    int is_load = extract32(insn, 22, 1);
+
+    if (is_load) {
+        unsupported_encoding(s, insn);
+    } else {
+        handle_gpr_stp(s, insn);
+    }
 }
 
 /* Load/store register (all forms) */
