@@ -1063,10 +1063,35 @@ static void disas_system(DisasContext *s, uint32_t insn)
     }
 }
 
-/* Exception generation */
+static void handle_svc(DisasContext *s, uint32_t insn)
+{
+    gen_exception_insn(s, 0, EXCP_SWI);
+}
+
+/* C3.2.3 Exception generation
+
+   31             24 23 21 20                     5 4   2 1  0
+  +-----------------+-----+------------------------+-----+----+
+  | 1 1 0 1 0 1 0 0 | opc |          imm16         | op2 | LL |
+  +-----------------------+------------------------+----------+
+
+  opc op2 LL
+  000 000 01 -> SVC
+ */
 static void disas_exc(DisasContext *s, uint32_t insn)
 {
-    unsupported_encoding(s, insn);
+    int opc = extract32(insn, 21, 3);
+    int op2_ll = extract32(insn, 0, 5);
+    int instruction = (opc<<5) | op2_ll;
+
+    switch (instruction) {
+    case 1:
+        handle_svc(s, insn);
+        break;
+    default:
+        unsupported_encoding(s, insn);
+        break;
+    }
 }
 
 /* C3.2.7 Unconditional branch (register)

@@ -1,6 +1,11 @@
 #ifndef TARGET_ARM_TRANSLATE_H
 #define TARGET_ARM_TRANSLATE_H
 
+/* These instructions trap after executing, so defer them until after the
+   conditional execution state has been updated.  */
+#define DISAS_WFI 4
+#define DISAS_SWI 5
+
 /* internal defines */
 typedef struct DisasContext {
     target_ulong pc;
