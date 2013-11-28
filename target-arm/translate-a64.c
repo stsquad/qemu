@@ -34,6 +34,18 @@
 #define GEN_HELPER 1
 #include "helper.h"
 
+#define DEBUG_AARCH64_DISAS     // define to enable tracing
+#ifdef DEBUG_AARCH64_DISAS
+
+#define TRACE_DECODE(fmt, ...)                                \
+    do {                                                                \
+        fprintf(stderr, "%s: 0x%08x @ %" HWADDR_PRIx " " fmt "\n",      \
+                __func__, insn, s->pc -4, ## __VA_ARGS__);              \
+    } while (0);
+#else
+#define TRACE_DECODE(fmt, ...)    do { /* nothing */ } while (0);
+#endif
+
 static TCGv_i64 cpu_X[32];
 static TCGv_i64 cpu_pc;
 static TCGv_i32 cpu_NF, cpu_ZF, cpu_CF, cpu_VF;
