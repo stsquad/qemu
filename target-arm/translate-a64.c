@@ -2852,10 +2852,108 @@ static void disas_data_proc_reg(DisasContext *s, uint32_t insn)
     }
 }
 
+/*
+ * C3.6.30 Floating point <-> integer conversions
+ *
+ *  31 30   29 28       24 23  22 21  20   19 18    16 15         10 9  5 4   0
+ * +--+---+---+-----------+------+---+-------+--------+-------------+----+-----+
+ * |sf| 0 | S | 1 1 1 1 0 | type | 1 | rmode | opcode | 0 0 0 0 0 0 | Rn | Rd  |
+ * +--+---+---+-----------+------+---+-------+--------+-------------+----+-----+
+ */
+static void disas_fpintconv(DisasContext *s, uint32_t insn)
+{
+    int rd = extract32(insn, 0, 5);
+    int rn = extract32(insn, 5, 5);
+    int opcode = extract32(insn, 16, 3);
+    int rmode = extract32(insn, 19, 2);
+    int type = extract32(insn, 22, 2);
+    bool sbit = extract32(insn, 29, 1);
+    bool sf = extract32(insn, 31, 1);
+
+    if (!sbit && (rmode < 2) && (opcode > 5)) {
+        /* FMOV */
+        bool itof = opcode & 1;
+
+        /* gpr to float, double, or top half of quad fp reg. */
+        switch (sf << 3 | type << 1 | rmode) {
+        case 0x0: /* 32 bit */
+        case 0xa: /* 64 bit */
+        case 0xd: /* 64 bit to top half of quad */
+            break;
+        default:
+            /* all other sf/type/rmode combinations are invalid */
+            unallocated_encoding(s);
+            break;
+        }
+
+
+        if (itof) {
+            int freg_offs = offsetof(CPUARMState, vfp.regs[rd * 2]);
+            TCGv_i64 tcg_rn = cpu_reg(s, rn);
+
+            switch (type) {
+            case 0:
+            {
+                /* 32 bit */
+                TCGv_i64 tmp = tcg_temp_new_i64();
+                tcg_gen_ext32u_i64(tmp, tcg_rn);
+                tcg_gen_st_i64(tmp, cpu_env, freg_offs);
+                tcg_gen_movi_i64(tmp, 0);
+                tcg_gen_st_i64(tmp, cpu_env, freg_offs + sizeof(float64));
+                tcg_temp_free_i64(tmp);
+                break;
+            }
+            case 1:
+            {
+                /* 64 bit */
+                TCGv_i64 tmp = tcg_const_i64(0);
+                tcg_gen_st_i64(tcg_rn, cpu_env, freg_offs);
+                tcg_gen_st_i64(tmp, cpu_env, freg_offs + sizeof(float64));
+                tcg_temp_free_i64(tmp);
+                break;
+            }
+            case 2:
+                /* 64 bit to top half. */
+                tcg_gen_st_i64(tcg_rn, cpu_env, freg_offs + sizeof(float64));
+                break;
+            }
+        } else {
+            int freg_offs = offsetof(CPUARMState, vfp.regs[rn * 2]);
+            TCGv_i64 tcg_rd = cpu_reg(s, rd);
+
+            switch (type) {
+            case 0:
+                /* 32 bit */
+                tcg_gen_ld32u_i64(tcg_rd, cpu_env, freg_offs);
+                break;
+            case 2:
+                /* 64 bits from top half */
+                freg_offs += sizeof(float64);
+                /* fall through */
+            case 1:
+                /* 64 bit */
+                tcg_gen_ld_i64(tcg_rd, cpu_env, freg_offs);
+                break;
+            }
+        }
+    } else {
+        /* actual FP conversions */
+        unsupported_encoding(s, insn);
+    }
+}
+
 /* C3.6 Data processing - SIMD and floating point */
 static void disas_data_proc_simd_fp(DisasContext *s, uint32_t insn)
 {
-    unsupported_encoding(s, insn);
+    // TODO proper decode skeleton here
+    if (extract32(insn, 30, 1) == 0 &&
+        extract32(insn, 24, 5) == 0x1e &&
+        extract32(insn, 21, 1) == 1 &&
+        extract32(insn, 10, 6) == 0) {
+        disas_fpintconv(s, insn);
+    } else {
+        unsupported_encoding(s, insn);
+    }
 }
 
 /* C3.1 A64 instruction index by encoding */
