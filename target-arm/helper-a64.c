@@ -24,6 +24,26 @@
 #include "sysemu/sysemu.h"
 #include "qemu/bitops.h"
 
+uint64_t HELPER(get_fpcr)(CPUARMState *env)
+{
+    return vfp_get_fpcr(env);
+}
+
+void HELPER(set_fpcr)(CPUARMState *env, uint64_t value)
+{
+    vfp_set_fpcr(env, value);
+}
+
+uint64_t HELPER(get_fpsr)(CPUARMState *env)
+{
+    return vfp_get_fpsr(env);
+}
+
+void HELPER(set_fpsr)(CPUARMState *env, uint64_t value)
+{
+    vfp_set_fpsr(env, value);
+}
+
 /* C2.4.7 Multiply and divide */
 /* special cases for 0 and LLONG_MIN are mandated by the standard */
 uint64_t HELPER(udiv64)(uint64_t num, uint64_t den)
