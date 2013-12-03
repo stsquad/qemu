@@ -458,4 +458,8 @@ DEF_HELPER_3(neon_qzip8, void, env, i32, i32)
 DEF_HELPER_3(neon_qzip16, void, env, i32, i32)
 DEF_HELPER_3(neon_qzip32, void, env, i32, i32)
 
+#ifdef TARGET_AARCH64
+#include "helper-a64.h"
+#endif
+
 #include "exec/def-helper.h"
