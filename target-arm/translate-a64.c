@@ -1381,6 +1381,95 @@ static void disas_ldst_pair(DisasContext *s, uint32_t insn)
     }
 }
 
+
+
+/*
+ * C3.3.10 Load/store (register offset)
+ *
+ * 31 30 29   27  26 25 24 23 22 21  20  16 15 13 12 11 10 9  5 4  0
+ * +----+-------+---+-----+-----+---+------+-----+--+-----+----+----+
+ * |size| 1 1 1 | V | 0 0 | opc | 1 |  Rm  | opt | S| 1 0 | Rn | Rt |
+ * +----+-------+---+-----+-----+---+------+-----+--+-----+----+----+
+ *
+ * For non-vector:
+ *   size: 00-> byte, 01 -> 16 bit, 10 -> 32bit, 11 -> 64bit
+ *   opc: 00 -> store, 01 -> loadu, 10 -> loads 64, 11 -> loads 32
+ * For vector:
+ *   size is opc<1>:size<1:0> so 100 -> 128 bit; 110 and 111 unallocated
+ *   opc<0>: 0 -> store, 1 -> load
+ * V: 1 -> vector/simd
+ * opt: extend encoding (see DecodeRegExtend)
+ * S: is S=1 then scale (essentially index by sizeof(size))
+ * Rt: register to transfer into/out of
+ * Rn: address register or SP for base
+ * Rm: offset register or ZR for offset
+ */
+static void handle_ldst_reg_roffset(DisasContext *s, uint32_t insn)
+{
+    int rt = extract32(insn, 0, 5);
+    int rn = extract32(insn, 5, 5);
+    int shift = extract32(insn, 12, 1);
+    int rm = extract32(insn, 16, 5);
+    int opc = extract32(insn, 22, 2);
+    int opt = extract32(insn, 13, 3);
+    int size = extract32(insn, 30, 2);
+    bool is_signed = false;
+    bool is_store = false;
+    bool is_extended = false;
+    bool is_vector = extract32(insn, 26, 1);
+
+    TCGv_i64 tcg_rm;
+    TCGv_i64 tcg_addr;
+
+    g_assert(extract32(insn, 10, 2)==2); /* only roffset */
+
+    if (extract32(opt, 1, 1) == 0) {
+        unallocated_encoding(s);
+        return;
+    }
+
+    if (is_vector) {
+        size |= (opc & 2) << 1;
+        if (size > 4) {
+            unallocated_encoding(s);
+        }
+        is_store = ((opc & 1) == 0);
+    } else {
+        if (size == 3 && opc == 2) {
+            /* PRFM - prefetch */
+            return;
+        }
+        is_store = (opc == 0);
+        is_signed = opc & (1<<1);
+        is_extended = (size < 3) && (opc & 1);
+    }
+
+    if (rn == 31) {
+        gen_check_sp_alignment(s);
+    }
+    tcg_addr = read_cpu_reg_sp(s, rn, 1);
+
+    tcg_rm = read_cpu_reg(s, rm, 1);
+    ext_and_shift_reg(tcg_rm, tcg_rm, opt, shift ? size : 0);
+
+    tcg_gen_add_i64(tcg_addr, tcg_addr, tcg_rm);
+
+    if (is_vector) {
+        if (is_store) {
+            do_fp_st(s, rt, tcg_addr, size);
+        } else {
+            do_fp_ld(s, rt, tcg_addr, size);
+        }
+    } else {
+        TCGv_i64 tcg_rt = cpu_reg(s, rt);
+        if (is_store) {
+            do_gpr_st(s, tcg_rt, tcg_addr, size);
+        } else {
+            do_gpr_ld(s, tcg_rt, tcg_addr, size, is_signed, is_extended);
+        }
+    }
+}
+
 /*
  * C3.3.13 Load/store (unsigned immediate)
  *
@@ -1456,7 +1545,11 @@ static void disas_ldst_reg(DisasContext *s, uint32_t insn)
 {
     switch (extract32(insn, 24, 2)) {
     case 0:
-        unsupported_encoding(s, insn);
+        if (extract32(insn, 21,1)) {
+            handle_ldst_reg_roffset(s, insn);
+        } else {
+            unsupported_encoding(s, insn);
+        }
         break;
     case 1:
         handle_ldst_reg_unsigned_imm(s, insn);
