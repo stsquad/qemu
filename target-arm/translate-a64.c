@@ -345,6 +345,31 @@ static int put_tpidr_el0(TCGv_i64 tcg_rt)
     return 0;
 }
 
+/* FPCR (C4.3.8) */
+static int get_fpcr(TCGv_i64 tcg_rt)
+{
+    gen_helper_get_fpcr(tcg_rt, cpu_env);
+    return 0;
+}
+
+static int put_fpcr(TCGv_i64 tcg_rt)
+{
+    gen_helper_set_fpcr(cpu_env, tcg_rt);
+    return 0;
+}
+
+/* FPSR (C4.3.9) */
+static int get_fpsr(TCGv_i64 tcg_rt)
+{
+    gen_helper_get_fpsr(tcg_rt, cpu_env);
+    return 0;
+}
+
+static int put_fpsr(TCGv_i64 tcg_rt)
+{
+    gen_helper_set_fpsr(cpu_env, tcg_rt);
+    return 0;
+}
 
 /* manual: System_Get() / System_Put() */
 /* returns 0 on success, 1 on unsupported, 2 on unallocated */
@@ -362,6 +387,12 @@ static int sysreg_access(enum sysreg_access access, DisasContext *s,
             /* NZVC C4.3.10 */
             return access == SYSTEM_GET ?
                 get_nzcv(cpu_reg(s, rt)) : put_nzcv(cpu_reg(s, rt));
+        } else if (op1 == 3 && crm == 4 && op2 == 0) {
+            return access == SYSTEM_GET ?
+                get_fpcr(cpu_reg(s, rt)) : put_fpcr(cpu_reg(s, rt));
+        } else if (op1 == 3 && crm == 4 && op2 == 1) {
+            return access == SYSTEM_GET ?
+                get_fpsr(cpu_reg(s, rt)) : put_fpsr(cpu_reg(s, rt));
         }
     } else if (crn == 11 || crn == 15) {
         /* C4.2.7 Reserved control space for IMPLEM.-DEFINED func. */
