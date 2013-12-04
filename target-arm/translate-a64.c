@@ -585,6 +585,48 @@ static void do_gpr_st(DisasContext *s, TCGv_i64 source, TCGv_i64 tcg_addr, int s
 }
 
 /*
+  Load from memory to GPR register
+*/
+static void do_gpr_ld(DisasContext *s, TCGv_i64 dest, TCGv_i64 tcg_addr, int size, bool is_signed, bool extend)
+{
+    switch (size) {
+    case 0:
+        if (is_signed) {
+            tcg_gen_qemu_ld8s(dest, tcg_addr, get_mem_index(s));
+        } else {
+            tcg_gen_qemu_ld8u(dest, tcg_addr, get_mem_index(s));
+        }
+        break;
+    case 1:
+        if (is_signed) {
+            tcg_gen_qemu_ld16s(dest, tcg_addr, get_mem_index(s));
+        } else {
+            tcg_gen_qemu_ld16u(dest, tcg_addr, get_mem_index(s));
+        }
+        break;
+    case 2:
+        if (is_signed) {
+            tcg_gen_qemu_ld32s(dest, tcg_addr, get_mem_index(s));
+        } else {
+            tcg_gen_qemu_ld32u(dest, tcg_addr, get_mem_index(s));
+        }
+        break;
+    case 3:
+        tcg_gen_qemu_ld64(dest, tcg_addr, get_mem_index(s));
+        break;
+    default:
+        /* Bad size */
+        g_assert(false);
+        break;
+    }
+
+    if (extend && is_signed) {
+        g_assert(size < 3);
+        tcg_gen_ext32u_i64(dest, dest);
+    }
+}
+
+/*
  * Store from FP register to memory
  */
 static void do_fp_st(DisasContext *s, int srcidx, TCGv_i64 tcg_addr, int size)
@@ -627,6 +669,57 @@ static void do_fp_st(DisasContext *s, int srcidx, TCGv_i64 tcg_addr, int size)
     }
 
     tcg_temp_free_i64(tmp);
+}
+
+/* Load from memory to FP register */
+static void do_fp_ld(DisasContext *s, int destidx, TCGv_i64 tcg_addr, int size)
+{
+    /* This always zero-extends and writes to a full 128 bit wide vector */
+    int freg_offs = offsetof(CPUARMState, vfp.regs[destidx * 2]);
+    TCGv_i64 tmplo = tcg_temp_new_i64();
+    TCGv_i64 tmphi;
+
+    switch (size) {
+    case 0:
+        tcg_gen_qemu_ld8u(tmplo, tcg_addr, get_mem_index(s));
+        break;
+    case 1:
+        tcg_gen_qemu_ld16u(tmplo, tcg_addr, get_mem_index(s));
+        break;
+    case 2:
+        tcg_gen_qemu_ld32u(tmplo, tcg_addr, get_mem_index(s));
+        break;
+    case 3:
+    case 4:
+        tcg_gen_qemu_ld64(tmplo, tcg_addr, get_mem_index(s));
+        break;
+    default:
+        g_assert(false);
+        break;
+    }
+
+    switch (size) {
+    case 4:
+    {
+        TCGv_i64 tcg_hiaddr;
+
+        tmphi = tcg_temp_new_i64();
+        tcg_hiaddr = tcg_temp_new_i64();
+        tcg_gen_addi_i64(tcg_hiaddr, tcg_addr, 8);
+        tcg_gen_qemu_ld64(tmphi, tcg_hiaddr, get_mem_index(s));
+        tcg_temp_free_i64(tcg_hiaddr);
+        break;
+    }
+    default:
+        tmphi = tcg_const_i64(0);
+        break;
+    }
+
+    tcg_gen_st_i64(tmplo, cpu_env, freg_offs);
+    tcg_gen_st_i64(tmphi, cpu_env, freg_offs + sizeof(float64));
+
+    tcg_temp_free_i64(tmplo);
+    tcg_temp_free_i64(tmphi);
 }
 
 /*
@@ -1067,6 +1160,105 @@ static void disas_ld_lit(DisasContext *s, uint32_t insn)
 }
 
 /*
+ * C5.6.81 LDP (Load Pair - non vector)
+ * C5.6.82 LDPSW (Load Pair Signed Word - non vector)
+ * C6.3.165 LDP (Load Pair of SIMD&FP)
+ *
+ *  31 30 29   27  26 25   23 22 21   15 14   10 9    5 4    0
+ * +-----+-------+---+-------+--+-----------------------------+
+ * | opc | 1 0 1 | V | index | 1|  imm7 |  Rt2  |  Rn  | Rt   |
+ * +-----+-------+---+-------+--+-------+-------+------+------+
+ *                             L
+ * opc: LDP           00 -> 32 bit, 10 -> 64 bit
+ *      LDPSW         01
+ *      LDP (SIMD&FP) 00 -> 32 bit, 01 -> 64 bit, 10 -> 128 bit
+ * idx: 001 -> post-index, 011 -> pre-index, 010 -> signed off
+ *
+ * Rt, Rt2 = GPR or SIMD registers to be stored
+ * Rn = general purpose register containing address
+ * imm7 = signed offset (multiple of 4 or 8 depending on size)
+ */
+static void handle_gpr_ldp(DisasContext *s, uint32_t insn)
+{
+    int rt = extract32(insn, 0, 5);
+    int rn = extract32(insn, 5, 5);
+    int rt2 = extract32(insn, 10, 5);
+    int64_t offset = sextract32(insn, 15, 7);
+    int idx = extract32(insn, 23, 3);
+    bool is_signed = false;
+    bool is_vector = extract32(insn, 26, 1);
+    int opc = extract32(insn, 30, 2);
+    int size;
+    bool postindex = true;
+    bool wback = false;
+
+    TCGv_i64 tcg_rt = cpu_reg(s, rt);
+    TCGv_i64 tcg_rt2 = cpu_reg(s, rt2);
+    TCGv_i64 tcg_addr = tcg_temp_new_i64();
+
+    if (opc == 3) {
+        unallocated_encoding(s);
+        return;
+    }
+    if (is_vector) {
+        size = 2 + opc;
+    } else {
+        is_signed = opc & 1;
+        size = 2 + extract32(opc, 1, 1);
+    }
+
+    switch (idx) {
+    case 1: /* post-index */
+        postindex = true;
+        wback = true;
+        break;
+    case 2: /* signed offset, rn not updated */
+        postindex = false;
+        break;
+    case 3: /* STP (pre-index) */
+        postindex = false;
+        wback = true;
+        break;
+    default: /* Failed decoder tree? */
+        unallocated_encoding(s);
+        break;
+    }
+
+    offset <<= size;
+
+    if (rn == 31) {
+        gen_check_sp_alignment(s);
+    }
+    tcg_gen_mov_i64(tcg_addr, cpu_reg_sp(s, rn));
+
+    if (!postindex) {
+        tcg_gen_addi_i64(tcg_addr, tcg_addr, offset);
+    }
+
+    if (is_vector) {
+        do_fp_ld(s, rt, tcg_addr, size);
+    } else {
+        do_gpr_ld(s, tcg_rt, tcg_addr, size, is_signed, false);
+    }
+    tcg_gen_addi_i64(tcg_addr, tcg_addr, 1 << size);
+    if (is_vector) {
+        do_fp_ld(s, rt2, tcg_addr, size);
+    } else {
+        do_gpr_ld(s, tcg_rt2, tcg_addr, size, is_signed, false);
+    }
+
+    if (wback) {
+        if (postindex) {
+            tcg_gen_addi_i64(tcg_addr, tcg_addr, offset - (1 << size));
+        } else {
+            tcg_gen_subi_i64(tcg_addr, tcg_addr, 1 << size);
+        }
+        tcg_gen_mov_i64(cpu_reg_sp(s, rn), tcg_addr);
+    }
+    tcg_temp_free_i64(tcg_addr);
+}
+
+/*
  * C5.6.177 STP (Store Pair - non vector)
  * C6.3.284 STP (Store Pair of SIMD&FP)
  *
@@ -1183,7 +1375,7 @@ static void disas_ldst_pair(DisasContext *s, uint32_t insn)
     int is_load = extract32(insn, 22, 1);
 
     if (is_load) {
-        unsupported_encoding(s, insn);
+        handle_gpr_ldp(s, insn);
     } else {
         handle_gpr_stp(s, insn);
     }
