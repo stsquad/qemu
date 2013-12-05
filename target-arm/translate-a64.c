@@ -213,6 +213,21 @@ static TCGv_i64 new_tmp_a64_zero(DisasContext *s)
     return t;
 }
 
+/*
+ * Register access functions
+ *
+ * These functions are used for directly accessing a register in where
+ * changes to the final register value are likely to be made. If you
+ * need to use a register for temporary calculation (e.g. index type
+ * operations) use the read_* form.
+ *
+ * B1.2.1 Register mappings
+ *
+ * In instruction register encoding 31 can refer to ZR (zero register) or
+ * the SP (stack pointer) depending on context. In QEMUs case we map SP
+ * to cpu_X[31] and ZR accesses to a temporary which can be discarded.
+ * This is the point of the *_sp forms.
+ */
 static TCGv_i64 cpu_reg(DisasContext *s, int reg)
 {
     if (reg == 31) {
@@ -247,6 +262,17 @@ static TCGv_i64 read_cpu_reg(DisasContext *s, int reg, int sf)
     return v;
 }
 
+static TCGv_i64 read_cpu_reg_sp(DisasContext *s, int reg, int sf)
+{
+    TCGv_i64 v = new_tmp_a64(s);
+    if (sf) {
+        tcg_gen_mov_i64(v, cpu_X[reg]);
+    } else {
+        tcg_gen_ext32u_i64(v, cpu_X[reg]);
+    }
+    return v;
+}
+
 /* Set ZF and NF based on a 64 bit result. This is alas fiddlier
  * than the 32 bit equivalent.
  */
@@ -272,6 +298,102 @@ static inline void gen_logic_CC(int sf, TCGv_i64 result)
     }
     tcg_gen_movi_i32(cpu_CF, 0);
     tcg_gen_movi_i32(cpu_VF, 0);
+}
+
+/* dest = T0 + T1; compute C, N, V and Z flags */
+static void gen_add_CC(int sf, TCGv_i64 dest, TCGv_i64 t0, TCGv_i64 t1)
+{
+    if (sf) {
+        TCGv_i64 result, flag, tmp;
+        result = tcg_temp_new_i64();
+        flag = tcg_temp_new_i64();
+        tmp = tcg_temp_new_i64();
+
+        tcg_gen_movi_i64(tmp, 0);
+        tcg_gen_add2_i64(result, flag, t0, tmp, t1, tmp);
+
+        tcg_gen_trunc_i64_i32(cpu_CF, flag);
+
+        gen_set_NZ64(result);
+
+        tcg_gen_xor_i64(flag, result, t0);
+        tcg_gen_xor_i64(tmp, t0, t1);
+        tcg_gen_andc_i64(flag, flag, tmp);
+        tcg_temp_free_i64(tmp);
+        tcg_gen_shri_i64(flag, flag, 32);
+        tcg_gen_trunc_i64_i32(cpu_VF, flag);
+
+        tcg_gen_mov_i64(dest, result);
+        tcg_temp_free_i64(result);
+        tcg_temp_free_i64(flag);
+    } else {
+        /* 32 bit arithmetic */
+        TCGv_i32 t0_32 = tcg_temp_new_i32();
+        TCGv_i32 t1_32 = tcg_temp_new_i32();
+        TCGv_i32 tmp = tcg_temp_new_i32();
+
+        tcg_gen_movi_i32(tmp, 0);
+        tcg_gen_trunc_i64_i32(t0_32, t0);
+        tcg_gen_trunc_i64_i32(t1_32, t1);
+        tcg_gen_add2_i32(cpu_NF, cpu_CF, t0_32, tmp, t1_32, tmp);
+        tcg_gen_mov_i32(cpu_ZF, cpu_NF);
+        tcg_gen_xor_i32(cpu_VF, cpu_NF, t0_32);
+        tcg_gen_xor_i32(tmp, t0_32, t1_32);
+        tcg_gen_andc_i32(cpu_VF, cpu_VF, tmp);
+        tcg_gen_extu_i32_i64(dest, cpu_NF);
+
+        tcg_temp_free_i32(tmp);
+        tcg_temp_free_i32(t0_32);
+        tcg_temp_free_i32(t1_32);
+    }
+}
+
+/* dest = T0 - T1; compute C, N, V and Z flags */
+static void gen_sub_CC(int sf, TCGv_i64 dest, TCGv_i64 t0, TCGv_i64 t1)
+{
+    if (sf) {
+        /* 64 bit arithmetic */
+        TCGv_i64 result, flag, tmp;
+
+        result = tcg_temp_new_i64();
+        flag = tcg_temp_new_i64();
+        tcg_gen_sub_i64(result, t0, t1);
+
+        gen_set_NZ64(result);
+
+        tcg_gen_setcond_i64(TCG_COND_GEU, flag, t0, t1);
+        tcg_gen_trunc_i64_i32(cpu_CF, flag);
+
+        tcg_gen_xor_i64(flag, result, t0);
+        tmp = tcg_temp_new_i64();
+        tcg_gen_xor_i64(tmp, t0, t1);
+        tcg_gen_and_i64(flag, flag, tmp);
+        tcg_temp_free_i64(tmp);
+        tcg_gen_shri_i64(flag, flag, 32);
+        tcg_gen_trunc_i64_i32(cpu_VF, flag);
+        tcg_gen_mov_i64(dest, result);
+        tcg_temp_free_i64(flag);
+        tcg_temp_free_i64(result);
+    } else {
+        /* 32 bit arithmetic */
+        TCGv_i32 t0_32 = tcg_temp_new_i32();
+        TCGv_i32 t1_32 = tcg_temp_new_i32();
+        TCGv_i32 tmp;
+
+        tcg_gen_trunc_i64_i32(t0_32, t0);
+        tcg_gen_trunc_i64_i32(t1_32, t1);
+        tcg_gen_sub_i32(cpu_NF, t0_32, t1_32);
+        tcg_gen_mov_i32(cpu_ZF, cpu_NF);
+        tcg_gen_setcond_i32(TCG_COND_GEU, cpu_CF, t0_32, t1_32);
+        tcg_gen_xor_i32(cpu_VF, cpu_NF, t0_32);
+        tmp = tcg_temp_new_i32();
+        tcg_gen_xor_i32(tmp, t0_32, t1_32);
+        tcg_temp_free_i32(t0_32);
+        tcg_temp_free_i32(t1_32);
+        tcg_gen_and_i32(cpu_VF, cpu_VF, tmp);
+        tcg_temp_free_i32(tmp);
+        tcg_gen_extu_i32_i64(dest, cpu_NF);
+    }
 }
 
 enum sysreg_access {
@@ -424,6 +546,55 @@ static int sysreg_access(enum sysreg_access access, DisasContext *s,
     }
 
     return 1; /* unsupported */
+}
+
+/*
+ * This utility function is for doing register extension with an
+ * optional shift. You will likely want to pass a temporary for the
+ * destination register. See DecodeRegExtend() in the aarch64 manual
+ */
+
+static void ext_and_shift_reg(TCGv_i64 tcg_out, TCGv_i64 tcg_in,
+                              int option, unsigned int shift)
+{
+    int extsize = extract32(option, 0, 2);
+    bool is_signed = extract32(option, 2, 1);
+
+    if (is_signed) {
+        switch (extsize) {
+        case 0:
+            tcg_gen_ext8s_i64(tcg_out, tcg_in);
+            break;
+        case 1:
+            tcg_gen_ext16s_i64(tcg_out, tcg_in);
+            break;
+        case 2:
+            tcg_gen_ext32s_i64(tcg_out, tcg_in);
+            break;
+        case 3:
+            tcg_gen_mov_i64(tcg_out, tcg_in);
+            break;
+        }
+    } else {
+        switch (extsize) {
+        case 0:
+            tcg_gen_ext8u_i64(tcg_out, tcg_in);
+            break;
+        case 1:
+            tcg_gen_ext16u_i64(tcg_out, tcg_in);
+            break;
+        case 2:
+            tcg_gen_ext32u_i64(tcg_out, tcg_in);
+            break;
+        case 3:
+            tcg_gen_mov_i64(tcg_out, tcg_in);
+            break;
+        }
+    }
+
+    if (shift) {
+        tcg_gen_shli_i64(tcg_out, tcg_out, shift);
+    }
 }
 
 /*
@@ -882,10 +1053,67 @@ static void disas_pc_rel_adr(DisasContext *s, uint32_t insn)
     tcg_gen_movi_i64(cpu_reg(s, rd), base + offset);
 }
 
-/* Add/subtract (immediate) */
+/*
+ * C3.4.1 Add/subtract (immediate)
+ *
+ *  31 30 29 28       24 23 22 21         10 9   5 4   0
+ * +--+--+--+-----------+-----+-------------+-----+-----+
+ * |sf|op| S| 1 0 0 0 1 |shift|    imm12    |  Rn | Rd  |
+ * +--+--+--+-----------+-----+-------------+-----+-----+
+ *
+ *    sf: 0 -> 32bit, 1 -> 64bit
+ *    op: 0 -> add  , 1 -> sub
+ *     S: 1 -> set flags
+ * shift: 00 -> LSL imm by 0, 01 -> LSL imm by 12
+ */
 static void disas_add_sub_imm(DisasContext *s, uint32_t insn)
 {
-    unsupported_encoding(s, insn);
+    int rd = extract32(insn, 0, 5);
+    int rn = extract32(insn, 5, 5);
+    uint64_t imm = extract32(insn, 10, 12);
+    int shift = extract32(insn, 22, 2);
+    bool setflags = extract32(insn, 29, 1);
+    bool sub_op = extract32(insn, 30, 1);
+    bool is_64bit = extract32(insn, 31, 1);
+
+    TCGv_i64 tcg_rn = cpu_reg_sp(s, rn);
+    TCGv_i64 tcg_rd = setflags ? cpu_reg(s, rd):cpu_reg_sp(s, rd);
+    TCGv_i64 tcg_result;
+
+    switch (shift) {
+    case 0x0:
+        break;
+    case 0x1:
+        imm <<= 12;
+        break;
+    default:
+        unallocated_encoding(s);
+    }
+
+    tcg_result = tcg_temp_new_i64();
+    if (!setflags) {
+        if (sub_op) {
+            tcg_gen_subi_i64(tcg_result, tcg_rn, imm);
+        } else {
+            tcg_gen_addi_i64(tcg_result, tcg_rn, imm);
+        }
+    } else {
+        TCGv_i64 tcg_imm = tcg_const_i64(imm);
+        if (sub_op) {
+            gen_sub_CC(is_64bit, tcg_result, tcg_rn, tcg_imm);
+        } else {
+            gen_add_CC(is_64bit, tcg_result, tcg_rn, tcg_imm);
+        }
+        tcg_temp_free_i64(tcg_imm);
+    }
+
+    if (is_64bit) {
+        tcg_gen_mov_i64(tcg_rd, tcg_result);
+    } else {
+        tcg_gen_ext32u_i64(tcg_rd, tcg_result);
+    }
+
+    tcg_temp_free_i64(tcg_result);
 }
 
 static uint64_t logic_imm_replicate(uint64_t mask, unsigned int esize)
@@ -1252,16 +1480,140 @@ static void disas_logic_reg(DisasContext *s, uint32_t insn)
     }
 }
 
-/* Add/subtract (extended register) */
-static void disas_add_sub_ext_reg(DisasContext *s, uint32_t insn)
+/*
+ * C3.5.1 Add/subtract (extended register)
+ *
+ *  31|30|29|28       24|23 22|21|20   16|15  13|12  10|9  5|4  0|
+ * +--+--+--+-----------+-----+--+-------+------+------+----+----+
+ * |sf|op| S| 0 1 0 1 1 | opt | 1|  Rm   |option| imm3 | Rn | Rd |
+ * +--+--+--+-----------+-----+--+-------+------+------+----+----+
+ *
+ *  sf: 0 -> 32bit, 1 -> 64bit
+ *  op: 0 -> add  , 1 -> sub
+ *   S: 1 -> set flags
+ * opt: 00
+ * option: extension type (see DecodeRegExtend)
+ * imm3: optional shift to Rm
+ *
+ * Rd = Rn + LSL(extend(Rm), amount)
+ */
+static void handle_add_sub_ext_reg(DisasContext *s, uint32_t insn)
 {
-    unsupported_encoding(s, insn);
+    int rd = extract32(insn, 0, 5);
+    int rn = extract32(insn, 5, 5);
+    int imm3 = extract32(insn, 10, 3);
+    int option = extract32(insn, 13, 3);
+    int rm = extract32(insn, 16, 5);
+    bool setflags = extract32(insn, 29, 1);
+    bool sub_op = extract32(insn, 30, 1);
+    bool sf = extract32(insn, 31, 1);
+
+    TCGv_i64 tcg_rm, tcg_rn; /* temps */
+    TCGv_i64 tcg_rd;
+    TCGv_i64 tcg_result;
+
+    /* non-flag setting ops may use SP */
+    if (!setflags) {
+        tcg_rn = read_cpu_reg_sp(s, rn, sf);
+        tcg_gen_mov_i64(tcg_rn, cpu_reg_sp(s, rn));
+        tcg_rd = cpu_reg_sp(s, rd);
+    } else {
+        tcg_rn = read_cpu_reg(s, rn, sf);
+        tcg_rd = cpu_reg(s, rd);
+    }
+
+    tcg_rm = read_cpu_reg(s, rm, sf);
+    ext_and_shift_reg(tcg_rm, tcg_rm, option, imm3);
+
+    tcg_result = tcg_temp_new_i64();
+
+    if (!setflags) {
+        if (sub_op) {
+            tcg_gen_sub_i64(tcg_result, tcg_rn, tcg_rm);
+        } else {
+            tcg_gen_add_i64(tcg_result, tcg_rn, tcg_rm);
+        }
+    } else {
+        if (sub_op) {
+            gen_sub_CC(sf, tcg_result, tcg_rn, tcg_rm);
+        } else {
+            gen_add_CC(sf, tcg_result, tcg_rn, tcg_rm);
+        }
+    }
+
+    if (sf) {
+        tcg_gen_mov_i64(tcg_rd, tcg_result);
+    } else {
+        tcg_gen_ext32u_i64(tcg_rd, tcg_result);
+    }
+
+    tcg_temp_free_i64(tcg_result);
 }
 
-/* Add/subtract (shifted register) */
-static void disas_add_sub_reg(DisasContext *s, uint32_t insn)
+/*
+ * C3.5.2 Add/subtract (shifted register)
+ *
+ *  31 30 29 28       24 23 22 21 20   16 15     10 9    5 4    0
+ * +--+--+--+-----------+-----+--+-------+---------+------+------+
+ * |sf|op| S| 0 1 0 1 1 |shift| 0|  Rm   |  imm6   |  Rn  |  Rd  |
+ * +--+--+--+-----------+-----+--+-------+---------+------+------+
+ *
+ *    sf: 0 -> 32bit, 1 -> 64bit
+ *    op: 0 -> add  , 1 -> sub
+ *     S: 1 -> set flags
+ * shift: 00 -> LSL, 01 -> LSR, 10 -> ASR, 11 -> RESERVED
+ *  imm6: Shift amount to apply to Rm before the add/sub
+ *        (for 32bit shifting more than 32 will cause an undef)
+ */
+static void handle_add_sub_reg(DisasContext *s, uint32_t insn)
 {
-    unsupported_encoding(s, insn);
+    int rd = extract32(insn, 0, 5);
+    int rn = extract32(insn, 5, 5);
+    int imm6 = extract32(insn, 10, 6);
+    int rm = extract32(insn, 16, 5);
+    int shift_type = extract32(insn, 22, 2);
+    bool setflags = extract32(insn, 29, 1);
+    bool sub_op = extract32(insn, 30, 1);
+    bool sf = extract32(insn, 31, 1);
+
+    TCGv_i64 tcg_rd = cpu_reg(s, rd);
+    TCGv_i64 tcg_rn, tcg_rm; /* temps */
+    TCGv_i64 tcg_result;
+
+    /* check for invalid encoding */
+    if ( (shift_type == 3) ||
+         (!sf && (imm6>31)) ) {
+        unallocated_encoding(s);
+    } else {
+        tcg_rn = read_cpu_reg(s, rn, sf);
+        tcg_rm = read_cpu_reg(s, rm, sf);
+        /* Rm is optionally shifted */
+        shift_reg_imm(tcg_rm, tcg_rm, sf, shift_type, imm6);
+
+        tcg_result = tcg_temp_new_i64();
+
+        if (!setflags) {
+            if (sub_op) {
+                tcg_gen_sub_i64(tcg_result, tcg_rn, tcg_rm);
+            } else {
+                tcg_gen_add_i64(tcg_result, tcg_rn, tcg_rm);
+            }
+        } else {
+            if (sub_op) {
+                gen_sub_CC(sf, tcg_result, tcg_rn, tcg_rm);
+            } else {
+                gen_add_CC(sf, tcg_result, tcg_rn, tcg_rm);
+            }
+        }
+
+        if (sf) {
+            tcg_gen_mov_i64(tcg_rd, tcg_result);
+        } else {
+            tcg_gen_ext32u_i64(tcg_rd, tcg_result);
+        }
+
+        tcg_temp_free_i64(tcg_result);
+    }
 }
 
 /* Data-processing (3 source) */
@@ -1612,9 +1964,9 @@ static void disas_data_proc_reg(DisasContext *s, uint32_t insn)
         break;
     case 0x0b: /* Add/subtract */
         if (insn & (1 << 21)) { /* (extended register) */
-            disas_add_sub_ext_reg(s, insn);
+            handle_add_sub_ext_reg(s, insn);
         } else {
-            disas_add_sub_reg(s, insn);
+            handle_add_sub_reg(s, insn);
         }
         break;
     case 0x1b: /* Data-processing (3 source) */
