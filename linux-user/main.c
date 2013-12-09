@@ -587,8 +587,126 @@ do_kernel_trap(CPUARMState *env)
 }
 #endif
 
+#ifdef TARGET_AARCH64
+/*
+ * Handle Store-release exclusive
+ *
+ * rs = gets the status result of store exclusive
+ * rt = is the register that is stored
+ * rt2 = is the second register store (in STP)
+ *
+ * While an rs = 31 is silly as writes to the ZR are a nop it is
+ * valid. However you must not write the result to the SP
+ * as that is likely to break things real quick...
+ */
+static int do_strex_a64(CPUARMState *env)
+{
+    uint64_t val;
+    int size;
+    bool is_pair;
+    int rc = 1;
+    int segv = 0;
+    uint64_t addr;
+    int rs, rt, rt2;
+
+    start_exclusive();
+    /* size | is_pair << 2 | (rs << 4) | (rt << 9) | (rt2 << 14)); */
+    size = env->exclusive_info & 3;
+    is_pair = env->exclusive_info & 4;
+    rs = (env->exclusive_info >> 4) & 0x1f;
+    rt = (env->exclusive_info >> 9) & 0x1f;
+    rt2 = (env->exclusive_info >> 14) & 0x1f;
+
+    addr = env->exclusive_addr;
+
+    fprintf(stderr,"do_strex64: size=%d, is_pair=%d, rs=%d, rt=%d, rt2=%d, addr=0x%lx test=0x%lx\n",
+            size, is_pair, rs, rt, rt2, addr, env->exclusive_test);
+
+    if (addr != env->exclusive_test) {
+        goto fail;
+    }
+    
+    switch (size) {
+    case 0:
+        segv = get_user_u8(val, addr);
+        break;
+    case 1:
+        segv = get_user_u16(val, addr);
+        break;
+    case 2:
+        segv = get_user_u32(val, addr);
+	break;
+    case 3:
+	segv = get_user_u64(val, addr);
+        break;
+    default:
+        abort();
+    }
+    if (segv) {
+        goto done;
+    }
+    if (val != env->exclusive_val) {
+        goto fail;
+    }
+    if (is_pair) {
+	if (size == 2) /* 32bit */
+	  segv = get_user_u32(val, addr + 4);
+	else /* 64bit */
+	  segv = get_user_u64(val, addr + 8);
+        if (segv) {
+            goto done;
+        }
+        if (val != env->exclusive_high) {
+            goto fail;
+        }
+    }
+    val = env->xregs[rt];
+    switch (size) {
+    case 0:
+        segv = put_user_u8(val, addr);
+        break;
+    case 1:
+        segv = put_user_u16(val, addr);
+        break;
+    case 2:
+        segv = put_user_u32(val, addr);
+        break;
+    case 3:
+        segv = put_user_u64(val, addr);
+        break;
+    }
+    if (segv) {
+        goto done;
+    }
+    if (is_pair) {
+        val = env->xregs[rt2];
+	if (size == 2) /* 32bit */
+	  segv = put_user_u32(val, addr + 4);
+	else /* 64bit */
+	  segv = put_user_u64(val, addr + 8);
+        if (segv) {
+            goto done;
+        }
+    }
+    rc = 0;
+fail:
+    env->pc += 4;
+    /* a write to the ZR is a NOP */
+    if (rs < 31) {
+        env->xregs[rs] = rc;
+    }
+done:
+    fprintf(stderr, "do_strex64 done pc=%lx rc=%d (segv=%d)\n", env->pc, rc, segv);
+    end_exclusive();
+    return segv;
+}
+#endif
+
 static int do_strex(CPUARMState *env)
 {
+#ifdef TARGET_AARCH64
+    return do_strex_a64(env);
+#else
     uint32_t val;
     int size;
     int rc = 1;
@@ -663,6 +781,7 @@ fail:
 done:
     end_exclusive();
     return segv;
+#endif
 }
 
 #ifdef TARGET_ABI32
