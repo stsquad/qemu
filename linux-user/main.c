@@ -619,8 +619,10 @@ static int do_strex_a64(CPUARMState *env)
 
     addr = env->exclusive_addr;
 
-    fprintf(stderr,"do_strex64: size=%d, is_pair=%d, rs=%d, rt=%d, rt2=%d, addr=0x%lx test=0x%lx\n",
-            size, is_pair, rs, rt, rt2, addr, env->exclusive_test);
+    /* 
+     * fprintf(stderr,"do_strex64: size=%d, is_pair=%d, rs=%d, rt=%d, rt2=%d, addr=0x%lx test=0x%lx\n",
+     *         size, is_pair, rs, rt, rt2, addr, env->exclusive_test);
+     */
 
     if (addr != env->exclusive_test) {
         goto fail;
@@ -696,7 +698,7 @@ fail:
         env->xregs[rs] = rc;
     }
 done:
-    fprintf(stderr, "do_strex64 done pc=%lx rc=%d (segv=%d)\n", env->pc, rc, segv);
+    /* fprintf(stderr, "do_strex64 done pc=%lx rc=%d (segv=%d)\n", env->pc, rc, segv); */
     end_exclusive();
     return segv;
 }

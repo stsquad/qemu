@@ -1248,8 +1248,10 @@ static void handle_ldst_excl(DisasContext *s, uint32_t insn)
     int size = extract32(insn, 30, 2);
     TCGv_i64 tcg_addr;
 
-    TRACE_DECODE("rt=%d, rn=%d, rt2=%d, rs=%d, is_lasr=%d, is_pair=%d, is_store=%d is_excl=%d size=%d",
-                 rt, rn, rt2, rs, is_lasr, is_pair, is_store, is_excl, size);
+    /* 
+     * TRACE_DECODE("rt=%d, rn=%d, rt2=%d, rs=%d, is_lasr=%d, is_pair=%d, is_store=%d is_excl=%d size=%d",
+     *              rt, rn, rt2, rs, is_lasr, is_pair, is_store, is_excl, size);
+     */
 
     if ((!is_excl && !is_lasr) ||
         (is_pair && size < 2)) {
