@@ -70,11 +70,24 @@ void do_qemu_set_log(int log_flags, bool use_own_buffers)
         qemu_log_close();
     }
 }
-
+/*
+ * Allow the user to include %d in their logfile which will be
+ * substituted with the current PID. This is useful for debugging many
+ * nested linux-user tasks but will result in lots of logs.
+ */
 void qemu_set_log_filename(const char *filename)
 {
     g_free(logfilename);
-    logfilename = g_strdup(filename);
+    if (g_strrstr(filename, "%d")) {
+        /* if we are going to format this we'd better validate first */
+        if (g_regex_match_simple("^[^%]+%d[^%]+$", filename, 0, 0)) {
+            logfilename = g_strdup_printf(filename, getpid());
+        } else {
+            g_error("Bad logfile format: %s", filename);
+        }
+    } else {
+        logfilename = g_strdup(filename);
+    }
     qemu_log_close();
     qemu_set_log(qemu_loglevel);
 }
