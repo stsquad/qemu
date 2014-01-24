@@ -62,14 +62,53 @@ static void test_parse_range(void)
     g_assert(qemu_log_in_addr_range(0x1050));
     g_assert(qemu_log_in_addr_range(0x2050));
     g_assert(qemu_log_in_addr_range(0x3050));
-
 }
+
+/* As the only real failure from a bad log filename path spec is
+ * reporting to the user we have to use the g_test_trap_subprocess
+ * mechanism and check no errors reported on stderr.
+ */
+#ifdef CONFIG_HAS_GLIB_SUBPROCESS_TESTS
+static void test_parse_path(void)
+{
+    /* All these should work without issue */
+    if (g_test_subprocess()) {
+        qemu_set_log_filename("/tmp/qemu.log");
+        qemu_set_log_filename("/tmp/qemu-%d.log");
+        qemu_set_log_filename("/tmp/qemu.log.%d");
+        return;
+    }
+
+    g_test_trap_subprocess (NULL, 0, 0);
+    g_test_trap_assert_passed();
+    g_test_trap_assert_stdout("");
+    g_test_trap_assert_stderr("");
+}
+
+static void test_parse_invalid_path(void)
+{
+    if (g_test_subprocess()) {
+        qemu_set_log_filename("/tmp/qemu-%d%d.log");
+        return;
+    }
+
+    g_test_trap_subprocess (NULL, 0, 0);
+    g_test_trap_assert_passed();
+    g_test_trap_assert_stdout("");
+    g_test_trap_assert_stderr("Bad logfile format: /tmp/qemu-%d%d.log\n");
+}
+#endif /* CONFIG_HAS_GLIB_SUBPROCESS_TESTS */
 
 int main(int argc, char **argv)
 {
     g_test_init(&argc, &argv, NULL);
 
     g_test_add_func("/logging/parse_range", test_parse_range);
+
+#ifdef CONFIG_HAS_GLIB_SUBPROCESS_TESTS
+    g_test_add_func("/logging/parse_path", test_parse_path);
+    g_test_add_func("/logging/parse_invalid_path", test_parse_invalid_path);
+#endif
 
     return g_test_run();
 }
