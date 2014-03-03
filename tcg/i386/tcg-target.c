@@ -1342,7 +1342,7 @@ static void tcg_out_qemu_ld_slow_path(TCGContext *s, TCGLabelQemuLdst *l)
         }
         break;
     default:
-        tcg_abort();
+        tcg_abort_dbg("bad opc:%x", opc);
     }
 
     /* Jump to the code corresponding to next IR of qemu_st */
@@ -1519,7 +1519,7 @@ static void tcg_out_qemu_ld_direct(TCGContext *s, TCGReg datalo, TCGReg datahi,
         }
         break;
     default:
-        tcg_abort();
+        tcg_abort_dbg("bad memop=%x", memop);
     }
 }
 
