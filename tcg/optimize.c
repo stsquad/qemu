@@ -407,7 +407,7 @@ static bool do_constant_folding_cond_eq(TCGCond c)
     case TCG_COND_EQ:
         return 1;
     default:
-        tcg_abort();
+        tcg_abort_dbg("bad condition:%d", c);
     }
 }
 

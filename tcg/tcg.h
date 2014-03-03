@@ -657,11 +657,14 @@ typedef struct TCGTargetOpDef {
     const char *args_ct_str[TCG_MAX_OP_ARGS];
 } TCGTargetOpDef;
 
-#define tcg_abort() \
+#define tcg_abort_dbg(fmt, ...)\
 do {\
-    fprintf(stderr, "%s:%d: tcg fatal error\n", __FILE__, __LINE__);\
+    fprintf(stderr, "%s:%d: tcg fatal error " fmt "\n",\
+            __FILE__, __LINE__, ## __VA_ARGS__);\
     abort();\
 } while (0)
+
+#define tcg_abort() tcg_abort_dbg("")
 
 #ifdef CONFIG_DEBUG_TCG
 # define tcg_debug_assert(X) do { assert(X); } while (0)
