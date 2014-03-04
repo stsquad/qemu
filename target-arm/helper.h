@@ -519,4 +519,6 @@ DEF_HELPER_FLAGS_3(crc32c, TCG_CALL_NO_RWG_SE, i32, i32, i32, i32)
 #include "helper-a64.h"
 #endif
 
+#include "tcg/tcg-helpers.h"
+
 #include "exec/def-helper.h"
