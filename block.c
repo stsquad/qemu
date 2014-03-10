@@ -1498,11 +1498,40 @@ int bdrv_open(BlockDriverState **pbs, const char *filename,
     /* If there is a backing file, use it */
     if ((flags & BDRV_O_NO_BACKING) == 0) {
         QDict *backing_options;
+        const char *backing_name;
+        BlockDriverState *backing_hd;
 
+        backing_name = qdict_get_try_str(options, "backing");
         qdict_extract_subqdict(options, &backing_options, "backing.");
-        ret = bdrv_open_backing_file(bs, backing_options, &local_err);
-        if (ret < 0) {
+
+        if (backing_name && qdict_size(backing_options)) {
+            error_setg(&local_err,
+                       "Option \"backing\" and \"backing.*\" cannot be "
+                       "used together");
+            ret = -EINVAL;
             goto close_and_fail;
+        }
+        if (backing_name) {
+            backing_hd = bdrv_find(backing_name);
+            if (!backing_hd) {
+                error_set(&local_err, QERR_DEVICE_NOT_FOUND, backing_name);
+                ret = -ENOENT;
+                goto close_and_fail;
+            }
+            qdict_del(options, "backing");
+            if (bdrv_op_is_blocked(backing_hd, BLOCK_OP_TYPE_BACKING_REFERENCE,
+                                   &local_err)) {
+                ret = -EBUSY;
+                goto close_and_fail;
+            }
+
+            bdrv_set_backing_hd(bs, backing_hd);
+            bdrv_ref(backing_hd);
+        } else {
+            ret = bdrv_open_backing_file(bs, backing_options, &local_err);
+            if (ret < 0) {
+                goto close_and_fail;
+            }
         }
     }
 

@@ -106,6 +106,19 @@ run_qemu -drive file="$TEST_IMG",file.backing.driver=file,file.backing.filename=
 run_qemu -drive file="$TEST_IMG",file.backing.driver=qcow2,file.backing.file.filename="$TEST_IMG.orig"
 
 echo
+echo === Backing file reference ===
+echo
+
+run_qemu -drive file="$TEST_IMG",if=none,id=drive0 \
+    -drive file="$TEST_IMG",driver=qcow2,backing=drive0
+
+run_qemu -drive file="$TEST_IMG",if=none,id=drive0 \
+    -drive file="$TEST_IMG",driver=qcow2,backing=drive0,backing.file.filename="$TEST_IMG.orig"
+
+run_qemu -drive file="$TEST_IMG",if=none,id=drive0 \
+    -drive file="$TEST_IMG",driver=qcow2,file.backing=drive0,file.backing.file.filename="$TEST_IMG.orig"
+
+echo
 echo === Enable and disable lazy refcounting on the command line, plus some invalid values ===
 echo
 

@@ -63,6 +63,19 @@ Testing: -drive file=TEST_DIR/t.qcow2,file.backing.driver=qcow2,file.backing.fil
 QEMU_PROG: -drive file=TEST_DIR/t.qcow2,file.backing.driver=qcow2,file.backing.file.filename=TEST_DIR/t.qcow2.orig: could not open disk image TEST_DIR/t.qcow2: Driver doesn't support backing files
 
 
+=== Backing file reference ===
+
+Testing: -drive file=TEST_DIR/t.qcow2,if=none,id=drive0 -drive file=TEST_DIR/t.qcow2,driver=qcow2,backing=drive0
+QEMU X.Y.Z monitor - type 'help' for more information
+(qemu) q[K[Dqu[K[D[Dqui[K[D[D[Dquit[K
+
+Testing: -drive file=TEST_DIR/t.qcow2,if=none,id=drive0 -drive file=TEST_DIR/t.qcow2,driver=qcow2,backing=drive0,backing.file.filename=TEST_DIR/t.qcow2.orig
+QEMU_PROG: -drive file=TEST_DIR/t.qcow2,driver=qcow2,backing=drive0,backing.file.filename=TEST_DIR/t.qcow2.orig: could not open disk image TEST_DIR/t.qcow2: Option "backing" and "backing.*" cannot be used together
+
+Testing: -drive file=TEST_DIR/t.qcow2,if=none,id=drive0 -drive file=TEST_DIR/t.qcow2,driver=qcow2,file.backing=drive0,file.backing.file.filename=TEST_DIR/t.qcow2.orig
+QEMU_PROG: -drive file=TEST_DIR/t.qcow2,driver=qcow2,file.backing=drive0,file.backing.file.filename=TEST_DIR/t.qcow2.orig: could not open disk image TEST_DIR/t.qcow2: Option "backing" and "backing.*" cannot be used together
+
+
 === Enable and disable lazy refcounting on the command line, plus some invalid values ===
 
 Testing: -drive file=TEST_DIR/t.qcow2,format=qcow2,lazy-refcounts=on
