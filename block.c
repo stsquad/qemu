@@ -1170,6 +1170,8 @@ void bdrv_set_backing_hd(BlockDriverState *bs, BlockDriverState *backing_hd)
     /* Otherwise we won't be able to commit due to check in bdrv_commit */
     bdrv_op_unblock(bs->backing_hd, BLOCK_OP_TYPE_COMMIT_TARGET,
                     bs->backing_blocker);
+    bdrv_op_unblock(bs->backing_hd, BLOCK_OP_TYPE_BACKUP_SOURCE,
+                    bs->backing_blocker);
 out:
     bdrv_refresh_limits(bs, NULL);
 }
