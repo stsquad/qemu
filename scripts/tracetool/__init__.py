@@ -118,13 +118,16 @@ class Event(object):
         Properties of the event.
     args : Arguments
         The event arguments.
+    arg_fmts : str
+        The format strings for each argument.
     """
 
     _CRE = re.compile("((?P<props>.*)\s+)?(?P<name>[^(\s]+)\((?P<args>[^)]*)\)\s*(?P<fmt>\".*)?")
+    _FMT = re.compile("(%\w+|%.*PRI\S+)")
 
     _VALID_PROPS = set(["disable"])
 
-    def __init__(self, name, props, fmt, args):
+    def __init__(self, name, props, fmt, args, arg_fmts):
         """
         Parameters
         ----------
@@ -136,11 +139,15 @@ class Event(object):
             Event printing format.
         args : Arguments
             Event arguments.
+        arg_fmts : list of str
+            Format strings for each argument.
+
         """
         self.name = name
         self.properties = props
         self.fmt = fmt
         self.args = args
+        self.arg_fmts = arg_fmts
 
         unknown_props = set(self.properties) - self._VALID_PROPS
         if len(unknown_props) > 0:
@@ -163,8 +170,9 @@ class Event(object):
         props = groups["props"].split()
         fmt = groups["fmt"]
         args = Arguments.build(groups["args"])
+        arg_fmts = Event._FMT.findall(fmt)
 
-        return Event(name, props, fmt, args)
+        return Event(name, props, fmt, args, arg_fmts)
 
     def __repr__(self):
         """Evaluable string representation for this object."""
