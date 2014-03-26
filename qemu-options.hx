@@ -2754,6 +2754,22 @@ STEXI
 Output log in @var{logfile} instead of to stderr
 ETEXI
 
+DEF("dfilter", HAS_ARG, QEMU_OPTION_DFILTER, \
+    "-dfilter range,..  filter debug output to range of addresses (useful for -d cpu,exec,etc..)\n",
+    QEMU_ARCH_ALL)
+STEXI
+@item -dfilter @var{range1}[,...]
+@findex -dfilter
+Filter debug output to that relevant to a range of target addresses. The filter
+spec can be either @var{start}-@var{end} or @var{start}+@var{size} where @var{start}
+@var{end} and @var{size} are the addresses and sizes required. For example:
+@example
+    -dfilter 0x8000-0x9000,0xffffffc000080000+0x200
+@end example
+Will dump output for any code in the 0x1000 sized block starting at 0x8000 and
+the 0x200 sized block starting at 0xffffffc000080000.
+ETEXI
+
 DEF("L", HAS_ARG, QEMU_OPTION_L, \
     "-L path         set the directory for the BIOS, VGA BIOS and keymaps\n",
     QEMU_ARCH_ALL)
