@@ -2510,14 +2510,15 @@ static void dump_op_count(void)
 #endif
 
 
-static inline int tcg_gen_code_common(TCGContext *s,
-                                      tcg_insn_unit *gen_code_buf,
+static inline int tcg_gen_code_common(TCGContext *s, TranslationBlock *tb,
                                       long search_pc)
 {
     TCGOpcode opc;
     int op_index;
     const TCGOpDef *def;
     const TCGArg *args;
+
+    g_assert(tb->tc_size == 0);
 
 #ifdef DEBUG_DISAS
     if (unlikely(qemu_loglevel_mask(CPU_LOG_TB_OP))) {
@@ -2557,8 +2558,8 @@ static inline int tcg_gen_code_common(TCGContext *s,
 
     tcg_reg_alloc_start(s);
 
-    s->code_buf = gen_code_buf;
-    s->code_ptr = gen_code_buf;
+    s->code_buf = tb->tc_ptr;
+    s->code_ptr = tb->tc_ptr;
 
     tcg_out_tb_init(s);
 
@@ -2640,7 +2641,7 @@ static inline int tcg_gen_code_common(TCGContext *s,
     return -1;
 }
 
-int tcg_gen_code(TCGContext *s, tcg_insn_unit *gen_code_buf)
+void tcg_gen_code(TCGContext *s, TranslationBlock *tb)
 {
 #ifdef CONFIG_PROFILER
     {
@@ -2656,22 +2657,23 @@ int tcg_gen_code(TCGContext *s, tcg_insn_unit *gen_code_buf)
     }
 #endif
 
-    tcg_gen_code_common(s, gen_code_buf, -1);
+    tcg_gen_code_common(s, tb, -1);
 
     /* flush instruction cache */
     flush_icache_range((uintptr_t)s->code_buf, (uintptr_t)s->code_ptr);
 
-    return tcg_current_code_size(s);
+    tb->tc_size = tcg_current_code_size(s);
+    return;
 }
 
 /* Return the index of the micro operation such as the pc after is <
    offset bytes from the start of the TB.  The contents of gen_code_buf must
    not be changed, though writing the same values is ok.
    Return -1 if not found. */
-int tcg_gen_code_search_pc(TCGContext *s, tcg_insn_unit *gen_code_buf,
+int tcg_gen_code_search_pc(TCGContext *s, TranslationBlock *tb,
                            long offset)
 {
-    return tcg_gen_code_common(s, gen_code_buf, offset);
+    return tcg_gen_code_common(s, tb, offset);
 }
 
 #ifdef CONFIG_PROFILER
