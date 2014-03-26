@@ -613,7 +613,8 @@ int cpu_exec(CPUArchState *env)
                     next_tb = 0;
                     tcg_ctx.tb_ctx.tb_invalidated_flag = 0;
                 }
-                if (qemu_loglevel_mask(CPU_LOG_EXEC)) {
+                if (qemu_loglevel_mask(CPU_LOG_EXEC) &&
+                    qemu_log_in_addr_range(tb->pc)) {
                     qemu_log("Trace %p [" TARGET_FMT_lx "] %s\n",
                              tb->tc_ptr, tb->pc, lookup_symbol(tb->pc));
                 }

@@ -2452,8 +2452,8 @@ static void dump_op_count(void)
 #endif
 
 
-static inline int tcg_gen_code_common(TCGContext *s, uint8_t *gen_code_buf,
-                                      long search_pc)
+static inline int tcg_gen_code_common(TCGContext *s, uint64_t target_pc,
+                                      uint8_t *gen_code_buf, long search_pc)
 {
     TCGOpcode opc;
     int op_index;
@@ -2461,7 +2461,8 @@ static inline int tcg_gen_code_common(TCGContext *s, uint8_t *gen_code_buf,
     const TCGArg *args;
 
 #ifdef DEBUG_DISAS
-    if (unlikely(qemu_loglevel_mask(CPU_LOG_TB_OP))) {
+    if (unlikely(qemu_loglevel_mask(CPU_LOG_TB_OP)
+                 && qemu_log_in_addr_range(target_pc))) {
         qemu_log("OP:\n");
         tcg_dump_ops(s);
         qemu_log("\n");
@@ -2489,7 +2490,8 @@ static inline int tcg_gen_code_common(TCGContext *s, uint8_t *gen_code_buf,
 #endif
 
 #ifdef DEBUG_DISAS
-    if (unlikely(qemu_loglevel_mask(CPU_LOG_TB_OP_OPT))) {
+    if (unlikely(qemu_loglevel_mask(CPU_LOG_TB_OP_OPT)
+                 && qemu_log_in_addr_range(target_pc))) {
         qemu_log("OP after optimization and liveness analysis:\n");
         tcg_dump_ops(s);
         qemu_log("\n");
@@ -2512,11 +2514,6 @@ static inline int tcg_gen_code_common(TCGContext *s, uint8_t *gen_code_buf,
         tcg_table_op_count[opc]++;
 #endif
         def = &tcg_op_defs[opc];
-#if 0
-        printf("%s: %d %d %d\n", def->name,
-               def->nb_oargs, def->nb_iargs, def->nb_cargs);
-        //        dump_regs(s);
-#endif
         switch(opc) {
         case INDEX_op_mov_i32:
         case INDEX_op_mov_i64:
@@ -2581,7 +2578,7 @@ static inline int tcg_gen_code_common(TCGContext *s, uint8_t *gen_code_buf,
     return -1;
 }
 
-int tcg_gen_code(TCGContext *s, uint8_t *gen_code_buf)
+int tcg_gen_code(TCGContext *s, uint64_t target_pc, uint8_t *gen_code_buf)
 {
 #ifdef CONFIG_PROFILER
     {
@@ -2597,7 +2594,7 @@ int tcg_gen_code(TCGContext *s, uint8_t *gen_code_buf)
     }
 #endif
 
-    tcg_gen_code_common(s, gen_code_buf, -1);
+    tcg_gen_code_common(s, target_pc, gen_code_buf, -1);
 
     /* flush instruction cache */
     flush_icache_range((uintptr_t)gen_code_buf, (uintptr_t)s->code_ptr);
@@ -2609,9 +2606,10 @@ int tcg_gen_code(TCGContext *s, uint8_t *gen_code_buf)
    offset bytes from the start of the TB.  The contents of gen_code_buf must
    not be changed, though writing the same values is ok.
    Return -1 if not found. */
-int tcg_gen_code_search_pc(TCGContext *s, uint8_t *gen_code_buf, long offset)
+int tcg_gen_code_search_pc(TCGContext *s, uint64_t tpc,
+                           uint8_t *gen_code_buf, long offset)
 {
-    return tcg_gen_code_common(s, gen_code_buf, offset);
+    return tcg_gen_code_common(s, tpc, gen_code_buf, offset);
 }
 
 #ifdef CONFIG_PROFILER
