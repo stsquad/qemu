@@ -19,11 +19,13 @@
 
 #include "qemu-common.h"
 #include "qemu/log.h"
+#include "qemu/range.h"
 
 static char *logfilename;
 FILE *qemu_logfile;
 int qemu_loglevel;
 static int log_append = 0;
+static GSList *debug_regions = NULL;
 
 void qemu_log(const char *fmt, ...)
 {
@@ -90,6 +92,60 @@ void qemu_set_log_filename(const char *filename)
     }
     qemu_log_close();
     qemu_set_log(qemu_loglevel);
+}
+
+/* Returns true if addr is in our debug filter or no filter defined
+ */
+bool qemu_log_in_addr_range(uint64_t addr)
+{
+    if (debug_regions) {
+        GSList *region = debug_regions;
+        do {
+            struct Range *range = region->data;
+            if (addr >= range->begin && addr <= range->end) {
+                return true;
+            }
+            region = g_slist_next(region);
+        } while (region);
+        return false;
+    } else {
+        return true;
+    }
+}
+
+
+void qemu_set_dfilter_ranges(const char *filter_spec)
+{
+    gchar **ranges = g_strsplit(filter_spec, ",", 0);
+    if (ranges) {
+        gchar **next = ranges;
+        gchar *r = *next++;
+        while (r) {
+            gchar *delim = g_strrstr(r, "-");
+            if (!delim) {
+                delim = g_strrstr(r, "+");
+            }
+            if (delim) {
+                struct Range *range = g_malloc(sizeof(Range));
+                range->begin = strtoul(r, NULL, 0);
+                switch (*delim) {
+                case '+':
+                    range->end = range->begin + strtoul(delim+1, NULL, 0);
+                    break;
+                case '-':
+                    range->end = strtoul(delim+1, NULL, 0);
+                    break;
+                default:
+                    g_assert_not_reached();
+                }
+                debug_regions = g_slist_append(debug_regions, range);
+            } else {
+                g_error("Bad range specifier in: %s", r);
+            }
+            r = *next++;
+        }
+        g_strfreev(ranges);
+    }
 }
 
 const QEMULogItem qemu_log_items[] = {

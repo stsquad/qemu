@@ -3388,6 +3388,9 @@ int main(int argc, char **argv, char **envp)
             case QEMU_OPTION_D:
                 log_file = optarg;
                 break;
+            case QEMU_OPTION_DFILTER:
+                qemu_set_dfilter_ranges(optarg);
+                break;
             case QEMU_OPTION_PERFMAP:
                 tb_enable_perfmap();
                 break;
