@@ -78,8 +78,7 @@ void restore_state_to_opc(CPUArchState *env, struct TranslationBlock *tb,
                           int pc_pos);
 
 void cpu_gen_init(void);
-int cpu_gen_code(CPUArchState *env, struct TranslationBlock *tb,
-                 int *gen_code_size_ptr);
+void cpu_gen_code(CPUArchState *env, struct TranslationBlock *tb);
 bool cpu_restore_state(CPUState *cpu, uintptr_t searched_pc);
 void page_size_init(void);
 
@@ -147,6 +146,7 @@ struct TranslationBlock {
 #define CF_LAST_IO     0x8000 /* Last insn may be an IO access.  */
 
     void *tc_ptr;    /* pointer to the translated code */
+    uint32_t tc_size;/* size of translated code */
     /* next matching tb for physical address. */
     struct TranslationBlock *phys_hash_next;
     /* first and second physical page containing code. The lower bit

@@ -153,17 +153,12 @@ void cpu_gen_init(void)
     tcg_context_init(&tcg_ctx); 
 }
 
-/* return non zero if the very first instruction is invalid so that
-   the virtual CPU can trigger an exception.
-
-   '*gen_code_size_ptr' contains the size of the generated code (host
-   code).
+/* code generation. On return tb->tc_size will reflect the size of
+ * generated code.
 */
-int cpu_gen_code(CPUArchState *env, TranslationBlock *tb, int *gen_code_size_ptr)
+void cpu_gen_code(CPUArchState *env, TranslationBlock *tb)
 {
     TCGContext *s = &tcg_ctx;
-    tcg_insn_unit *gen_code_buf;
-    int gen_code_size;
 #ifdef CONFIG_PROFILER
     int64_t ti;
 #endif
@@ -178,7 +173,6 @@ int cpu_gen_code(CPUArchState *env, TranslationBlock *tb, int *gen_code_size_ptr
     gen_intermediate_code(env, tb);
 
     /* generate machine code */
-    gen_code_buf = tb->tc_ptr;
     tb->tb_next_offset[0] = 0xffff;
     tb->tb_next_offset[1] = 0xffff;
     s->tb_next_offset = tb->tb_next_offset;
@@ -195,24 +189,23 @@ int cpu_gen_code(CPUArchState *env, TranslationBlock *tb, int *gen_code_size_ptr
     s->interm_time += profile_getclock() - ti;
     s->code_time -= profile_getclock();
 #endif
-    gen_code_size = tcg_gen_code(s, gen_code_buf);
-    *gen_code_size_ptr = gen_code_size;
+   tcg_gen_code(s, tb);
+
 #ifdef CONFIG_PROFILER
     s->code_time += profile_getclock();
     s->code_in_len += tb->size;
-    s->code_out_len += gen_code_size;
+    s->code_out_len += tb->tc_size;
 #endif
 
-    tb_write_perfmap(gen_code_buf, gen_code_size, tb->pc, env->cp15.contextidr_el1);
+    tb_write_perfmap(tb->tc_ptr, tb->tc_size, tb->pc, env->cp15.contextidr_el1);
 #ifdef DEBUG_DISAS
     if (qemu_loglevel_mask(CPU_LOG_TB_OUT_ASM)) {
-        qemu_log("OUT: [size=%d]\n", gen_code_size);
-        log_disas(tb->tc_ptr, gen_code_size);
+        qemu_log("OUT: [size=%d]\n", tb->tc_size);
+        log_disas(tb->tc_ptr, tb->tc_size);
         qemu_log("\n");
         qemu_log_flush();
     }
 #endif
-    return 0;
 }
 
 /* The cpu state corresponding to 'searched_pc' is restored.
@@ -223,7 +216,6 @@ static int cpu_restore_state_from_tb(CPUState *cpu, TranslationBlock *tb,
     CPUArchState *env = cpu->env_ptr;
     TCGContext *s = &tcg_ctx;
     int j;
-    uintptr_t tc_ptr;
 #ifdef CONFIG_PROFILER
     int64_t ti;
 #endif
@@ -243,8 +235,7 @@ static int cpu_restore_state_from_tb(CPUState *cpu, TranslationBlock *tb,
     }
 
     /* find opc index corresponding to search_pc */
-    tc_ptr = (uintptr_t)tb->tc_ptr;
-    if (searched_pc < tc_ptr)
+    if (searched_pc < (uintptr_t) tb->tc_ptr)
         return -1;
 
     s->tb_next_offset = tb->tb_next_offset;
@@ -255,8 +246,8 @@ static int cpu_restore_state_from_tb(CPUState *cpu, TranslationBlock *tb,
     s->tb_jmp_offset = NULL;
     s->tb_next = tb->tb_next;
 #endif
-    j = tcg_gen_code_search_pc(s, (tcg_insn_unit *)tc_ptr,
-                               searched_pc - tc_ptr);
+    j = tcg_gen_code_search_pc(s, tb,
+                               searched_pc - (uintptr_t) tb->tc_ptr);
     if (j < 0)
         return -1;
     /* now find start of instruction before */
@@ -973,7 +964,6 @@ TranslationBlock *tb_gen_code(CPUState *cpu,
     TranslationBlock *tb;
     tb_page_addr_t phys_pc, phys_page2;
     target_ulong virt_page2;
-    int code_gen_size;
 
     phys_pc = get_page_addr_code(env, pc);
     tb = tb_alloc(pc);
@@ -986,12 +976,14 @@ TranslationBlock *tb_gen_code(CPUState *cpu,
         tcg_ctx.tb_ctx.tb_invalidated_flag = 1;
     }
     tb->tc_ptr = tcg_ctx.code_gen_ptr;
+    tb->tc_size = 0;
     tb->cs_base = cs_base;
     tb->flags = flags;
     tb->cflags = cflags;
-    cpu_gen_code(env, tb, &code_gen_size);
-    tcg_ctx.code_gen_ptr = (void *)(((uintptr_t)tcg_ctx.code_gen_ptr +
-            code_gen_size + CODE_GEN_ALIGN - 1) & ~(CODE_GEN_ALIGN - 1));
+    cpu_gen_code(env, tb);
+    tcg_ctx.code_gen_ptr = (void *)(((uintptr_t)
+                                     tcg_ctx.code_gen_ptr +
+                                     tb->tc_size + CODE_GEN_ALIGN - 1) & ~(CODE_GEN_ALIGN - 1));
 
     /* check next page if needed */
     virt_page2 = (pc + tb->size - 1) & TARGET_PAGE_MASK;
