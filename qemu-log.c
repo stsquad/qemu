@@ -19,11 +19,13 @@
 
 #include "qemu-common.h"
 #include "qemu/log.h"
+#include "qemu/range.h"
 
 static char *logfilename;
 FILE *qemu_logfile;
 int qemu_loglevel;
 static int log_append = 0;
+static GArray *debug_regions;
 
 void qemu_log(const char *fmt, ...)
 {
@@ -90,6 +92,61 @@ void qemu_set_log_filename(const char *filename)
     }
     qemu_log_close();
     qemu_set_log(qemu_loglevel);
+}
+
+/* Returns true if addr is in our debug filter or no filter defined
+ */
+bool qemu_log_in_addr_range(uint64_t addr)
+{
+    if (debug_regions) {
+        int i = 0;
+        for (i = 0; i < debug_regions->len; i++) {
+            struct Range *range = &g_array_index(debug_regions, Range, i);
+            if (addr >= range->begin && addr <= range->end) {
+                return true;
+            }
+        }
+        return false;
+    } else {
+        return true;
+    }
+}
+
+
+void qemu_set_dfilter_ranges(const char *filter_spec)
+{
+    gchar **ranges = g_strsplit(filter_spec, ",", 0);
+    if (ranges) {
+        gchar **next = ranges;
+        gchar *r = *next++;
+        debug_regions = g_array_sized_new(FALSE, FALSE,
+                                          sizeof(Range), g_strv_length(ranges));
+        while (r) {
+            gchar *delim = g_strrstr(r, "-");
+            if (!delim) {
+                delim = g_strrstr(r, "+");
+            }
+            if (delim) {
+                struct Range range;
+                range.begin = strtoul(r, NULL, 0);
+                switch (*delim) {
+                case '+':
+                    range.end = range.begin + strtoul(delim+1, NULL, 0);
+                    break;
+                case '-':
+                    range.end = strtoul(delim+1, NULL, 0);
+                    break;
+                default:
+                    g_assert_not_reached();
+                }
+                g_array_append_val(debug_regions, range);
+            } else {
+                g_error("Bad range specifier in: %s", r);
+            }
+            r = *next++;
+        }
+        g_strfreev(ranges);
+    }
 }
 
 const QEMULogItem qemu_log_items[] = {
