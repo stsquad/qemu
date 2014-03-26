@@ -1222,3 +1222,11 @@ xen_pv_mmio_write(uint64_t addr) "WARNING: write to Xen PV Device MMIO space (ad
 # hw/pci/pci_host.c
 pci_cfg_read(const char *dev, unsigned devid, unsigned fnid, unsigned offs, unsigned val) "%s %02u:%u @0x%x -> 0x%x"
 pci_cfg_write(const char *dev, unsigned devid, unsigned fnid, unsigned offs, unsigned val) "%s %02u:%u @0x%x <- 0x%x"
+
+# cpu-exec.c
+exec_tb(void *tb, uintptr_t pc) "tb:%p pc=0x%x"
+exec_tb_nocache(void *tb, uintptr_t pc) "tb:%p pc=0x%x"
+exec_tb_exit(void *next_tb, unsigned int flags) "tb:%p flags=%x"
+
+# translate-all.c
+translate_block(void *tb, uintptr_t pc, uint8_t *tb_code) "tb:%p, pc:0x%x, tb_code:%p"
