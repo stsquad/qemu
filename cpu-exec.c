@@ -178,10 +178,14 @@ void cpu_reload_memory_map(CPUState *cpu)
 #endif
 
 /* Execute a TB, and fix up the CPU state afterwards if necessary */
-static inline tcg_target_ulong cpu_tb_exec(CPUState *cpu, uint8_t *tb_ptr)
+static inline tcg_target_ulong cpu_tb_exec(CPUState *cpu, TranslationBlock *itb)
 {
     CPUArchState *env = cpu->env_ptr;
     uintptr_t next_tb;
+    uint8_t *tb_ptr = itb->tc_ptr;
+
+    qemu_log_mask(CPU_LOG_EXEC, "Trace %p [" TARGET_FMT_lx "] %s\n",
+                  itb->tc_ptr, itb->pc, lookup_symbol(itb->pc));
 
 #if defined(DEBUG_DISAS)
     if (qemu_loglevel_mask(CPU_LOG_TB_CPU)) {
@@ -212,6 +216,10 @@ static inline tcg_target_ulong cpu_tb_exec(CPUState *cpu, uint8_t *tb_ptr)
          */
         CPUClass *cc = CPU_GET_CLASS(cpu);
         TranslationBlock *tb = (TranslationBlock *)(next_tb & ~TB_EXIT_MASK);
+        qemu_log_mask(CPU_LOG_EXEC,
+                      "Abandoned execution of TB chain before %p ["
+                      TARGET_FMT_lx "] %s\n",
+                      itb->tc_ptr, itb->pc, lookup_symbol(itb->pc));
         if (cc->synchronize_from_tb) {
             cc->synchronize_from_tb(cpu, tb);
         } else {
@@ -251,7 +259,7 @@ static void cpu_exec_nocache(CPUArchState *env, int max_cycles,
     cpu->current_tb = tb;
     /* execute the generated code */
     trace_exec_tb_nocache(tb, tb->pc);
-    cpu_tb_exec(cpu, tb->tc_ptr);
+    cpu_tb_exec(cpu, tb);
     cpu->current_tb = NULL;
     tb_phys_invalidate(tb, -1);
     tb_free(tb);
@@ -373,7 +381,6 @@ int cpu_exec(CPUArchState *env)
 #endif
     int ret, interrupt_request;
     TranslationBlock *tb;
-    uint8_t *tc_ptr;
     uintptr_t next_tb;
     SyncClocks sc;
 
@@ -505,10 +512,6 @@ int cpu_exec(CPUArchState *env)
 #if !defined(CONFIG_USER_ONLY)
                 tb_unlock();
 #endif
-                if (qemu_loglevel_mask(CPU_LOG_EXEC)) {
-                    qemu_log("Trace %p [" TARGET_FMT_lx "] %s\n",
-                             tb->tc_ptr, tb->pc, lookup_symbol(tb->pc));
-                }
                 /* see if we can patch the calling TB. When the TB
                    spans two pages, we cannot safely do a direct
                    jump. */
@@ -528,9 +531,8 @@ int cpu_exec(CPUArchState *env)
                 barrier();
                 if (likely(!cpu->exit_request)) {
                     trace_exec_tb(tb, tb->pc);
-                    tc_ptr = tb->tc_ptr;
                     /* execute the generated code */
-                    next_tb = cpu_tb_exec(cpu, tc_ptr);
+                    next_tb = cpu_tb_exec(cpu, tb);
                     switch (next_tb & TB_EXIT_MASK) {
                     case TB_EXIT_REQUESTED:
                         /* Something asked us to stop executing
