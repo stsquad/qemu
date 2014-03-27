@@ -1,4 +1,5 @@
 #include "cpu.h"
+#include "trace.h"
 #include "internals.h"
 #include "exec/gdbstub.h"
 #include "helper.h"
@@ -4010,6 +4011,9 @@ int arm_cpu_handle_mmu_fault(CPUState *cs, vaddr address,
         /* Map a single [sub]page.  */
         phys_addr &= ~(hwaddr)0x3ff;
         address &= ~(target_ulong)0x3ff;
+
+        trace_mmu_helper_mmu_fault(address, phys_addr, mmu_idx, 0, 0, 0);
+
         tlb_set_page(cs, address, phys_addr, prot, mmu_idx, page_size);
         return 0;
     }

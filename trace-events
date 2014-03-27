@@ -968,6 +968,14 @@ v9fs_xattrcreate(uint16_t tag, uint8_t id, int32_t fid, char* name, int64_t size
 v9fs_readlink(uint16_t tag, uint8_t id, int32_t fid) "tag %d id %d fid %d"
 v9fs_readlink_return(uint16_t tag, uint8_t id, char* target) "tag %d id %d name %s"
 
+# target-arm/helper-a64.c
+arm_aarch64_irq(bool a64_mode, int index) "a64_mode:%d exception index:%d"
+
+# target-arm/op_helper.c
+arm_exception(int excep) "exception index %d"
+arm_exception_return_aarch32(uint32_t spsr, uint32_t pc) "a32 exception return to 0x%x spsr=0x%x"
+arm_exception_return_aarch64(uint32_t spsr, uint64_t pc, int el) "a64 exception return to 0x%x spsr=0x%x at el=%d"
+
 # target-sparc/mmu_helper.c
 mmu_helper_dfault(uint64_t address, uint64_t context, int mmu_idx, uint32_t tl) "DFAULT at %"PRIx64" context %"PRIx64" mmu_idx=%d tl=%d"
 mmu_helper_dprot(uint64_t address, uint64_t context, int mmu_idx, uint32_t tl) "DPROT at %"PRIx64" context %"PRIx64" mmu_idx=%d tl=%d"

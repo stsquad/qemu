@@ -17,6 +17,7 @@
  * License along with this library; if not, see <http://www.gnu.org/licenses/>.
  */
 #include "cpu.h"
+#include "trace.h"
 #include "helper.h"
 #include "internals.h"
 
@@ -27,6 +28,8 @@ static void raise_exception(CPUARMState *env, int tt)
 {
     ARMCPU *cpu = arm_env_get_cpu(env);
     CPUState *cs = CPU(cpu);
+
+    trace_arm_exception(tt);
 
     cs->exception_index = tt;
     cpu_loop_exit(cs);
@@ -407,6 +410,7 @@ void HELPER(exception_return)(CPUARMState *env)
         }
 
         env->regs[15] = env->elr_el1 & ~0x1;
+        trace_arm_exception_return_aarch32(spsr, env->regs[15]);
     } else {
         new_el = extract32(spsr, 2, 2);
         if (new_el > 1) {
@@ -425,6 +429,7 @@ void HELPER(exception_return)(CPUARMState *env)
         pstate_write(env, spsr);
         env->xregs[31] = env->sp_el[new_el];
         env->pc = env->elr_el1;
+        trace_arm_exception_return_aarch64(spsr, env->pc, new_el);
     }
 
     return;

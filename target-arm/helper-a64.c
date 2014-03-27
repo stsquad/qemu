@@ -18,6 +18,7 @@
  */
 
 #include "cpu.h"
+#include "trace.h"
 #include "exec/gdbstub.h"
 #include "helper.h"
 #include "qemu/host-utils.h"
@@ -445,6 +446,8 @@ void aarch64_cpu_do_interrupt(CPUState *cs)
     CPUARMState *env = &cpu->env;
     target_ulong addr = env->cp15.c12_vbar;
     int i;
+
+    trace_arm_aarch64_irq(is_a64(env), cs->exception_index);
 
     if (arm_current_pl(env) == 0) {
         if (env->aarch64) {
