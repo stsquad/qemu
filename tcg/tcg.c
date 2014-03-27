@@ -27,6 +27,8 @@
 #define USE_TCG_OPTIMIZATIONS
 
 #include "config.h"
+#include <glib.h>
+#include <glib/gstdio.h>
 
 /* Define to jump the ELF file used to communicate with GDB.  */
 #undef DEBUG_JIT
@@ -106,6 +108,8 @@ static int tcg_target_const_match(tcg_target_long val,
 static void tcg_out_tb_init(TCGContext *s);
 static void tcg_out_tb_finalize(TCGContext *s);
 
+static void tcg_write_perfmap(uint8_t *start, uint64_t size, uint64_t target_pc);
+void qemu_tcg_enable_perfmap(void);
 
 TCGOpDef tcg_op_defs[] = {
 #define DEF(s, oargs, iargs, cargs, flags) { #s, oargs, iargs, cargs, iargs + oargs + cargs, flags },
@@ -2575,6 +2579,8 @@ static inline int tcg_gen_code_common(TCGContext *s, uint64_t target_pc,
  the_end:
     /* Generate TB finalization at the end of block */
     tcg_out_tb_finalize(s);
+
+    tcg_write_perfmap(gen_code_buf, s->code_ptr - gen_code_buf, target_pc);
     return -1;
 }
 
@@ -2665,6 +2671,21 @@ void tcg_dump_info(FILE *f, fprintf_function cpu_fprintf)
     cpu_fprintf(f, "[TCG profiler not compiled]\n");
 }
 #endif
+
+static FILE *tcg_perfmap = NULL;
+void qemu_tcg_enable_perfmap(void) {
+    gchar * map_file = g_strdup_printf("/tmp/perf-%d.map", getpid());
+    tcg_perfmap = g_fopen(map_file, "w");
+    g_free(map_file);
+}
+
+static void tcg_write_perfmap(uint8_t *start, uint64_t size, uint64_t target_pc)
+{
+    if (tcg_perfmap) {
+        g_fprintf(tcg_perfmap, "%lx %lx subject-0x%lx\n",
+                  (uint64_t) start, size, target_pc);
+    }
+}
 
 #ifdef ELF_HOST_MACHINE
 /* In order to use this feature, the backend needs to do three things:

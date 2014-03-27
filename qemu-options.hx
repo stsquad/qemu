@@ -2691,6 +2691,16 @@ Will dump output for any code in the 0x1000 sized block starting at 0x8000 and
 the 0x200 sized block starting at 0xffffffc000080000.
 ETEXI
 
+DEF("perfmap", 0, QEMU_OPTION_PERFMAP, \
+    "-perfmap  generate a /tmp/perf-${pid}.map file for perf\n",
+    QEMU_ARCH_ALL)
+STEXI
+@item -perfmap
+@findex -perfmap
+This will cause QEMU to generate a map file for Linux perf tools that will allow
+basic profiling information to be broken down into basic blocks.
+ETEXI
+
 DEF("L", HAS_ARG, QEMU_OPTION_L, \
     "-L path         set the directory for the BIOS, VGA BIOS and keymaps\n",
     QEMU_ARCH_ALL)

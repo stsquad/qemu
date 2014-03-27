@@ -123,6 +123,9 @@ int main(int argc, char **argv)
 #define MAX_VIRTIO_CONSOLES 1
 #define MAX_SCLP_CONSOLES 1
 
+/* seems better than pulling in all the tcg headers? */
+extern void qemu_tcg_enable_perfmap(void);
+
 static const char *data_dir[16];
 static int data_dir_idx;
 const char *bios_name = NULL;
@@ -3336,6 +3339,9 @@ int main(int argc, char **argv, char **envp)
                 break;
             case QEMU_OPTION_DFILTER:
                 qemu_set_dfilter_ranges(optarg);
+                break;
+            case QEMU_OPTION_PERFMAP:
+                qemu_tcg_enable_perfmap();
                 break;
             case QEMU_OPTION_s:
                 add_device_config(DEV_GDB, "tcp::" DEFAULT_GDBSTUB_PORT);
