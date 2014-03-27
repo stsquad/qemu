@@ -10897,7 +10897,8 @@ static inline void gen_intermediate_code_internal(ARMCPU *cpu,
         if (num_insns + 1 == max_insns && (tb->cflags & CF_LAST_IO))
             gen_io_start();
 
-        if (unlikely(qemu_loglevel_mask(CPU_LOG_TB_OP | CPU_LOG_TB_OP_OPT))) {
+        if (unlikely(qemu_loglevel_mask(CPU_LOG_TB_OP | CPU_LOG_TB_OP_OPT)
+                     && qemu_log_in_addr_range(dc->pc))) {
             tcg_gen_debug_insn_start(dc->pc);
         }
 
@@ -11061,6 +11062,10 @@ void arm_cpu_dump_state(CPUState *cs, FILE *f, fprintf_function cpu_fprintf,
 
     if (is_a64(env)) {
         aarch64_cpu_dump_state(cs, f, cpu_fprintf, flags);
+        return;
+    }
+
+    if (!qemu_log_in_addr_range(env->regs[15])) {
         return;
     }
 

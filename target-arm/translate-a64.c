@@ -127,6 +127,10 @@ void aarch64_cpu_dump_state(CPUState *cs, FILE *f,
     uint32_t psr = pstate_read(env);
     int i;
 
+    if (!qemu_log_in_addr_range(env->pc)) {
+        return;
+    }
+
     cpu_fprintf(f, "A64 PC=%016"PRIx64"  SP=%016"PRIx64"\n",
             env->pc, env->xregs[31]);
     for (i = 0; i < 31; i++) {
@@ -10710,7 +10714,8 @@ void gen_intermediate_code_internal_a64(ARMCPU *cpu,
             gen_io_start();
         }
 
-        if (unlikely(qemu_loglevel_mask(CPU_LOG_TB_OP | CPU_LOG_TB_OP_OPT))) {
+        if (unlikely(qemu_loglevel_mask(CPU_LOG_TB_OP | CPU_LOG_TB_OP_OPT)
+                     && qemu_log_in_addr_range(dc->pc))) {
             tcg_gen_debug_insn_start(dc->pc);
         }
 
@@ -10780,7 +10785,8 @@ done_generating:
     *tcg_ctx.gen_opc_ptr = INDEX_op_end;
 
 #ifdef DEBUG_DISAS
-    if (qemu_loglevel_mask(CPU_LOG_TB_IN_ASM)) {
+    if (qemu_loglevel_mask(CPU_LOG_TB_IN_ASM)
+        && qemu_log_in_addr_range(pc_start)) {
         qemu_log("----------------\n");
         qemu_log("IN: %s\n", lookup_symbol(pc_start));
         log_target_disas(env, pc_start, dc->pc - pc_start,
