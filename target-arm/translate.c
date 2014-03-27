@@ -11064,6 +11064,8 @@ void arm_cpu_dump_state(CPUState *cs, FILE *f, fprintf_function cpu_fprintf,
         return;
     }
 
+    cpu_fprintf(f, "A32 PC=%08"PRIx32"  SP=%08"PRIx32"\n",
+                env->regs[15], env->regs[13]);
     for(i=0;i<16;i++) {
         cpu_fprintf(f, "R%02d=%08x", i, env->regs[i]);
         if ((i % 4) == 3)

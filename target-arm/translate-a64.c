@@ -127,7 +127,7 @@ void aarch64_cpu_dump_state(CPUState *cs, FILE *f,
     uint32_t psr = pstate_read(env);
     int i;
 
-    cpu_fprintf(f, "PC=%016"PRIx64"  SP=%016"PRIx64"\n",
+    cpu_fprintf(f, "A64 PC=%016"PRIx64"  SP=%016"PRIx64"\n",
             env->pc, env->xregs[31]);
     for (i = 0; i < 31; i++) {
         cpu_fprintf(f, "X%02d=%016"PRIx64, i, env->xregs[i]);
