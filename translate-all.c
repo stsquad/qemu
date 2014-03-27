@@ -27,6 +27,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <inttypes.h>
+#include <glib.h>
 
 #include "config.h"
 
@@ -129,6 +130,24 @@ static void tb_link_page(TranslationBlock *tb, tb_page_addr_t phys_pc,
                          tb_page_addr_t phys_page2);
 static TranslationBlock *tb_find_pc(uintptr_t tc_ptr);
 
+static FILE *tb_perfmap;
+
+void tb_enable_perfmap(void)
+{
+    gchar *map_file = g_strdup_printf("/tmp/perf-%d.map", getpid());
+    tb_perfmap = fopen(map_file, "w");
+    g_free(map_file);
+}
+
+static void tb_write_perfmap(tcg_insn_unit *start, int size, target_ulong pc)
+{
+    if (tb_perfmap) {
+        fprintf(tb_perfmap,
+                "%"PRIxPTR" %x subject-"TARGET_FMT_lx"\n",
+                (uintptr_t) start, size, pc);
+    }
+}
+
 void cpu_gen_init(void)
 {
     tcg_context_init(&tcg_ctx); 
@@ -184,6 +203,7 @@ int cpu_gen_code(CPUArchState *env, TranslationBlock *tb, int *gen_code_size_ptr
     s->code_out_len += gen_code_size;
 #endif
 
+    tb_write_perfmap(gen_code_buf, gen_code_size, tb->pc);
 #ifdef DEBUG_DISAS
     if (qemu_loglevel_mask(CPU_LOG_TB_OUT_ASM)) {
         qemu_log("OUT: [size=%d]\n", gen_code_size);
@@ -583,6 +603,12 @@ static inline void code_gen_alloc(size_t tb_size)
     tcg_ctx.code_gen_prologue = tcg_ctx.code_gen_buffer +
             tcg_ctx.code_gen_buffer_size - 1024;
     tcg_ctx.code_gen_buffer_size -= 1024;
+
+    if (tb_perfmap) {
+        fprintf(tb_perfmap,
+                "%"PRIxPTR" %x tcg-prologue-buffer\n",
+                (uintptr_t) tcg_ctx.code_gen_prologue, 1024);
+    }
 
     tcg_ctx.code_gen_buffer_max_size = tcg_ctx.code_gen_buffer_size -
         (TCG_MAX_OP_SIZE * OPC_BUF_SIZE);

@@ -117,6 +117,7 @@ int main(int argc, char **argv)
 #include "ui/qemu-spice.h"
 #include "qapi/string-input-visitor.h"
 #include "qom/object_interfaces.h"
+#include "qemu-common.h"
 
 #define DEFAULT_RAM_SIZE 128
 
@@ -3386,6 +3387,9 @@ int main(int argc, char **argv, char **envp)
                 break;
             case QEMU_OPTION_D:
                 log_file = optarg;
+                break;
+            case QEMU_OPTION_PERFMAP:
+                tb_enable_perfmap();
                 break;
             case QEMU_OPTION_s:
                 add_device_config(DEV_GDB, "tcp::" DEFAULT_GDBSTUB_PORT);

@@ -3220,6 +3220,16 @@ STEXI
 prepend a timestamp to each log message.(default:on)
 ETEXI
 
+DEF("perfmap", 0, QEMU_OPTION_PERFMAP, \
+    "-perfmap        generate a /tmp/perf-${pid}.map file for perf\n",
+    QEMU_ARCH_ALL)
+STEXI
+@item -perfmap
+@findex -perfmap
+This will cause QEMU to generate a map file for Linux perf tools that will allow
+basic profiling information to be broken down into basic blocks.
+ETEXI
+
 HXCOMM This is the last statement. Insert new options before this line!
 STEXI
 @end table
