@@ -186,6 +186,8 @@ const QEMULogItem qemu_log_items[] = {
     { LOG_GUEST_ERROR, "guest_errors",
       "log when the guest OS does something invalid (eg accessing a\n"
       "non-existent register)" },
+    { CPU_LOG_TB_NOCHAIN, "nochain",
+      "disable chaining of translation blocks (better tracing, but slower)" },
     { 0, NULL, NULL },
 };
 

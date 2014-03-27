@@ -620,8 +620,10 @@ int cpu_exec(CPUArchState *env)
                 }
                 /* see if we can patch the calling TB. When the TB
                    spans two pages, we cannot safely do a direct
-                   jump. */
-                if (next_tb != 0 && tb->page_addr[1] == -1) {
+                   jump. It can also complicate tracing so disable if
+                   asked (but be aware this can change behaviour). */
+                if (next_tb != 0 && tb->page_addr[1] == -1 &&
+                    !qemu_loglevel_mask (CPU_LOG_TB_NOCHAIN)) {
                     tb_add_jump((TranslationBlock *)(next_tb & ~TB_EXIT_MASK),
                                 next_tb & TB_EXIT_MASK, tb);
                 }
