@@ -444,7 +444,8 @@ This option defines the type of the media: disk or cdrom.
 @item cyls=@var{c},heads=@var{h},secs=@var{s}[,trans=@var{t}]
 These options have the same definition as they have in @option{-hdachs}.
 @item snapshot=@var{snapshot}
-@var{snapshot} is "on" or "off" and allows to enable snapshot for given drive (see @option{-snapshot}).
+@var{snapshot} is "on" or "off" and controls snapshot mode for the given drive
+(see @option{-snapshot}).
 @item cache=@var{cache}
 @var{cache} is "none", "writeback", "unsafe", "directsync" or "writethrough" and controls how the host cache is used to access block data.
 @item aio=@var{aio}
@@ -1242,7 +1243,7 @@ Disable adaptive encodings. Adaptive encodings are enabled by default.
 An adaptive encoding will try to detect frequently updated screen regions,
 and send updates in these regions using a lossy encoding (like JPEG).
 This can be really helpful to save bandwidth when playing videos. Disabling
-adaptive encodings allows to restore the original static behavior of encodings
+adaptive encodings restores the original static behavior of encodings
 like Tight.
 
 @item share=[allow-exclusive|force-shared|ignore]
