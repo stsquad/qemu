@@ -2804,7 +2804,7 @@ static void disas_logic_imm(DisasContext *s, uint32_t insn)
         tcg_gen_xori_i64(tcg_rd, tcg_rn, wmask);
         break;
     default:
-        assert(FALSE); /* must handle all above */
+        g_assert_not_reached(); /* must handle all above */
         break;
     }
 
@@ -3047,7 +3047,7 @@ static void shift_reg(TCGv_i64 dst, TCGv_i64 src, int sf,
         }
         break;
     default:
-        assert(FALSE); /* all shift types should be handled */
+        g_assert_not_reached(); /* all shift types should be handled */
         break;
     }
 
@@ -3153,7 +3153,7 @@ static void disas_logic_reg(DisasContext *s, uint32_t insn)
         tcg_gen_eqv_i64(tcg_rd, tcg_rn, tcg_rm);
         break;
     default:
-        assert(FALSE);
+        g_assert_not_reached();
         break;
     }
 
@@ -4111,7 +4111,7 @@ static void handle_fp_1src_single(DisasContext *s, int opcode, int rd, int rn)
         gen_helper_rints(tcg_res, tcg_op, fpst);
         break;
     default:
-        abort();
+        g_assert_not_reached();
     }
 
     write_fp_sreg(s, rd, tcg_res);
@@ -4167,7 +4167,7 @@ static void handle_fp_1src_double(DisasContext *s, int opcode, int rd, int rn)
         gen_helper_rintd(tcg_res, tcg_op, fpst);
         break;
     default:
-        abort();
+        g_assert_not_reached();
     }
 
     write_fp_dreg(s, rd, tcg_res);
@@ -4239,7 +4239,7 @@ static void handle_fp_fcvt(DisasContext *s, int opcode,
         break;
     }
     default:
-        abort();
+        g_assert_not_reached();
     }
 }
 
@@ -10621,7 +10621,7 @@ static void disas_a64_insn(CPUARMState *env, DisasContext *s)
         disas_data_proc_simd_fp(s, insn);
         break;
     default:
-        assert(FALSE); /* all 15 cases should be handled above */
+        g_assert_not_reached(); /* all 15 cases should be handled above */
         break;
     }
 
