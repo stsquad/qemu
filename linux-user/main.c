@@ -4021,6 +4021,11 @@ int main(int argc, char **argv, char **envp)
     free(target_environ);
 
     if (qemu_log_enabled()) {
+        qemu_log("Loading: %s\nArgs: ", filename);
+        for (i=0; i < target_argc; i++) {
+            qemu_log("%s ", target_argv[i]);
+        }
+        qemu_log("\n");
 #if defined(CONFIG_USE_GUEST_BASE)
         qemu_log("guest_base  0x%lx\n", guest_base);
 #endif
