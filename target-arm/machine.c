@@ -120,30 +120,27 @@ static const VMStateDescription vmstate_thumb2ee = {
     }
 };
 
-static int get_cpsr(QEMUFile *f, void *opaque, size_t size)
+static int get_psr(QEMUFile *f, void *opaque, size_t size)
 {
     ARMCPU *cpu = opaque;
     CPUARMState *env = &cpu->env;
     uint32_t val = qemu_get_be32(f);
 
-    /* Avoid mode switch when restoring CPSR */
-    env->uncached_cpsr = val & CPSR_M;
-    cpsr_write(env, val, 0xffffffff);
+    restore_state_from_spsr(env, val);
     return 0;
 }
 
-static void put_cpsr(QEMUFile *f, void *opaque, size_t size)
+static void put_psr(QEMUFile *f, void *opaque, size_t size)
 {
     ARMCPU *cpu = opaque;
     CPUARMState *env = &cpu->env;
-
-    qemu_put_be32(f, cpsr_read(env));
+    qemu_put_be32(f, save_state_to_spsr(env));
 }
 
-static const VMStateInfo vmstate_cpsr = {
-    .name = "cpsr",
-    .get = get_cpsr,
-    .put = put_cpsr,
+static const VMStateInfo vmstate_psr = {
+    .name = "psr",
+    .get = get_psr,
+    .put = put_psr,
 };
 
 static void cpu_pre_save(void *opaque)
@@ -218,17 +215,19 @@ static int cpu_post_load(void *opaque, int version_id)
 
 const VMStateDescription vmstate_arm_cpu = {
     .name = "cpu",
-    .version_id = 20,
-    .minimum_version_id = 20,
+    .version_id = 21,
+    .minimum_version_id = 21,
     .pre_save = cpu_pre_save,
     .post_load = cpu_post_load,
     .fields = (VMStateField[]) {
         VMSTATE_UINT32_ARRAY(env.regs, ARMCPU, 16),
+        VMSTATE_UINT64_ARRAY(env.xregs, ARMCPU, 32),
+        VMSTATE_UINT64(env.pc, ARMCPU),
         {
-            .name = "cpsr",
+            .name = "psr",
             .version_id = 0,
             .size = sizeof(uint32_t),
-            .info = &vmstate_cpsr,
+            .info = &vmstate_psr,
             .flags = VMS_SINGLE,
             .offset = 0,
         },
