@@ -468,7 +468,7 @@ void cpu_loop(CPUX86State *env)
 static void arm_kernel_cmpxchg64_helper(CPUARMState *env)
 {
     uint64_t oldval, newval, val;
-    uint32_t addr, cpsr;
+    uint32_t addr;
     target_siginfo_t info;
 
     /* Based on the 32 bit code in do_kernel_trap */
@@ -478,7 +478,6 @@ static void arm_kernel_cmpxchg64_helper(CPUARMState *env)
        operations. However things like ldrex/strex are much harder so
        there's not much point trying.  */
     start_exclusive();
-    cpsr = cpsr_read(env);
     addr = env->regs[2];
 
     if (get_user_u64(oldval, env->regs[0])) {
@@ -505,12 +504,11 @@ static void arm_kernel_cmpxchg64_helper(CPUARMState *env)
         };
 
         env->regs[0] = 0;
-        cpsr |= CPSR_C;
+        env->CF = 1;
     } else {
         env->regs[0] = -1;
-        cpsr &= ~CPSR_C;
+        env->CF = 0;
     }
-    cpsr_write(env, cpsr, CPSR_C);
     end_exclusive();
     return;
 
@@ -533,7 +531,6 @@ static int
 do_kernel_trap(CPUARMState *env)
 {
     uint32_t addr;
-    uint32_t cpsr;
     uint32_t val;
 
     switch (env->regs[15]) {
@@ -546,7 +543,6 @@ do_kernel_trap(CPUARMState *env)
             operations. However things like ldrex/strex are much harder so
             there's not much point trying.  */
         start_exclusive();
-        cpsr = save_state_to_spsr(env);
         addr = env->regs[2];
         /* FIXME: This should SEGV if the access fails.  */
         if (get_user_u32(val, addr))
@@ -556,12 +552,11 @@ do_kernel_trap(CPUARMState *env)
             /* FIXME: Check for segfaults.  */
             put_user_u32(val, addr);
             env->regs[0] = 0;
-            cpsr |= CPSR_C;
+            env->CF = 1;
         } else {
             env->regs[0] = -1;
-            cpsr &= ~CPSR_C;
+            env->CF = 0;
         }
-        cpsr_write(env, cpsr, CPSR_C);
         end_exclusive();
         break;
     case 0xffff0fe0: /* __kernel_get_tls */
