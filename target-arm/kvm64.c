@@ -153,7 +153,7 @@ int kvm_arch_put_registers(CPUState *cs, int level)
     }
 
     /* Note that KVM thinks pstate is 64 bit but we use a uint32_t */
-    val = pstate_read(env);
+    val = save_state_to_spsr(env);
     reg.id = AARCH64_CORE_REG(regs.pstate);
     reg.addr = (uintptr_t) &val;
     ret = kvm_vcpu_ioctl(cs, KVM_SET_ONE_REG, &reg);

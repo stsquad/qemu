@@ -1224,7 +1224,7 @@ static int target_setup_sigframe(struct target_rt_sigframe *sf,
     }
     __put_user(env->xregs[31], &sf->uc.tuc_mcontext.sp);
     __put_user(env->pc, &sf->uc.tuc_mcontext.pc);
-    __put_user(pstate_read(env), &sf->uc.tuc_mcontext.pstate);
+    __put_user(save_state_to_spsr(env), &sf->uc.tuc_mcontext.pstate);
 
     __put_user(env->exception.vaddress, &sf->uc.tuc_mcontext.fault_address);
 
@@ -1572,7 +1572,7 @@ setup_sigcontext(struct target_sigcontext *sc, /*struct _fpstate *fpstate,*/
 	__put_user(env->regs[14], &sc->arm_lr);
 	__put_user(env->regs[15], &sc->arm_pc);
 #ifdef TARGET_CONFIG_CPU_32
-	__put_user(cpsr_read(env), &sc->arm_cpsr);
+        __put_user(save_state_to_spsr(env), &sc->arm_cpsr);
 #endif
 
 	__put_user(/* current->thread.trap_no */ 0, &sc->trap_no);
@@ -1604,7 +1604,7 @@ setup_return(CPUARMState *env, struct target_sigaction *ka,
 	abi_ulong handler = ka->_sa_handler;
 	abi_ulong retcode;
 	int thumb = handler & 1;
-	uint32_t cpsr = cpsr_read(env);
+	uint32_t cpsr = save_state_to_spsr(env);
 
 	cpsr &= ~CPSR_IT;
 	if (thumb) {

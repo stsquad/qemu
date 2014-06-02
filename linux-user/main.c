@@ -546,7 +546,7 @@ do_kernel_trap(CPUARMState *env)
             operations. However things like ldrex/strex are much harder so
             there's not much point trying.  */
         start_exclusive();
-        cpsr = cpsr_read(env);
+        cpsr = save_state_to_spsr(env);
         addr = env->regs[2];
         /* FIXME: This should SEGV if the access fails.  */
         if (get_user_u32(val, addr))

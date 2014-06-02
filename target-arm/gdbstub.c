@@ -53,7 +53,7 @@ int arm_cpu_gdb_read_register(CPUState *cs, uint8_t *mem_buf, int n)
         return gdb_get_reg32(mem_buf, 0);
     case 25:
         /* CPSR */
-        return gdb_get_reg32(mem_buf, cpsr_read(env));
+        return gdb_get_reg32(mem_buf, save_state_to_spsr(env));
     }
     /* Unknown register.  */
     return 0;

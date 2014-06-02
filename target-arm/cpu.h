@@ -480,30 +480,8 @@ int arm_cpu_handle_mmu_fault(CPUState *cpu, vaddr address, int rw,
 #define PSTATE_MODE_EL1t 4
 #define PSTATE_MODE_EL0t 0
 
-/* ARMv8 ARM D1.7 Process state, PSTATE
- *
- *  31  28 27  24 23   22 21 20 22    21  20 19  16 15   8 7   5 4    0
- * +------+------+-------+-----+--------+---+------+------+-----+------+
- * | NZCV | DAIF | SS IL |  EL | nRW SP | Q |  GE  |  IT  | JTE | Mode |
- * +------+------+-------+-----+--------+---+------+------+-----+------+
- *
- * The PSTATE is an abstraction of a number of Return the current
- * PSTATE value. This is only valid for A64 hardware although can be
- * read when in AArch32 mode.
- */
-static inline uint32_t pstate_read(CPUARMState *env)
-{
-    int ZF;
-
-    g_assert(is_a64(env));
-
-    ZF = (env->ZF == 0);
-    return (env->NF & 0x80000000) | (ZF << 30)
-        | (env->CF << 29) | ((env->VF & 0x80000000) >> 3)
-        | env->pstate | env->daif;
-}
-
-/* Update the current PSTATE value. This doesn't include nRW which is */
+/* Update the current PSTATE value. This doesn't include nRW which
+ * indicates if we are in 64 or 32 bit mode */
 static inline void pstate_write(CPUARMState *env, uint32_t val)
 {
     g_assert(is_a64(env));
@@ -520,25 +498,9 @@ static inline void pstate_write(CPUARMState *env, uint32_t val)
  *
  * Unlike the above PSTATE implementation these functions will attempt
  * to switch processor mode when the M[4:0] bits are set.
- */
-uint32_t cpsr_read(CPUARMState *env);
-/* Set the CPSR.  Note that some bits of mask must be all-set or all-clear.  */
+ *
+ * Note that some bits of mask must be all-set or all-clear.  */
 void cpsr_write(CPUARMState *env, uint32_t val, uint32_t mask);
-
-/* ARMv7-M ARM B1.4.2, special purpose program status register xPSR */
-static inline uint32_t xpsr_read(CPUARMState *env)
-{
-    int ZF;
-
-    g_assert(!is_a64(env));
-
-    ZF = (env->ZF == 0);
-    return (env->NF & 0x80000000) | (ZF << 30)
-        | (env->CF << 29) | ((env->VF & 0x80000000) >> 3) | (env->QF << 27)
-        | (env->thumb << 24) | ((env->condexec_bits & 3) << 25)
-        | ((env->condexec_bits & 0xfc) << 8)
-        | env->v7m.exception;
-}
 
 /* Set the xPSR.  Note that some bits of mask must be all-set or all-clear.  */
 static inline void xpsr_write(CPUARMState *env, uint32_t val, uint32_t mask)

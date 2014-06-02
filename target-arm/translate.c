@@ -11192,7 +11192,7 @@ void arm_cpu_dump_state(CPUState *cs, FILE *f, fprintf_function cpu_fprintf,
         else
             cpu_fprintf(f, " ");
     }
-    psr = cpsr_read(env);
+    psr = save_state_to_spsr(env);
     cpu_fprintf(f, "PSR=%08x %c%c%c%c %c %s%d\n",
                 psr,
                 psr & (1 << 31) ? 'N' : '-',

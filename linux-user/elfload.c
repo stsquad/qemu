@@ -321,7 +321,7 @@ static void elf_core_copy_regs(target_elf_gregset_t *regs, const CPUARMState *en
     (*regs)[14] = tswapreg(env->regs[14]);
     (*regs)[15] = tswapreg(env->regs[15]);
 
-    (*regs)[16] = tswapreg(cpsr_read((CPUARMState *)env));
+    (*regs)[16] = tswapreg(save_state_to_spsr((CPUARMState *)env));
     (*regs)[17] = tswapreg(env->regs[0]); /* XXX */
 }
 
@@ -509,7 +509,7 @@ static void elf_core_copy_regs(target_elf_gregset_t *regs,
         (*regs)[i] = tswapreg(env->xregs[i]);
     }
     (*regs)[32] = tswapreg(env->pc);
-    (*regs)[33] = tswapreg(pstate_read((CPUARMState *)env));
+    (*regs)[33] = tswapreg(save_state_to_spsr((CPUARMState *)env));
 }
 
 #define USE_ELF_CORE_DUMP

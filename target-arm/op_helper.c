@@ -258,7 +258,7 @@ void HELPER(exception_with_syndrome)(CPUARMState *env, uint32_t excp,
 
 uint32_t HELPER(cpsr_read)(CPUARMState *env)
 {
-    return cpsr_read(env) & ~CPSR_EXEC;
+    return save_state_to_spsr(env) & ~CPSR_EXEC;
 }
 
 void HELPER(cpsr_write)(CPUARMState *env, uint32_t val, uint32_t mask)
@@ -386,10 +386,9 @@ void HELPER(exception_return)(CPUARMState *env)
 
     if (spsr & PSTATE_nRW) {
         /* TODO: We currently assume EL1/2/3 are running in AArch64.  */
-        env->aarch64 = 0;
         new_el = 0;
-        env->uncached_cpsr = 0x10;
-        cpsr_write(env, spsr, ~0);
+        switch_mode(env, spsr & CPSR_M);
+
         for (i = 0; i < 15; i++) {
             env->regs[i] = env->xregs[i];
         }
@@ -412,11 +411,11 @@ void HELPER(exception_return)(CPUARMState *env)
             /* Return to EL0 with M[0] bit set */
             goto illegal_return;
         }
-        env->aarch64 = 1;
-        pstate_write(env, spsr);
         env->xregs[31] = env->sp_el[new_el];
         env->pc = env->elr_el[cur_el];
     }
+    /* This will set env->aarch64 as appropriate */
+    restore_state_from_spsr(env, spsr);
 
     return;
 
@@ -431,8 +430,8 @@ illegal_return:
     env->pstate |= PSTATE_IL;
     env->pc = env->elr_el[cur_el];
     spsr &= PSTATE_NZCV | PSTATE_DAIF;
-    spsr |= pstate_read(env) & ~(PSTATE_NZCV | PSTATE_DAIF);
-    pstate_write(env, spsr);
+    spsr |= save_state_to_spsr(env) & ~(PSTATE_NZCV | PSTATE_DAIF);
+    restore_state_from_spsr(env, spsr);
 }
 
 /* ??? Flag setting arithmetic is awkward because we need to do comparisons.

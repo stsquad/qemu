@@ -35,7 +35,7 @@ int aarch64_cpu_gdb_read_register(CPUState *cs, uint8_t *mem_buf, int n)
     case 32:
         return gdb_get_reg64(mem_buf, env->pc);
     case 33:
-        return gdb_get_reg32(mem_buf, pstate_read(env));
+        return gdb_get_reg32(mem_buf, save_state_to_spsr(env));
     }
     /* Unknown register.  */
     return 0;
@@ -62,7 +62,7 @@ int aarch64_cpu_gdb_write_register(CPUState *cs, uint8_t *mem_buf, int n)
         env->pc = tmp;
         return 8;
     case 33:
-        /* CPSR */
+        /* SPSR */
         pstate_write(env, tmp);
         return 4;
     }

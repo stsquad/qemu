@@ -445,6 +445,7 @@ void aarch64_cpu_do_interrupt(CPUState *cs)
     CPUARMState *env = &cpu->env;
     target_ulong addr = env->cp15.vbar_el[1];
     int i;
+    uint32_t spsr = save_state_to_spsr(env);
 
     if (arm_current_pl(env) == 0) {
         if (env->aarch64) {
@@ -452,7 +453,7 @@ void aarch64_cpu_do_interrupt(CPUState *cs)
         } else {
             addr += 0x600;
         }
-    } else if (pstate_read(env) & PSTATE_SP) {
+    } else if (spsr & PSTATE_SP) {
         addr += 0x200;
     }
 
@@ -488,12 +489,12 @@ void aarch64_cpu_do_interrupt(CPUState *cs)
     }
 
     if (is_a64(env)) {
-        env->banked_spsr[aarch64_banked_spsr_index(1)] = pstate_read(env);
+        env->banked_spsr[aarch64_banked_spsr_index(1)] = spsr;
         env->sp_el[arm_current_pl(env)] = env->xregs[31];
         env->xregs[31] = env->sp_el[1];
         env->elr_el[1] = env->pc;
     } else {
-        env->banked_spsr[0] = cpsr_read(env);
+        env->banked_spsr[0] = spsr;
         if (!env->thumb) {
             env->cp15.esr_el[1] |= 1 << 25;
         }
@@ -506,6 +507,7 @@ void aarch64_cpu_do_interrupt(CPUState *cs)
         env->condexec_bits = 0;
     }
 
+    // TODO: restore_state_from_spsr()
     env->aarch64 = 1;
     pstate_write(env, PSTATE_DAIF | PSTATE_MODE_EL1h);
 

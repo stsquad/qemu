@@ -384,7 +384,7 @@ int kvm_arch_put_registers(CPUState *cs, int level)
     }
 
     /* Special cases which aren't a single CPUARMState field */
-    cpsr = cpsr_read(env);
+    cpsr = save_state_to_spsr(env);
     r.id = KVM_REG_ARM | KVM_REG_SIZE_U32 |
         KVM_REG_ARM_CORE | KVM_REG_ARM_CORE_REG(usr_regs.ARM_cpsr);
     r.addr = (uintptr_t)(&cpsr);

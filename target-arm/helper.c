@@ -2990,17 +2990,6 @@ static int bad_mode_switch(CPUARMState *env, int mode)
     }
 }
 
-uint32_t cpsr_read(CPUARMState *env)
-{
-    int ZF;
-    ZF = (env->ZF == 0);
-    return env->uncached_cpsr | (env->NF & 0x80000000) | (ZF << 30) |
-        (env->CF << 29) | ((env->VF & 0x80000000) >> 3) | (env->QF << 27)
-        | (env->thumb << 5) | ((env->condexec_bits & 3) << 25)
-        | ((env->condexec_bits & 0xfc) << 8)
-        | (env->GE << 16) | (env->daif & CPSR_AIF);
-}
-
 void cpsr_write(CPUARMState *env, uint32_t val, uint32_t mask)
 {
     if (mask & CPSR_NZCV) {
@@ -3278,7 +3267,7 @@ void arm_v7m_cpu_do_interrupt(CPUState *cs)
 {
     ARMCPU *cpu = ARM_CPU(cs);
     CPUARMState *env = &cpu->env;
-    uint32_t xpsr = xpsr_read(env);
+    uint32_t xpsr = save_state_to_spsr(env);
     uint32_t lr;
     uint32_t addr;
 
@@ -3479,7 +3468,8 @@ void arm_cpu_do_interrupt(CPUState *cs)
         addr += env->cp15.vbar_el[1];
     }
     switch_mode (env, new_mode);
-    env->spsr = cpsr_read(env);
+    env->spsr = save_state_to_spsr(env);
+    /* TODO: restore_state_from_spsr */
     /* Clear IT bits.  */
     env->condexec_bits = 0;
     /* Switch to the new mode, and to the correct instruction set.  */
@@ -4212,19 +4202,19 @@ uint32_t HELPER(v7m_mrs)(CPUARMState *env, uint32_t reg)
 
     switch (reg) {
     case 0: /* APSR */
-        return xpsr_read(env) & 0xf8000000;
+        return save_state_to_spsr(env) & 0xf8000000;
     case 1: /* IAPSR */
-        return xpsr_read(env) & 0xf80001ff;
+        return save_state_to_spsr(env) & 0xf80001ff;
     case 2: /* EAPSR */
-        return xpsr_read(env) & 0xff00fc00;
+        return save_state_to_spsr(env) & 0xff00fc00;
     case 3: /* xPSR */
-        return xpsr_read(env) & 0xff00fdff;
+        return save_state_to_spsr(env) & 0xff00fdff;
     case 5: /* IPSR */
-        return xpsr_read(env) & 0x000001ff;
+        return save_state_to_spsr(env) & 0x000001ff;
     case 6: /* EPSR */
-        return xpsr_read(env) & 0x0700fc00;
+        return save_state_to_spsr(env) & 0x0700fc00;
     case 7: /* IEPSR */
-        return xpsr_read(env) & 0x0700edff;
+        return save_state_to_spsr(env) & 0x0700edff;
     case 8: /* MSP */
         return env->v7m.current_sp ? env->v7m.other_sp : env->regs[13];
     case 9: /* PSP */

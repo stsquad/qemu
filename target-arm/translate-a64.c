@@ -126,7 +126,7 @@ void aarch64_cpu_dump_state(CPUState *cs, FILE *f,
 {
     ARMCPU *cpu = ARM_CPU(cs);
     CPUARMState *env = &cpu->env;
-    uint32_t psr = pstate_read(env);
+    uint32_t psr = save_state_to_spsr(env);
     int i;
 
     cpu_fprintf(f, "PC=%016"PRIx64"  SP=%016"PRIx64"\n",
