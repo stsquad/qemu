@@ -108,7 +108,7 @@ static inline void writeRegister(unsigned int x, unsigned int y)
 
 static inline void writeConditionCodes(unsigned int x)
 {
-        cpsr_write(user_registers,x,CPSR_NZCV);
+        set_condition_codes(user_registers, x);
 }
 
 #define ARM_REG_PC 15
