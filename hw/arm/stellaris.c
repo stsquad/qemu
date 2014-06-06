@@ -1350,13 +1350,13 @@ static void lm3s6965evb_init(MachineState *machine)
 
 static QEMUMachine lm3s811evb_machine = {
     .name = "lm3s811evb",
-    .desc = "Stellaris LM3S811EVB",
+    .desc = "Stellaris LM3S811EVB (ARM Cortex-M3)",
     .init = lm3s811evb_init,
 };
 
 static QEMUMachine lm3s6965evb_machine = {
     .name = "lm3s6965evb",
-    .desc = "Stellaris LM3S6965EVB",
+    .desc = "Stellaris LM3S6965EVB (ARM Cortex-M3)",
     .init = lm3s6965evb_init,
 };
 
