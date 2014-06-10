@@ -35,7 +35,8 @@ before_install:
   - git submodule update --init --recursive
   - sudo apt-get update -qq
   - sudo apt-get install -qq ${CORE_PKGS} ${NET_PKGS} ${GUI_PKGS} ${EXTRA_PKGS}
-script: "./configure --target-list=${TARGETS} ${EXTRA_CONFIG} && make && ${TEST_CMD}"
+script:
+  - ./scripts/travis-build.sh
 matrix:
   # We manually include a number of additional build for non-standard bits
   include:
