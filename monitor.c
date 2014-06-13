@@ -69,6 +69,7 @@
 #include "exec/cpu_ldst.h"
 #include "qmp-commands.h"
 #include "hmp.h"
+#include "android-console.h"
 #include "qemu/thread.h"
 #include "block/qapi.h"
 #include "qapi/qmp-event.h"
@@ -210,6 +211,8 @@ struct Monitor {
     void *password_opaque;
     mon_cmd_t *cmd_table;
     QError *error;
+    const char *prompt;
+    const char *banner;
     QLIST_HEAD(,mon_fd_t) fds;
     QLIST_ENTRY(Monitor) entry;
 };
@@ -226,6 +229,7 @@ static int mon_refcount;
 
 static mon_cmd_t mon_cmds[];
 static mon_cmd_t info_cmds[];
+static mon_cmd_t android_cmds[];
 
 static const mon_cmd_t qmp_cmds[];
 
@@ -257,7 +261,7 @@ void monitor_read_command(Monitor *mon, int show_prompt)
     if (!mon->rs)
         return;
 
-    readline_start(mon->rs, "(qemu) ", 0, monitor_command_cb, NULL);
+    readline_start(mon->rs, mon->prompt, 0, monitor_command_cb, NULL);
     if (show_prompt)
         readline_show_prompt(mon->rs);
 }
@@ -2944,6 +2948,8 @@ static const mon_cmd_t qmp_cmds[] = {
     { /* NULL */ },
 };
 
+#include "android-commands.h"
+
 /*******************************************************************/
 
 static const char *pch;
@@ -3711,8 +3717,12 @@ static const mon_cmd_t *monitor_parse_command(Monitor *mon,
 
     cmd = search_dispatch_table(table, cmdname);
     if (!cmd) {
-        monitor_printf(mon, "unknown command: '%.*s'\n",
-                       (int)(p - cmdline), cmdline);
+        if (mon->cmd_table == android_cmds) {
+            monitor_printf(mon, "KO: unknown command, try 'help'\n");
+        } else {
+            monitor_printf(mon, "unknown command: '%.*s'\n",
+                           (int)(p - cmdline), cmdline);
+        }
         return NULL;
     }
 
@@ -5253,8 +5263,7 @@ static void monitor_event(void *opaque, int event)
         break;
 
     case CHR_EVENT_OPENED:
-        monitor_printf(mon, "QEMU %s monitor - type 'help' for more "
-                       "information\n", QEMU_VERSION);
+        monitor_printf(mon, "%s\n", mon->banner);
         if (!mon->mux_out) {
             readline_restart(mon->rs);
             readline_show_prompt(mon->rs);
@@ -5333,6 +5342,15 @@ void monitor_init(CharDriverState *chr, int flags)
 
     mon = g_malloc(sizeof(*mon));
     monitor_data_init(mon);
+    mon->prompt = "(qemu) ";
+    mon->banner =
+        "QEMU " QEMU_VERSION " monitor - type 'help' for more information";
+
+    if (flags & MONITOR_ANDROID_CONSOLE) {
+        mon->cmd_table = android_cmds;
+        mon->prompt = "";
+        mon->banner = "Android Console: type 'help' for a list of commands";
+    }
 
     mon->chr = chr;
     mon->flags = flags;
