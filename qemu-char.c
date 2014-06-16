@@ -429,6 +429,11 @@ int qemu_chr_add_client(CharDriverState *s, int fd)
     return s->chr_add_client ? s->chr_add_client(s, fd) : -1;
 }
 
+int qemu_chr_del_client(CharDriverState *s)
+{
+    return s->chr_del_client ? s->chr_del_client(s) : -1;
+}
+
 void qemu_chr_accept_input(CharDriverState *s)
 {
     if (s->chr_accept_input)
@@ -2843,12 +2848,12 @@ static GSource *tcp_chr_add_watch(CharDriverState *chr, GIOCondition cond)
     return qio_channel_create_watch(s->ioc, cond);
 }
 
-static void tcp_chr_disconnect(CharDriverState *chr)
+static int tcp_chr_del_client(CharDriverState *chr)
 {
     TCPCharDriver *s = chr->opaque;
 
     if (!s->connected) {
-        return;
+        return -1;
     }
 
     s->connected = 0;
@@ -2869,6 +2874,7 @@ static void tcp_chr_disconnect(CharDriverState *chr)
     if (s->reconnect_time) {
         qemu_chr_socket_restart_timer(chr);
     }
+    return 0;
 }
 
 static gboolean tcp_chr_read(QIOChannel *chan, GIOCondition cond, void *opaque)
@@ -2877,6 +2883,12 @@ static gboolean tcp_chr_read(QIOChannel *chan, GIOCondition cond, void *opaque)
     TCPCharDriver *s = chr->opaque;
     uint8_t buf[READ_BUF_LEN];
     int len, size;
+
+    if (cond & G_IO_HUP) {
+        /* connection closed */
+        tcp_chr_del_client(chr);
+        return TRUE;
+    }
 
     if (!s->connected || s->max_size <= 0) {
         return TRUE;
@@ -2887,7 +2899,7 @@ static gboolean tcp_chr_read(QIOChannel *chan, GIOCondition cond, void *opaque)
     size = tcp_chr_recv(chr, (void *)buf, len);
     if (size == 0 || size == -1) {
         /* connection closed */
-        tcp_chr_disconnect(chr);
+        tcp_chr_del_client(chr);
     } else if (size > 0) {
         if (s->do_telnetopt)
             tcp_chr_process_IAC_bytes(chr, s, buf, &size);
@@ -2910,7 +2922,7 @@ static int tcp_chr_sync_read(CharDriverState *chr, const uint8_t *buf, int len)
     size = tcp_chr_recv(chr, (void *) buf, len);
     if (size == 0) {
         /* connection closed */
-        tcp_chr_disconnect(chr);
+        tcp_chr_del_client(chr);
     }
 
     return size;
@@ -2970,7 +2982,7 @@ static gboolean tcp_chr_telnet_init_io(QIOChannel *ioc,
         if (ret == QIO_CHANNEL_ERR_BLOCK) {
             ret = 0;
         } else {
-            tcp_chr_disconnect(init->chr);
+            tcp_chr_del_client(init->chr);
             return FALSE;
         }
     }
@@ -3027,7 +3039,7 @@ static void tcp_chr_tls_handshake(Object *source,
     TCPCharDriver *s = chr->opaque;
 
     if (err) {
-        tcp_chr_disconnect(chr);
+        tcp_chr_del_client(chr);
     } else {
         if (s->do_telnetopt) {
             tcp_chr_telnet_init(chr);
@@ -3057,7 +3069,7 @@ static void tcp_chr_tls_init(CharDriverState *chr)
     }
     if (tioc == NULL) {
         error_free(err);
-        tcp_chr_disconnect(chr);
+        tcp_chr_del_client(chr);
     }
     object_unref(OBJECT(s->ioc));
     s->ioc = QIO_CHANNEL(tioc);
@@ -4408,6 +4420,7 @@ static CharDriverState *qmp_chardev_open_socket(const char *id,
     chr->get_msgfds = tcp_get_msgfds;
     chr->set_msgfds = tcp_set_msgfds;
     chr->chr_add_client = tcp_chr_add_client;
+    chr->chr_del_client = tcp_chr_del_client;
     chr->chr_add_watch = tcp_chr_add_watch;
     chr->chr_update_read_handler = tcp_chr_update_read_handler;
     /* be isn't opened until we get a connection */
