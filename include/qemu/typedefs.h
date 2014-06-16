@@ -96,4 +96,7 @@ typedef struct uWireSlave uWireSlave;
 typedef struct VirtIODevice VirtIODevice;
 typedef struct Visitor Visitor;
 
+struct Slirp;
+typedef struct Slirp Slirp;
+
 #endif /* QEMU_TYPEDEFS_H */
