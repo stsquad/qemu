@@ -889,6 +889,77 @@ static void do_help_cmd(Monitor *mon, const QDict *qdict)
     help_cmd(mon, qdict_get_try_str(qdict, "name"));
 }
 
+static void android_console_help(Monitor *mon, const QDict *qdict)
+{
+    const char *name = qdict_get_try_str(qdict, "helptext");
+    const mon_cmd_t *cmd;
+    const mon_cmd_t *cmds = mon->cmd_table;
+    char *args[MAX_ARGS];
+    int nb_args = 0;
+    int thisarg = 0;
+    const mon_cmd_t *parent_cmd = NULL;
+
+    if (!name) {
+        /* No arguments, just print command list */
+        monitor_printf(mon, "Android console command help:\n\n");
+        for (cmd = cmds; cmd->name; cmd++) {
+            monitor_printf(mon, "    %-15s  %s\n", cmd->name, cmd->help);
+        }
+        monitor_printf(mon,
+                       "\ntry 'help <command>' for command-specific help\n");
+        return;
+    }
+
+    /* With an argument, look for it */
+    if (!parse_cmdline(name, &nb_args, args) < 0 || nb_args == 0) {
+        monitor_printf(mon, "KO: couldn't parse help text\n");
+        return;
+    }
+
+    for (;;) {
+        for (cmd = cmds; cmd->name; cmd++) {
+            if (compare_cmd(args[thisarg], cmd->name)) {
+                break;
+            }
+        }
+        if (!cmd->name) {
+            /* command/subcommand not found */
+            monitor_printf(mon, "try one of these instead:\n\n");
+            for (cmd = cmds; cmd->name; cmd++) {
+                int i;
+                monitor_printf(mon, "    ");
+                for (i = 0; i < thisarg; i++) {
+                    monitor_printf(mon, "%s ", args[i]);
+                }
+                monitor_printf(mon, "%s\n", cmd->name);
+            }
+            monitor_printf(mon, "\nKO: unknown command\n");
+            return;
+        }
+
+        thisarg++;
+
+        if (thisarg >= nb_args || !cmd->sub_table) {
+            /* For subtables, the command handler for the entry in the 1st
+             * level of commands deals with help (including "help subcommand"
+             * where there is no following second level command in the help
+             * string). For top level commands, we just print the short text.
+             */
+            if (parent_cmd) {
+                parent_cmd->mhandler.cmd(mon, qdict);
+            } else if (cmd->sub_table) {
+                cmd->mhandler.cmd(mon, qdict);
+            } else {
+                monitor_printf(mon, "%s\nOK\n", cmd->help);
+            }
+            return;
+        }
+
+        parent_cmd = cmd;
+        cmds = cmd->sub_table;
+    }
+}
+
 static void do_trace_event_set_state(Monitor *mon, const QDict *qdict)
 {
     const char *tp_name = qdict_get_str(qdict, "name");

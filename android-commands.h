@@ -28,10 +28,10 @@ static mon_cmd_t android_redir_cmds[] = {
 static mon_cmd_t android_cmds[] = {
     {
         .name = "help|h|?",
-        .args_type = "name:S?",
+        .args_type = "helptext:S?",
         .params = "",
         .help = "print a list of commands",
-        .mhandler.cmd = do_help_cmd,
+        .mhandler.cmd = android_console_help,
     },
     {
         .name = "kill",
