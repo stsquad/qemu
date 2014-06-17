@@ -179,6 +179,8 @@ typedef struct {
     int64_t rate;       /* Minimum time (in ns) between two events */
 } MonitorQAPIEventConf;
 
+typedef void MonitorErrorPrintFn(struct Monitor *mon, const char *fmt, ...);
+
 struct Monitor {
     CharDriverState *chr;
     int reset_seen;
@@ -207,6 +209,7 @@ struct Monitor {
 
     const char *prompt;
     const char *banner;
+    MonitorErrorPrintFn *print_error;
     QLIST_HEAD(,mon_fd_t) fds;
     QLIST_ENTRY(Monitor) entry;
 };
@@ -2619,15 +2622,16 @@ static QDict *monitor_parse_arguments(Monitor *mon,
                 if (ret < 0) {
                     switch(c) {
                     case 'F':
-                        monitor_printf(mon, "%s: filename expected\n",
-                                       cmd->name);
+                        mon->print_error(mon, "%s: filename expected\n",
+                                         cmd->name);
                         break;
                     case 'B':
-                        monitor_printf(mon, "%s: block device name expected\n",
-                                       cmd->name);
+                        mon->print_error(mon,
+                                         "%s: block device name expected\n",
+                                         cmd->name);
                         break;
                     default:
-                        monitor_printf(mon, "%s: string expected\n", cmd->name);
+                        mon->print_error(mon, "%s: string expected\n", cmd->name);
                         break;
                     }
                     goto fail;
@@ -2712,8 +2716,8 @@ static QDict *monitor_parse_arguments(Monitor *mon,
                     }
                 next:
                     if (*p != '\0' && !qemu_isspace(*p)) {
-                        monitor_printf(mon, "invalid char in format: '%c'\n",
-                                       *p);
+                        mon->print_error(mon, "invalid char in format: '%c'\n",
+                                         *p);
                         goto fail;
                     }
                     if (format < 0)
@@ -2769,12 +2773,12 @@ static QDict *monitor_parse_arguments(Monitor *mon,
                     goto fail;
                 /* Check if 'i' is greater than 32-bit */
                 if ((c == 'i') && ((val >> 32) & 0xffffffff)) {
-                    monitor_printf(mon, "\'%s\' has failed: ", cmd->name);
-                    monitor_printf(mon, "integer is for 32-bit values\n");
+                    mon->print_error(mon, "\'%s\' has failed: ", cmd->name);
+                    mon->print_error(mon, "integer is for 32-bit values\n");
                     goto fail;
                 } else if (c == 'M') {
                     if (val < 0) {
-                        monitor_printf(mon, "enter a positive value\n");
+                        mon->print_error(mon, "enter a positive value\n");
                         goto fail;
                     }
                     val <<= 20;
@@ -2798,7 +2802,7 @@ static QDict *monitor_parse_arguments(Monitor *mon,
                 }
                 val = qemu_strtosz(p, &end);
                 if (val < 0) {
-                    monitor_printf(mon, "invalid size\n");
+                    mon->print_error(mon, "invalid size\n");
                     goto fail;
                 }
                 qdict_put(qdict, key, qint_from_int(val));
@@ -2831,7 +2835,7 @@ static QDict *monitor_parse_arguments(Monitor *mon,
                     }
                 }
                 if (*p && !qemu_isspace(*p)) {
-                    monitor_printf(mon, "Unknown unit suffix\n");
+                    mon->print_error(mon, "Unknown unit suffix\n");
                     goto fail;
                 }
                 qdict_put(qdict, key, qfloat_from_double(val));
@@ -2854,7 +2858,7 @@ static QDict *monitor_parse_arguments(Monitor *mon,
                 } else if (p - beg == 3 && !memcmp(beg, "off", p - beg)) {
                     val = false;
                 } else {
-                    monitor_printf(mon, "Expected 'on' or 'off'\n");
+                    mon->print_error(mon, "Expected 'on' or 'off'\n");
                     goto fail;
                 }
                 qdict_put(qdict, key, qbool_from_bool(val));
@@ -2875,9 +2879,9 @@ static QDict *monitor_parse_arguments(Monitor *mon,
                     p++;
                     if(c != *p) {
                         if(!is_valid_option(p, typestr)) {
-                  
-                            monitor_printf(mon, "%s: unsupported option -%c\n",
-                                           cmd->name, *p);
+                            mon->print_error(mon,
+                                             "%s: unsupported option -%c\n",
+                                             cmd->name, *p);
                             goto fail;
                         } else {
                             skip_key = 1;
@@ -2910,8 +2914,8 @@ static QDict *monitor_parse_arguments(Monitor *mon,
                 }
                 len = strlen(p);
                 if (len <= 0) {
-                    monitor_printf(mon, "%s: string expected\n",
-                                   cmd->name);
+                    mon->print_error(mon, "%s: string expected\n",
+                                     cmd->name);
                     goto fail;
                 }
                 qdict_put(qdict, key, qstring_from_str(p));
@@ -2920,7 +2924,7 @@ static QDict *monitor_parse_arguments(Monitor *mon,
             break;
         default:
         bad_type:
-            monitor_printf(mon, "%s: unknown type '%c'\n", cmd->name, c);
+            mon->print_error(mon, "%s: unknown type '%c'\n", cmd->name, c);
             goto fail;
         }
         g_free(key);
@@ -2930,8 +2934,8 @@ static QDict *monitor_parse_arguments(Monitor *mon,
     while (qemu_isspace(*p))
         p++;
     if (*p != '\0') {
-        monitor_printf(mon, "%s: extraneous characters at the end of line\n",
-                       cmd->name);
+        mon->print_error(mon, "%s: extraneous characters at the end of line\n",
+                         cmd->name);
         goto fail;
     }
 
@@ -4235,11 +4239,13 @@ Monitor * monitor_init(CharDriverState *chr, int flags)
     mon->prompt = "(qemu) ";
     mon->banner =
         "QEMU " QEMU_VERSION " monitor - type 'help' for more information";
+    mon->print_error = monitor_printf;
 
     if (flags & MONITOR_ANDROID_CONSOLE) {
         mon->cmd_table = android_cmds;
         mon->prompt = "";
         mon->banner = "Android Console: type 'help' for a list of commands";
+        mon->print_error = android_monitor_print_error;
     }
 
     if (flags & MONITOR_DYNAMIC_CMDS) {
