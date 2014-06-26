@@ -455,19 +455,24 @@ int arm_cpu_handle_mmu_fault(CPUState *cpu, vaddr address, int rw,
 #define PSTATE_SP (1U)
 #define PSTATE_M (0xFU)
 #define PSTATE_nRW (1U << 4)
+#define PSTATE_T (1U << 5)
 #define PSTATE_F (1U << 6)
 #define PSTATE_I (1U << 7)
 #define PSTATE_A (1U << 8)
 #define PSTATE_D (1U << 9)
 #define PSTATE_IL (1U << 20)
 #define PSTATE_SS (1U << 21)
+#define PSTATE_Q (1U << 27)
 #define PSTATE_V (1U << 28)
 #define PSTATE_C (1U << 29)
 #define PSTATE_Z (1U << 30)
 #define PSTATE_N (1U << 31)
 #define PSTATE_NZCV (PSTATE_N | PSTATE_Z | PSTATE_C | PSTATE_V)
-#define PSTATE_DAIF (PSTATE_D | PSTATE_A | PSTATE_I | PSTATE_F)
-#define CACHED_PSTATE_BITS (PSTATE_NZCV | PSTATE_DAIF)
+#define PSTATE_AIF  (PSTATE_A | PSTATE_I | PSTATE_F)
+#define PSTATE_DAIF (PSTATE_D | PSTATE_AIF)
+#define AARCH64_CACHED_PSTATE_BITS (PSTATE_NZCV | PSTATE_DAIF)
+#define AARCH32_CACHED_PSTATE_BITS (PSTATE_NZCV | PSTATE_Q | PSTATE_AIF \
+                                    | CACHED_CPSR_BITS)
 /* Mode values for AArch64 */
 #define PSTATE_MODE_EL3h 13
 #define PSTATE_MODE_EL3t 12
@@ -538,7 +543,7 @@ static inline void pstate_write(CPUARMState *env, uint32_t val)
 
     spsr_write_cc_flags(env, val);
     env->daif = val & PSTATE_DAIF;
-    env->pstate = val & ~CACHED_PSTATE_BITS;
+    env->pstate = val & ~AARCH64_CACHED_PSTATE_BITS;
 }
 
 /* ARMv7-AR ARM B1.3.3 Current Program Status Register, CPSR
@@ -719,6 +724,80 @@ static inline bool arm_el_is_aa64(CPUARMState *env, int el)
      */
     return arm_feature(env, ARM_FEATURE_AARCH64);
 }
+
+/* ARMv8 ARM D1.6.4, Saved Program Status Registers
+ *
+ * These are formats used to save program status when exceptions are
+ * taken. There are two forms:
+ *
+ * AArch64 -> AArch64 Exception
+ *  31  30  28  29  27  22  21   20  19  10  9   8   7   6   5  4   3      0
+ * +---+---+---+---+------+----+----+------+---+---+---+---+---+------------+
+ * | N | Z | C | V | RES0 | SS | IL | RES0 | D | A | I | F | 0 | 0 | M[3:0] |
+ * +---+---+---+---+------+----+----+------+---+---+---+---+---+------------+
+ *
+ * AArch32 -> AArch64 Exception
+ * (see also ARMv7-AR ARM B1.3.3 CSPR/SPSR formats)
+ *  31  30  29  28  27  26     25 24  23  22  21   20  19     16
+ * +---+---+---+---+---+---------+---+------+----+----+---------+
+ * | N | Z | C | V | Q | IT[1:0] | J | RES0 | SS | IL | GE[3:0] |
+ * +---+---+---+---+---+---------+---+------+----+----+---------+
+ *  15     10  9   8   7   6   5   4  3      0
+ * +---------+---+---+---+---+---+---+--------+
+ * | IT[7:2] | E | A | I | F | T | 1 | M[3:0] |
+ * +---------+---+---+---+---+---+---+--------+
+ *
+ * M[4] = nRW - 0 = 64bit, 1 = 32bit
+ * Bit definitions for ARMv8 SPSR (PSTATE) format.
+ * Only these are valid when in AArch64 mode; in
+ * AArch32 mode SPSRs are basically CPSR-format.
+ *
+ * Also ARMv7-M ARM B1.4.2, special purpose program status register xPSR
+ */
+
+/* Save the program state */
+static inline uint32_t save_state_to_spsr(CPUARMState *env)
+{
+    if (is_a64(env)) {
+        return pstate_read(env);
+    } else {
+        if (arm_feature(env, ARM_FEATURE_M)) {
+            return xpsr_read(env);
+        } else {
+            return cpsr_read(env);
+        }
+    }
+}
+
+/* Restore the program state.
+ *
+ * This restores the program execution state including it's current
+ * execution mode. However validation of mode changes and additional
+ * registers and state that need changing should be done by the
+ * calling function.
+ *
+ * The simple set_condition_codes() function can be used just to
+ * update the cached integer flags which are quite often manipulated
+ * alone.
+ */
+
+/* Restore the complete program state */
+static inline void restore_state_from_spsr(CPUARMState *env,
+                                           uint32_t saved_state)
+{
+    if (arm_feature(env, ARM_FEATURE_M)) {
+        xpsr_write(env, saved_state, 0xffff);
+    } else {
+        /* the rest depends on the mode we end up in */
+        env->aarch64 = (saved_state & PSTATE_nRW) ? 0 : 1;
+        if (is_a64(env)) {
+            pstate_write(env, saved_state);
+        } else {
+            cpsr_write(env, saved_state, 0xffff);
+        }
+    }
+}
+
 
 void arm_cpu_list(FILE *f, fprintf_function cpu_fprintf);
 
