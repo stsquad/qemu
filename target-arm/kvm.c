@@ -279,6 +279,16 @@ void kvm_arm_register_device(MemoryRegion *mr, uint64_t devid, uint64_t group,
     memory_region_ref(kd->mr);
 }
 
+static void failed_cpreg_operation(ARMCPU *cpu, uint64_t regidx, int ret,
+                                   const char *func)
+{
+    uint32_t cpreg_id = kvm_to_cpreg_id(regidx);
+    ARMCPRegInfo *cpreg = g_hash_table_lookup(cpu->cp_regs, &cpreg_id);
+    qemu_log_mask(LOG_UNIMP,
+                  "%s: failed (%d) KVM reg op %"PRIx64" (%s)\n",
+                  func, ret, regidx, cpreg ? cpreg->name : "unknown");
+}
+
 bool write_kvmstate_to_list(ARMCPU *cpu)
 {
     CPUState *cs = CPU(cpu);
@@ -309,6 +319,7 @@ bool write_kvmstate_to_list(ARMCPU *cpu)
             abort();
         }
         if (ret) {
+            failed_cpreg_operation(cpu, regidx, ret, __func__);
             ok = false;
         }
     }
@@ -345,6 +356,7 @@ bool write_list_to_kvmstate(ARMCPU *cpu)
              * "you tried to set a register which is constant with
              * a different value from what it actually contains".
              */
+            failed_cpreg_operation(cpu, regidx, ret, __func__);
             ok = false;
         }
     }
