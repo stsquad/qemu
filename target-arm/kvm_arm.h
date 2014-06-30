@@ -47,6 +47,18 @@ void kvm_arm_register_device(MemoryRegion *mr, uint64_t devid, uint64_t group,
                              uint64_t attr, int dev_fd);
 
 /**
+ * kvm_arm_sync_register_list:
+ * @cs: CPUState
+ *
+ * Before migration can occur we need to sync the list of additional
+ * registers that KVM knows about which we can then use when we start
+ * doing migration. It's OK for the TCG side not to know about
+ * registers exposed by the KVM side although this will break
+ * migration between the two VM types.
+ */
+bool kvm_arm_sync_register_list(CPUState *cs);
+
+/**
  * write_list_to_kvmstate:
  * @cpu: ARMCPU
  *
