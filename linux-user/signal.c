@@ -1274,7 +1274,7 @@ static int target_restore_sigframe(CPUARMState *env,
     __get_user(env->xregs[31], &sf->uc.tuc_mcontext.sp);
     __get_user(env->pc, &sf->uc.tuc_mcontext.pc);
     __get_user(pstate, &sf->uc.tuc_mcontext.pstate);
-    pstate_write(env, pstate);
+    restore_state_from_spsr(env, pstate);
 
     __get_user(magic, &aux->fpsimd.head.magic);
     __get_user(size, &aux->fpsimd.head.size);

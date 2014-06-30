@@ -63,7 +63,7 @@ int aarch64_cpu_gdb_write_register(CPUState *cs, uint8_t *mem_buf, int n)
         return 8;
     case 33:
         /* SPSR */
-        pstate_write(env, tmp);
+        restore_state_from_spsr(env, tmp);
         return 4;
     }
     /* Unknown register.  */

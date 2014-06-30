@@ -507,9 +507,8 @@ void aarch64_cpu_do_interrupt(CPUState *cs)
         env->condexec_bits = 0;
     }
 
-    // TODO: restore_state_from_spsr()
-    env->aarch64 = 1;
-    pstate_write(env, PSTATE_DAIF | PSTATE_MODE_EL1h);
+    /* start IRQ with a clean program state */
+    restore_state_from_spsr(env, PSTATE_DAIF | PSTATE_MODE_EL1h);
 
     env->pc = addr;
     cs->interrupt_request |= CPU_INTERRUPT_EXITTB;

@@ -230,7 +230,7 @@ int kvm_arch_get_registers(CPUState *cs)
     if (ret) {
         return ret;
     }
-    pstate_write(env, val);
+    restore_state_from_spsr(env, val);
 
     /* KVM puts SP_EL0 in regs.sp and SP_EL1 in regs.sp_el1. On the
      * QEMU side we keep the current SP in xregs[31] as well.
