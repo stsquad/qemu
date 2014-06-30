@@ -21,6 +21,7 @@
 #include "sysemu/kvm.h"
 #include "kvm_arm.h"
 #include "cpu.h"
+#include "internals.h"
 #include "hw/arm/arm.h"
 
 const KVMCapabilityInfo kvm_arch_required_capabilities[] = {
@@ -287,6 +288,130 @@ static void failed_cpreg_operation(ARMCPU *cpu, uint64_t regidx, int ret,
     qemu_log_mask(LOG_UNIMP,
                   "%s: failed (%d) KVM reg op %"PRIx64" (%s)\n",
                   func, ret, regidx, cpreg ? cpreg->name : "unknown");
+}
+
+static int compare_u64(const void *a, const void *b)
+{
+    if (*(uint64_t *)a > *(uint64_t *)b) {
+        return 1;
+    }
+    if (*(uint64_t *)a < *(uint64_t *)b) {
+        return -1;
+    }
+    return 0;
+}
+
+static bool reg_syncs_via_tuple_list(uint64_t regidx)
+{
+    /* Return true if the regidx is a register we should synchronize
+     * via the cpreg_tuples array (ie is not a core reg we sync by
+     * hand in kvm_arch_get/put_registers())
+     */
+    switch (regidx & KVM_REG_ARM_COPROC_MASK) {
+    case KVM_REG_ARM_CORE:
+#ifdef KVM_REG_ARM_VFP
+    case KVM_REG_ARM_VFP:
+#endif
+        return false;
+    default:
+        return true;
+    }
+}
+
+/*
+ * Fetch a list of registers from KVM that we will need to be able to
+ * migrate the state. These registers may or may not map onto real
+ * hardware registers but either way QEMU uses the KVM_GET/SET_ONE_REG
+ * api to copy their state back and forth when required.
+ *
+ * For migration between KVM and TCG both models need to understand
+ * the same set of registers.
+ *
+ * If we exit due to failure we would leak memory but we'll be exiting
+ * anyway so the return path is kept simple.
+ */
+bool kvm_arm_sync_register_list(CPUState *cs)
+{
+    struct kvm_reg_list rl;
+    struct kvm_reg_list *rlp;
+    int i, j, ret, arraylen;
+    ARMCPU *cpu = ARM_CPU(cs);
+
+    /* Populate the cpreg list based on the kernel's idea
+     * of what registers exist (and throw away the TCG-created list).
+     */
+    rl.n = 0;
+    ret = kvm_vcpu_ioctl(cs, KVM_GET_REG_LIST, &rl);
+    if (ret != -E2BIG) {
+        return FALSE;
+    }
+
+    rlp = g_malloc(sizeof(struct kvm_reg_list) + (rl.n * sizeof(uint64_t)));
+    rlp->n = rl.n;
+    ret = kvm_vcpu_ioctl(cs, KVM_GET_REG_LIST, rlp);
+    if (ret) {
+        fprintf(stderr, "%s: failed to get register list\n", __func__);
+        return FALSE;
+    }
+    /* Sort the list we get back from the kernel, since cpreg_tuples
+     * must be in strictly ascending order.
+     */
+    qsort(&rlp->reg, rlp->n, sizeof(rlp->reg[0]), compare_u64);
+
+    /* Count how many of these registers we'll actually sync through
+     * the cpreg_indexes mechanism and overwrite the existing TCG
+     * built array of registers.
+     */
+    for (i = 0, arraylen = 0; i < rlp->n; i++) {
+        uint64_t regidx = rlp->reg[i];
+        if (reg_syncs_via_tuple_list(regidx)) {
+            gboolean found = FALSE;
+            arraylen++;
+            for (j = 0; j < cpu->cpreg_array_len; j++) {
+                if (regidx == cpu->cpreg_indexes[j]) {
+                    found = TRUE;
+                    break;
+                }
+            }
+            if (!found) {
+                qemu_log_mask(LOG_UNIMP,
+                              "%s: TCG missing definition of %"PRIx64"\n",
+                              __func__, regidx);
+            }
+        }
+    }
+
+    cpu->cpreg_indexes = g_renew(uint64_t, cpu->cpreg_indexes, arraylen);
+    cpu->cpreg_values = g_renew(uint64_t, cpu->cpreg_values, arraylen);
+    cpu->cpreg_vmstate_indexes = g_renew(uint64_t, cpu->cpreg_vmstate_indexes,
+                                         arraylen);
+    cpu->cpreg_vmstate_values = g_renew(uint64_t, cpu->cpreg_vmstate_values,
+                                        arraylen);
+    cpu->cpreg_array_len = arraylen;
+    cpu->cpreg_vmstate_array_len = arraylen;
+
+    for (i = 0, arraylen = 0; i < rlp->n; i++) {
+        uint64_t regidx = rlp->reg[i];
+        if (!reg_syncs_via_tuple_list(regidx)) {
+            continue;
+        }
+        switch (regidx & KVM_REG_SIZE_MASK) {
+        case KVM_REG_SIZE_U32:
+        case KVM_REG_SIZE_U64:
+            break;
+        default:
+            fprintf(stderr,
+                    "%s: un-handled register size (%"PRIx64") in kernel list\n",
+                    __func__, regidx);
+            return FALSE;
+        }
+        cpu->cpreg_indexes[arraylen] = regidx;
+        arraylen++;
+    }
+
+    g_assert(cpu->cpreg_array_len == arraylen);
+
+    return TRUE;
 }
 
 bool write_kvmstate_to_list(ARMCPU *cpu)
