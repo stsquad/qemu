@@ -103,7 +103,7 @@ int kvm_arch_init_vcpu(CPUState *cs)
         return ret;
     }
 
-    /* TODO : support for save/restore/reset of system regs via tuple list */
+    kvm_arm_sync_register_list(cs);
 
     return 0;
 }
