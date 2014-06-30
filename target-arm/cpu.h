@@ -795,6 +795,15 @@ static inline void restore_state_from_spsr(CPUARMState *env,
     }
 }
 
+/* Restore a few masked bits of the program state */
+static inline void restore_state_from_masked_spsr(CPUARMState *env,
+                                                  uint32_t mask,
+                                                  uint32_t saved_state)
+{
+    uint32_t spsr = (save_state_to_spsr(env) & ~mask);
+    spsr |= (saved_state & mask);
+    return restore_state_from_spsr(env, spsr);
+}
 
 void arm_cpu_list(FILE *f, fprintf_function cpu_fprintf);
 

@@ -93,8 +93,12 @@ int arm_cpu_gdb_write_register(CPUState *cs, uint8_t *mem_buf, int n)
         }
         return 4;
     case 25:
-        /* CPSR */
-        cpsr_write(env, tmp, 0xffffffff);
+        /* CPSR
+         * FIXME?: as restore_state_from_spsr() doesn't do aarch32
+         * special mode fixups this may break. However GDB doesn't
+         * seem to be able to handle tracing over a mode switch anyway
+         */
+        restore_state_from_spsr(env, tmp);
         return 4;
     }
     /* Unknown register.  */

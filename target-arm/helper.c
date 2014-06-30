@@ -2970,68 +2970,6 @@ void arm_cp_reset_ignore(CPUARMState *env, const ARMCPRegInfo *opaque)
     /* Helper coprocessor reset function for do-nothing-on-reset registers */
 }
 
-static int bad_mode_switch(CPUARMState *env, int mode)
-{
-    /* Return true if it is not valid for us to switch to
-     * this CPU mode (ie all the UNPREDICTABLE cases in
-     * the ARM ARM CPSRWriteByInstr pseudocode).
-     */
-    switch (mode) {
-    case ARM_CPU_MODE_USR:
-    case ARM_CPU_MODE_SYS:
-    case ARM_CPU_MODE_SVC:
-    case ARM_CPU_MODE_ABT:
-    case ARM_CPU_MODE_UND:
-    case ARM_CPU_MODE_IRQ:
-    case ARM_CPU_MODE_FIQ:
-        return 0;
-    default:
-        return 1;
-    }
-}
-
-void cpsr_write(CPUARMState *env, uint32_t val, uint32_t mask)
-{
-    if (mask & CPSR_NZCV) {
-        env->ZF = (~val) & CPSR_Z;
-        env->NF = val;
-        env->CF = (val >> 29) & 1;
-        env->VF = (val << 3) & 0x80000000;
-    }
-    if (mask & CPSR_Q)
-        env->QF = ((val & CPSR_Q) != 0);
-    if (mask & CPSR_T)
-        env->thumb = ((val & CPSR_T) != 0);
-    if (mask & CPSR_IT_0_1) {
-        env->condexec_bits &= ~3;
-        env->condexec_bits |= (val >> 25) & 3;
-    }
-    if (mask & CPSR_IT_2_7) {
-        env->condexec_bits &= 3;
-        env->condexec_bits |= (val >> 8) & 0xfc;
-    }
-    if (mask & CPSR_GE) {
-        env->GE = (val >> 16) & 0xf;
-    }
-
-    env->daif &= ~(CPSR_AIF & mask);
-    env->daif |= val & CPSR_AIF & mask;
-
-    if ((env->uncached_cpsr ^ val) & mask & CPSR_M) {
-        if (bad_mode_switch(env, val & CPSR_M)) {
-            /* Attempt to switch to an invalid mode: this is UNPREDICTABLE.
-             * We choose to ignore the attempt and leave the CPSR M field
-             * untouched.
-             */
-            mask &= ~CPSR_M;
-        } else {
-            switch_mode(env, val & CPSR_M);
-        }
-    }
-    mask &= ~CACHED_CPSR_BITS;
-    env->uncached_cpsr = (env->uncached_cpsr & ~mask) | (val & mask);
-}
-
 /* Sign/zero extend */
 uint32_t HELPER(sxtb16)(uint32_t x)
 {

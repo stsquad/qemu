@@ -4184,7 +4184,7 @@ int main(int argc, char **argv, char **envp)
 #elif defined(TARGET_ARM)
     {
         int i;
-        cpsr_write(env, regs->uregs[16], 0xffffffff);
+        restore_state_from_spsr(env, regs->uregs[16]);
         for(i = 0; i < 16; i++) {
             env->regs[i] = regs->uregs[i];
         }

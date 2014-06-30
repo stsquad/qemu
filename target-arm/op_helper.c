@@ -261,9 +261,47 @@ uint32_t HELPER(cpsr_read)(CPUARMState *env)
     return save_state_to_spsr(env) & ~CPSR_EXEC;
 }
 
+static int bad_mode_switch(CPUARMState *env, int mode)
+{
+    /* Return true if it is not valid for us to switch to
+     * this CPU mode (ie all the UNPREDICTABLE cases in
+     * the ARM ARM CPSRWriteByInstr pseudocode).
+     */
+    switch (mode) {
+    case ARM_CPU_MODE_USR:
+    case ARM_CPU_MODE_SYS:
+    case ARM_CPU_MODE_SVC:
+    case ARM_CPU_MODE_ABT:
+    case ARM_CPU_MODE_UND:
+    case ARM_CPU_MODE_IRQ:
+    case ARM_CPU_MODE_FIQ:
+        return 0;
+    default:
+        return 1;
+    }
+}
+
 void HELPER(cpsr_write)(CPUARMState *env, uint32_t val, uint32_t mask)
 {
-    cpsr_write(env, val, mask);
+    uint32_t current_cpsr = save_state_to_spsr(env);
+    uint32_t new_cpsr;
+
+    /* we may be triggering a mode change */
+    if ((current_cpsr ^ val) & mask & CPSR_M) {
+        if (bad_mode_switch(env, val & CPSR_M)) {
+            /* Attempt to switch to an invalid mode: this is UNPREDICTABLE.
+             * We choose to ignore the attempt and leave the CPSR M field
+             * untouched.
+             */
+            mask &= ~CPSR_M;
+        } else {
+            switch_mode(env, val & CPSR_M);
+        }
+    }
+
+    new_cpsr = current_cpsr & ~mask;
+    new_cpsr |= (val & mask);
+    restore_state_from_spsr(env, new_cpsr);
 }
 
 /* Access to user mode registers from privileged modes.  */

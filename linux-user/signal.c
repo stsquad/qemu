@@ -1599,38 +1599,39 @@ get_sigframe(struct target_sigaction *ka, CPUARMState *regs, int framesize)
 
 static void
 setup_return(CPUARMState *env, struct target_sigaction *ka,
-	     abi_ulong *rc, abi_ulong frame_addr, int usig, abi_ulong rc_addr)
+             abi_ulong *rc, abi_ulong frame_addr, int usig, abi_ulong rc_addr)
 {
-	abi_ulong handler = ka->_sa_handler;
-	abi_ulong retcode;
-	int thumb = handler & 1;
-	uint32_t cpsr = save_state_to_spsr(env);
+        abi_ulong handler = ka->_sa_handler;
+        abi_ulong retcode;
+        int thumb = handler & 1;
+        uint32_t cpsr = save_state_to_spsr(env);
 
-	cpsr &= ~CPSR_IT;
-	if (thumb) {
-		cpsr |= CPSR_T;
-	} else {
-		cpsr &= ~CPSR_T;
-	}
+        cpsr &= ~CPSR_IT;
+        if (thumb) {
+                cpsr |= CPSR_T;
+        } else {
+                cpsr &= ~CPSR_T;
+        }
 
-	if (ka->sa_flags & TARGET_SA_RESTORER) {
-		retcode = ka->sa_restorer;
-	} else {
-		unsigned int idx = thumb;
+        if (ka->sa_flags & TARGET_SA_RESTORER) {
+                retcode = ka->sa_restorer;
+        } else {
+                unsigned int idx = thumb;
 
-		if (ka->sa_flags & TARGET_SA_SIGINFO)
-			idx += 2;
+                if (ka->sa_flags & TARGET_SA_SIGINFO) {
+                        idx += 2;
+                }
 
-        __put_user(retcodes[idx], rc);
+                __put_user(retcodes[idx], rc);
 
-		retcode = rc_addr + thumb;
-	}
+                retcode = rc_addr + thumb;
+        }
 
-	env->regs[0] = usig;
-	env->regs[13] = frame_addr;
-	env->regs[14] = retcode;
-	env->regs[15] = handler & (thumb ? ~1 : ~3);
-	cpsr_write(env, cpsr, 0xffffffff);
+        env->regs[0] = usig;
+        env->regs[13] = frame_addr;
+        env->regs[14] = retcode;
+        env->regs[15] = handler & (thumb ? ~1 : ~3);
+        restore_state_from_spsr(env, cpsr);
 }
 
 static abi_ulong *setup_sigframe_v2_vfp(abi_ulong *regspace, CPUARMState *env)
@@ -1858,12 +1859,14 @@ restore_sigcontext(CPUARMState *env, struct target_sigcontext *sc)
     __get_user(env->regs[15], &sc->arm_pc);
 #ifdef TARGET_CONFIG_CPU_32
     __get_user(cpsr, &sc->arm_cpsr);
-        cpsr_write(env, cpsr, CPSR_USER | CPSR_EXEC);
+    restore_state_from_masked_spsr(env,
+                                   (CPSR_USER | CPSR_EXEC),
+                                   cpsr);
 #endif
 
-	err |= !valid_user_regs(env);
+    err |= !valid_user_regs(env);
 
-	return err;
+    return err;
 }
 
 static long do_sigreturn_v1(CPUARMState *env)
