@@ -462,7 +462,7 @@ static void QEMU_NORETURN force_sig(int target_sig)
         nodump.rlim_cur=0;
         setrlimit(RLIMIT_CORE, &nodump);
         (void) fprintf(stderr, "qemu: uncaught target signal %d (%s) - %s\n",
-            target_sig, strsignal(host_sig), "core dumped" );
+                       target_sig, strsignal(host_sig), "core dumped" );
     }
 
     /* The proper exit code for dying from an uncaught signal is
@@ -470,7 +470,12 @@ static void QEMU_NORETURN force_sig(int target_sig)
      * a negative value.  To get the proper exit code we need to
      * actually die from an uncaught signal.  Here the default signal
      * handler is installed, we send ourself a signal and we wait for
-     * it to arrive. */
+     * it to arrive.
+     *
+     * The remaining wrinkle is any child watching for __WCOREFLAG
+     * (e.g. ltp abort() tests) will not see it and known the core
+     * file was created.
+     */
     sigfillset(&act.sa_mask);
     act.sa_handler = SIG_DFL;
     act.sa_flags = 0;
