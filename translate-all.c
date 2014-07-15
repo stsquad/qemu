@@ -714,11 +714,22 @@ static void page_flush_tb(void)
     }
 }
 
+void tb_flush_all_jmp_cache(CPUState *cpu)
+{
+    trace_tb_flush_all_jump_cache(cpu->tb_jmp_cache_stats.hits,
+                                  cpu->tb_jmp_cache_stats.misses);
+    memset(cpu->tb_jmp_cache, 0, sizeof(cpu->tb_jmp_cache));
+    memset((void *) &cpu->tb_jmp_cache_stats,
+           0, sizeof(cpu->tb_jmp_cache_stats));
+}
+
 /* flush all the translation blocks */
 /* XXX: tb_flush is currently not thread safe */
 void tb_flush(CPUArchState *env1)
 {
     CPUState *cpu = ENV_GET_CPU(env1);
+
+    trace_tb_flush();
 
 #if defined(DEBUG_FLUSH)
     printf("qemu: flush code_size=%ld nb_tbs=%d avg_tb_size=%ld\n",
@@ -734,7 +745,7 @@ void tb_flush(CPUArchState *env1)
     tcg_ctx.tb_ctx.nb_tbs = 0;
 
     CPU_FOREACH(cpu) {
-        memset(cpu->tb_jmp_cache, 0, sizeof(cpu->tb_jmp_cache));
+        tb_flush_all_jmp_cache(cpu);
     }
 
     memset(tcg_ctx.tb_ctx.tb_phys_hash, 0, sizeof(tcg_ctx.tb_ctx.tb_phys_hash));
@@ -1520,6 +1531,8 @@ void tb_flush_jmp_cache(CPUState *cpu, target_ulong addr)
     i = tb_jmp_cache_hash_page(addr);
     memset(&cpu->tb_jmp_cache[i], 0,
            TB_JMP_PAGE_SIZE * sizeof(TranslationBlock *));
+
+    trace_tb_flush_jump_cache(addr);
 }
 
 void dump_exec_info(FILE *f, fprintf_function cpu_fprintf)

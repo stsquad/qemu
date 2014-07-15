@@ -243,6 +243,11 @@ struct CPUState {
     void *env_ptr; /* CPUArchState */
     struct TranslationBlock *current_tb;
     struct TranslationBlock *tb_jmp_cache[TB_JMP_CACHE_SIZE];
+    /* Cache hit/miss stats */
+    struct {
+        unsigned int hits;
+        unsigned int misses;
+    } tb_jmp_cache_stats;
     struct GDBRegisterState *gdb_regs;
     int gdb_num_regs;
     int gdb_num_g_regs;
@@ -583,6 +588,15 @@ void cpu_exit(CPUState *cpu);
  * Resumes CPU, i.e. puts CPU into runnable state.
  */
 void cpu_resume(CPUState *cpu);
+
+
+/**
+ * tb_flush_all_jmp_cache:
+ * @cpu: The CPU jmp cache to flush
+ *
+ * Flush all the entries from the CPU fast jump cache
+ */
+void tb_flush_all_jmp_cache(CPUState *cpu);
 
 /**
  * qemu_init_vcpu:

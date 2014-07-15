@@ -187,7 +187,10 @@ static inline TranslationBlock *tb_find_fast(CPUArchState *env)
     tb = cpu->tb_jmp_cache[tb_jmp_cache_hash_func(pc)];
     if (unlikely(!tb || tb->pc != pc || tb->cs_base != cs_base ||
                  tb->flags != flags)) {
+        trace_inc_counter(&cpu->tb_jmp_cache_stats.misses);
         tb = tb_find_slow(env, pc, cs_base, flags);
+    } else {
+        trace_inc_counter(&cpu->tb_jmp_cache_stats.hits);
     }
     return tb;
 }

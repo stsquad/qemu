@@ -1245,6 +1245,9 @@ disable exec_tb_exit(void *next_tb, unsigned int flags) "tb:%p flags=%x"
 
 # translate-all.c
 translate_block(void *tb, uintptr_t pc, uint8_t *tb_code) "tb:%p, pc:0x%x, tb_code:%p"
+tb_flush(void) ""
+tb_flush_jump_cache(uintptr_t pc) "pc:0x%x"
+tb_flush_all_jump_cache(unsigned int hits, unsigned int misses) "hits:%d misses:%d"
 
 # memory.c
 memory_region_ops_read(void *mr, uint64_t addr, uint64_t value, unsigned size) "mr %p addr %#"PRIx64" value %#"PRIx64" size %u"
