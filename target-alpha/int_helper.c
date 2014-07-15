@@ -37,31 +37,25 @@ uint64_t helper_cttz(uint64_t arg)
     return ctz64(arg);
 }
 
-static inline uint64_t byte_zap(uint64_t op, uint8_t mskb)
+uint64_t helper_zapnot(uint64_t val, uint64_t mskb)
 {
     uint64_t mask;
 
-    mask = 0;
-    mask |= ((mskb >> 0) & 1) * 0x00000000000000FFULL;
-    mask |= ((mskb >> 1) & 1) * 0x000000000000FF00ULL;
-    mask |= ((mskb >> 2) & 1) * 0x0000000000FF0000ULL;
-    mask |= ((mskb >> 3) & 1) * 0x00000000FF000000ULL;
-    mask |= ((mskb >> 4) & 1) * 0x000000FF00000000ULL;
-    mask |= ((mskb >> 5) & 1) * 0x0000FF0000000000ULL;
-    mask |= ((mskb >> 6) & 1) * 0x00FF000000000000ULL;
-    mask |= ((mskb >> 7) & 1) * 0xFF00000000000000ULL;
+    mask  = sextract64(mskb, 0, 1) & 0x00000000000000fful;
+    mask |= sextract64(mskb, 1, 1) & 0x000000000000ff00ul;
+    mask |= sextract64(mskb, 2, 1) & 0x0000000000ff0000ul;
+    mask |= sextract64(mskb, 3, 1) & 0x00000000ff000000ul;
+    mask |= sextract64(mskb, 4, 1) & 0x000000ff00000000ul;
+    mask |= sextract64(mskb, 5, 1) & 0x0000ff0000000000ul;
+    mask |= sextract64(mskb, 6, 1) & 0x00ff000000000000ul;
+    mask |= sextract64(mskb, 7, 1) & 0xff00000000000000ul;
 
-    return op & ~mask;
+    return val & mask;
 }
 
 uint64_t helper_zap(uint64_t val, uint64_t mask)
 {
-    return byte_zap(val, mask);
-}
-
-uint64_t helper_zapnot(uint64_t val, uint64_t mask)
-{
-    return byte_zap(val, ~mask);
+    return helper_zapnot(val, ~mask);
 }
 
 uint64_t helper_cmpbge(uint64_t op1, uint64_t op2)
