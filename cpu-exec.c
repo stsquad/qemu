@@ -126,6 +126,7 @@ static TranslationBlock *tb_find_slow(CPUArchState *env,
     unsigned int h;
     tb_page_addr_t phys_pc, phys_page1;
     target_ulong virt_page2;
+    unsigned int searched=0;
 
     tcg_ctx.tb_ctx.tb_invalidated_flag = 0;
 
@@ -156,6 +157,7 @@ static TranslationBlock *tb_find_slow(CPUArchState *env,
             }
         }
         ptb1 = &tb->phys_hash_next;
+        searched = searched+1;
     }
  not_found:
    /* if no translated code available, then translate it now */
@@ -170,6 +172,7 @@ static TranslationBlock *tb_find_slow(CPUArchState *env,
     }
     /* we add the TB in the virtual pc hash table */
     cpu->tb_jmp_cache[tb_jmp_cache_hash_func(pc)] = tb;
+    trace_tb_find_slow(searched);
     return tb;
 }
 

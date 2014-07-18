@@ -1243,6 +1243,8 @@ disable exec_tb(void *tb, uintptr_t pc) "tb:%p pc=0x%x"
 disable exec_tb_nocache(void *tb, uintptr_t pc) "tb:%p pc=0x%x"
 disable exec_tb_exit(void *next_tb, unsigned int flags) "tb:%p flags=%x"
 
+disable tb_find_slow(unsigned int searched) "searched %d entries"
+
 # translate-all.c
 translate_block(void *tb, uintptr_t pc, uint8_t *tb_code) "tb:%p, pc:0x%x, tb_code:%p"
 tb_flush(void) ""
