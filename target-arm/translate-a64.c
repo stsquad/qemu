@@ -10725,7 +10725,8 @@ void gen_intermediate_code_internal_a64(ARMCPU *cpu,
             gen_io_start();
         }
 
-        if (unlikely(qemu_loglevel_mask(CPU_LOG_TB_OP | CPU_LOG_TB_OP_OPT))) {
+        if (unlikely(qemu_loglevel_mask(CPU_LOG_TB_OP | CPU_LOG_TB_OP_OPT) &&
+                     qemu_log_in_addr_range(dc->pc))) {
             tcg_gen_debug_insn_start(dc->pc);
         }
 
