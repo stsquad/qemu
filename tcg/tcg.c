@@ -2427,7 +2427,8 @@ static inline int tcg_gen_code_common(TCGContext *s, TranslationBlock *tb,
      g_assert(tb->tc_size == 0 || search_pc > 0);
 
 #ifdef DEBUG_DISAS
-    if (unlikely(qemu_loglevel_mask(CPU_LOG_TB_OP))) {
+    if (unlikely(qemu_loglevel_mask(CPU_LOG_TB_OP)
+                 && qemu_log_in_addr_range(tb->pc))) {
         qemu_log("OP:\n");
         tcg_dump_ops(s);
         qemu_log("\n");
@@ -2455,7 +2456,8 @@ static inline int tcg_gen_code_common(TCGContext *s, TranslationBlock *tb,
 #endif
 
 #ifdef DEBUG_DISAS
-    if (unlikely(qemu_loglevel_mask(CPU_LOG_TB_OP_OPT))) {
+    if (unlikely(qemu_loglevel_mask(CPU_LOG_TB_OP_OPT)
+                 && qemu_log_in_addr_range(tb->pc))) {
         qemu_log("OP after optimization and liveness analysis:\n");
         tcg_dump_ops(s);
         qemu_log("\n");
@@ -2478,11 +2480,6 @@ static inline int tcg_gen_code_common(TCGContext *s, TranslationBlock *tb,
         tcg_table_op_count[opc]++;
 #endif
         def = &tcg_op_defs[opc];
-#if 0
-        printf("%s: %d %d %d\n", def->name,
-               def->nb_oargs, def->nb_iargs, def->nb_cargs);
-        //        dump_regs(s);
-#endif
         switch(opc) {
         case INDEX_op_mov_i32:
         case INDEX_op_mov_i64:

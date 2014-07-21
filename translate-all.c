@@ -199,7 +199,8 @@ void cpu_gen_code(CPUArchState *env, TranslationBlock *tb)
 
     tb_write_perfmap(tb->tc_ptr, tb->tc_size, tb->pc);
 #ifdef DEBUG_DISAS
-    if (qemu_loglevel_mask(CPU_LOG_TB_OUT_ASM)) {
+    if (qemu_loglevel_mask(CPU_LOG_TB_OUT_ASM) &&
+        qemu_log_in_addr_range(tb->pc)) {
         qemu_log("OUT: [size=%d]\n", tb->tc_size);
         log_disas(tb->tc_ptr, tb->tc_size);
         qemu_log("\n");
