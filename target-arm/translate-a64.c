@@ -3107,6 +3107,9 @@ static void disas_logic_reg(DisasContext *s, uint32_t insn)
     rn = extract32(insn, 5, 5);
     rd = extract32(insn, 0, 5);
 
+    TRACE_DECODE("sf:%d opc:%d, amount: %d, type:%d, rn=%d",
+                 sf, opc, shift_amount, shift_type, rn);
+
     if (!sf && (shift_amount & (1 << 5))) {
         unallocated_encoding(s);
         return;
