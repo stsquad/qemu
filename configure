@@ -857,7 +857,6 @@ for opt do
   ;;
   --enable-debug)
       # Enable debugging options that aren't excessively noisy
-      debug_tcg="yes"
       debug="yes"
       strip_opt="no"
   ;;
@@ -3990,6 +3989,8 @@ fi
 if test "$gcov" = "yes" ; then
   CFLAGS="-fprofile-arcs -ftest-coverage -g $CFLAGS"
   LDFLAGS="-fprofile-arcs -ftest-coverage $LDFLAGS"
+elif test "$debug" = "yes" ; then
+  CFLAGS="-O0 -ggdb $CFLAGS"
 elif test "$debug" = "no" ; then
   CFLAGS="-O2 -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2 $CFLAGS"
 fi
