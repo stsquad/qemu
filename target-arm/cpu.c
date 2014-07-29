@@ -398,6 +398,7 @@ static ObjectClass *arm_cpu_class_by_name(const char *cpu_model)
 /* CPU models. These are not needed for the AArch64 linux-user build. */
 #if !defined(CONFIG_USER_ONLY) || !defined(TARGET_AARCH64)
 
+#ifndef TARGET_AARCH64
 static void arm926_initfn(Object *obj)
 {
     ARMCPU *cpu = ARM_CPU(obj);
@@ -452,6 +453,7 @@ static void arm1026_initfn(Object *obj)
         define_one_arm_cp_reg(cpu, &ifar);
     }
 }
+#endif /* TARGET_AARCH64 */
 
 static void arm1136_r2_initfn(Object *obj)
 {
@@ -780,6 +782,7 @@ static void cortex_a15_initfn(Object *obj)
     define_arm_cp_regs(cpu, cortexa15_cp_reginfo);
 }
 
+#ifndef TARGET_AARCH64
 static void ti925t_initfn(Object *obj)
 {
     ARMCPU *cpu = ARM_CPU(obj);
@@ -947,6 +950,7 @@ static void pxa270c5_initfn(Object *obj)
     cpu->ctr = 0xd172172;
     cpu->reset_sctlr = 0x00000078;
 }
+#endif /* TARGET_AARCH64 */
 
 #ifdef CONFIG_USER_ONLY
 static void arm_any_initfn(Object *obj)
@@ -975,24 +979,16 @@ typedef struct ARMCPUInfo {
     void (*class_init)(ObjectClass *oc, void *data);
 } ARMCPUInfo;
 
+/* ARMv5 CPU models are disabled for the TARGET_AARCH64 build as they
+ * could potentially use the smaller 1k pages which we don't support
+ * for aarch64
+ */
 static const ARMCPUInfo arm_cpus[] = {
 #if !defined(CONFIG_USER_ONLY) || !defined(TARGET_AARCH64)
+#ifndef TARGET_AARCH64
     { .name = "arm926",      .initfn = arm926_initfn },
     { .name = "arm946",      .initfn = arm946_initfn },
     { .name = "arm1026",     .initfn = arm1026_initfn },
-    /* What QEMU calls "arm1136-r2" is actually the 1136 r0p2, i.e. an
-     * older core than plain "arm1136". In particular this does not
-     * have the v6K features.
-     */
-    { .name = "arm1136-r2",  .initfn = arm1136_r2_initfn },
-    { .name = "arm1136",     .initfn = arm1136_initfn },
-    { .name = "arm1176",     .initfn = arm1176_initfn },
-    { .name = "arm11mpcore", .initfn = arm11mpcore_initfn },
-    { .name = "cortex-m3",   .initfn = cortex_m3_initfn,
-                             .class_init = arm_v7m_class_init },
-    { .name = "cortex-a8",   .initfn = cortex_a8_initfn },
-    { .name = "cortex-a9",   .initfn = cortex_a9_initfn },
-    { .name = "cortex-a15",  .initfn = cortex_a15_initfn },
     { .name = "ti925t",      .initfn = ti925t_initfn },
     { .name = "sa1100",      .initfn = sa1100_initfn },
     { .name = "sa1110",      .initfn = sa1110_initfn },
@@ -1009,6 +1005,20 @@ static const ARMCPUInfo arm_cpus[] = {
     { .name = "pxa270-b1",   .initfn = pxa270b1_initfn },
     { .name = "pxa270-c0",   .initfn = pxa270c0_initfn },
     { .name = "pxa270-c5",   .initfn = pxa270c5_initfn },
+#endif
+    /* What QEMU calls "arm1136-r2" is actually the 1136 r0p2, i.e. an
+     * older core than plain "arm1136". In particular this does not
+     * have the v6K features.
+     */
+    { .name = "arm1136-r2",  .initfn = arm1136_r2_initfn },
+    { .name = "arm1136",     .initfn = arm1136_initfn },
+    { .name = "arm1176",     .initfn = arm1176_initfn },
+    { .name = "arm11mpcore", .initfn = arm11mpcore_initfn },
+    { .name = "cortex-m3",   .initfn = cortex_m3_initfn,
+                             .class_init = arm_v7m_class_init },
+    { .name = "cortex-a8",   .initfn = cortex_a8_initfn },
+    { .name = "cortex-a9",   .initfn = cortex_a9_initfn },
+    { .name = "cortex-a15",  .initfn = cortex_a15_initfn },
 #ifdef CONFIG_USER_ONLY
     { .name = "any",         .initfn = arm_any_initfn },
 #endif

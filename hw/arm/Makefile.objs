@@ -1,8 +1,19 @@
-obj-y += boot.o collie.o exynos4_boards.o gumstix.o highbank.o
+obj-y += boot.o collie.o exynos4_boards.o
+obj-$(CONFIG_ARMV5_BOARDS) += gumstix.o
+obj-y += highbank.o
 obj-$(CONFIG_DIGIC) += digic_boards.o
-obj-y += integratorcp.o kzm.o mainstone.o musicpal.o nseries.o
-obj-y += omap_sx1.o palm.o ranchu.o realview.o spitz.o stellaris.o
-obj-y += tosa.o versatilepb.o vexpress.o virt.o xilinx_zynq.o z2.o
+obj-$(CONFIG_ARMV5_BOARDS) += integratorcp.o
+obj-y += kzm.o
+obj-$(CONFIG_ARMV5_BOARDS) += mainstone.o
+obj-$(CONFIG_ARMV5_BOARDS) += musicpal.o
+obj-y += nseries.o
+obj-y += omap_sx1.o palm.o ranchu.o realview.o
+obj-$(CONFIG_ARMV5_BOARDS) += spitz.o
+obj-y += stellaris.o
+obj-$(CONFIG_ARMV5_BOARDS) += tosa.o
+obj-$(CONFIG_ARMV5_BOARDS) +=versatilepb.o
+obj-y += vexpress.o virt.o xilinx_zynq.o
+obj-$(CONFIG_ARMV5_BOARDS) +=z2.o
 obj-y += lionhead.o
 
 obj-y += armv7m.o exynos4210.o pxa2xx.o pxa2xx_gpio.o pxa2xx_pic.o

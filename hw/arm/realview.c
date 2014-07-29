@@ -351,6 +351,7 @@ static void realview_init(QEMUMachineInitArgs *args,
     arm_load_kernel(ARM_CPU(first_cpu), &realview_binfo);
 }
 
+#ifndef TARGET_AARCH64
 static void realview_eb_init(QEMUMachineInitArgs *args)
 {
     if (!args->cpu_model) {
@@ -358,6 +359,7 @@ static void realview_eb_init(QEMUMachineInitArgs *args)
     }
     realview_init(args, BOARD_EB);
 }
+#endif
 
 static void realview_eb_mpcore_init(QEMUMachineInitArgs *args)
 {
@@ -383,12 +385,14 @@ static void realview_pbx_a9_init(QEMUMachineInitArgs *args)
     realview_init(args, BOARD_PBX_A9);
 }
 
+#ifndef TARGET_AARCH64
 static QEMUMachine realview_eb_machine = {
     .name = "realview-eb",
     .desc = "ARM RealView Emulation Baseboard (ARM926EJ-S)",
     .init = realview_eb_init,
     .block_default_type = IF_SCSI,
 };
+#endif
 
 static QEMUMachine realview_eb_mpcore_machine = {
     .name = "realview-eb-mpcore",
@@ -414,7 +418,9 @@ static QEMUMachine realview_pbx_a9_machine = {
 
 static void realview_machine_init(void)
 {
+#ifndef TARGET_AARCH64
     qemu_register_machine(&realview_eb_machine);
+#endif
     qemu_register_machine(&realview_eb_mpcore_machine);
     qemu_register_machine(&realview_pb_a8_machine);
     qemu_register_machine(&realview_pbx_a9_machine);
