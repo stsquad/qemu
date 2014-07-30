@@ -139,12 +139,12 @@ void tb_enable_perfmap(void)
     g_free(map_file);
 }
 
-static void tb_write_perfmap(tcg_insn_unit *start, int size, target_ulong pc)
+static void tb_write_perfmap(tcg_insn_unit *start, int size, target_ulong pc, int pid)
 {
     if (tb_perfmap) {
         fprintf(tb_perfmap,
-                "%"PRIxPTR" %x subject-"TARGET_FMT_lx"\n",
-                (uintptr_t) start, size, pc);
+                "%"PRIxPTR" %x subject-"TARGET_FMT_lx"-%d\n",
+                (uintptr_t) start, size, pc, pid);
     }
 }
 
@@ -197,7 +197,7 @@ void cpu_gen_code(CPUArchState *env, TranslationBlock *tb)
     s->code_out_len += tb->tc_size;
 #endif
 
-    tb_write_perfmap(tb->tc_ptr, tb->tc_size, tb->pc);
+    tb_write_perfmap(tb->tc_ptr, tb->tc_size, tb->pc, env->cp15.contextidr_el1);
 #ifdef DEBUG_DISAS
     if (qemu_loglevel_mask(CPU_LOG_TB_OUT_ASM) &&
         qemu_log_in_addr_range(tb->pc)) {
