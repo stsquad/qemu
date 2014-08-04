@@ -161,6 +161,34 @@ static const VMStateInfo vmstate_cpsr = {
     .put = put_cpsr,
 };
 
+#if defined CONFIG_KVM
+static int get_mpstate(QEMUFile *f, void *opaque, size_t size)
+{
+    ARMCPU *cpu = opaque;
+    struct kvm_mp_state mp_state = { .mp_state =  qemu_get_be32(f)};
+    return kvm_vcpu_ioctl(CPU(cpu), KVM_SET_MP_STATE, &mp_state);
+}
+
+static void put_mpstate(QEMUFile *f, void *opaque, size_t size)
+{
+    ARMCPU *cpu = opaque;
+    struct kvm_mp_state mp_state;
+    int ret = kvm_vcpu_ioctl(CPU(cpu), KVM_GET_MP_STATE, &mp_state);
+    if (ret) {
+        fprintf(stderr, "%s: failed to get MP_STATE %d/%s\n",
+                __func__, ret, strerror(ret));
+        abort();
+    }
+    qemu_put_be32(f, mp_state.mp_state);
+}
+
+static const VMStateInfo vmstate_mpstate = {
+    .name = "mpstate",
+    .get = get_mpstate,
+    .put = put_mpstate,
+};
+#endif
+
 static void cpu_pre_save(void *opaque)
 {
     ARMCPU *cpu = opaque;
@@ -244,6 +272,16 @@ const VMStateDescription vmstate_arm_cpu = {
         VMSTATE_UINT32_ARRAY(env.regs, ARMCPU, 16),
         VMSTATE_UINT64_ARRAY(env.xregs, ARMCPU, 32),
         VMSTATE_UINT64(env.pc, ARMCPU),
+#if defined CONFIG_KVM
+        {
+            .name = "mp_state",
+            .version_id = 0,
+            .size = sizeof(uint32_t),
+            .info = &vmstate_mpstate,
+            .flags = VMS_SINGLE,
+            .offset = 0,
+        },
+#endif
         {
             .name = "cpsr",
             .version_id = 0,
