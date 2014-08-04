@@ -25,6 +25,7 @@
 #include "hw/arm/arm.h"
 
 const KVMCapabilityInfo kvm_arch_required_capabilities[] = {
+    KVM_CAP_INFO(MP_STATE),
     KVM_CAP_LAST_INFO
 };
 
