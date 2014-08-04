@@ -458,6 +458,46 @@ void kvm_arm_reset_vcpu(ARMCPU *cpu)
     }
 }
 
+/*
+ * Update KVM's MP_STATE based on what QEMU thinks it is
+ */
+int kvm_arm_sync_mpstate_to_kvm(ARMCPU *cpu)
+{
+    if (kvm_check_extension(CPU(cpu)->kvm_state, KVM_CAP_MP_STATE)) {
+        struct kvm_mp_state mp_state = {
+            .mp_state =
+            cpu->powered_off ? KVM_MP_STATE_STOPPED : KVM_MP_STATE_RUNNABLE
+        };
+        int ret = kvm_vcpu_ioctl(CPU(cpu), KVM_SET_MP_STATE, &mp_state);
+        if (ret) {
+            fprintf(stderr, "%s: failed to set MP_STATE %d/%s\n",
+                    __func__, ret, strerror(ret));
+            return -1;
+        }
+    }
+
+    return 0;
+}
+
+/*
+ * Sync the KVM MP_STATE into QEMU
+ */
+int kvm_arm_sync_mpstate_to_qemu(ARMCPU *cpu)
+{
+    if (kvm_check_extension(CPU(cpu)->kvm_state, KVM_CAP_MP_STATE)) {
+        struct kvm_mp_state mp_state;
+        int ret = kvm_vcpu_ioctl(CPU(cpu), KVM_GET_MP_STATE, &mp_state);
+        if (ret) {
+            fprintf(stderr, "%s: failed to get MP_STATE %d/%s\n",
+                    __func__, ret, strerror(ret));
+            abort();
+        }
+        cpu->powered_off = (mp_state.mp_state == KVM_MP_STATE_STOPPED);
+    }
+
+    return 0;
+}
+
 void kvm_arch_pre_run(CPUState *cs, struct kvm_run *run)
 {
 }
