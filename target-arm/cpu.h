@@ -140,6 +140,8 @@ typedef struct CPUARMState {
        This contains all the other bits.  Use cpsr_{read,write} to access
        the whole CPSR.  */
     uint32_t uncached_cpsr;
+
+    /* SPSR_mode - the Saved Program state on entry to current mode */
     uint32_t spsr;
 
     /* Banked registers.  */
@@ -475,13 +477,23 @@ int arm_cpu_handle_mmu_fault(CPUState *cpu, vaddr address, int rw,
 #define PSTATE_MODE_EL1t 4
 #define PSTATE_MODE_EL0t 0
 
-/* Return the current PSTATE value. For the moment we don't support 32<->64 bit
- * interprocessing, so we don't attempt to sync with the cpsr state used by
- * the 32 bit decoder.
+/* ARMv8 ARM D1.6.4 Saved Program Status Register (SPSRs)
+ *
+ *  31  28 27  24 23   22 21 20 22    21  20 19  16 15   8 7   5 4    0
+ * +------+------+-------+-----+--------+---+------+------+-----+------+
+ * | NZCV | DAIF | SS IL |  EL | nRW SP | Q |  GE  |  IT  | JTE | Mode |
+ * +------+------+-------+-----+--------+---+------+------+-----+------+
+ *
+ * The PSTATE is an abstraction of a number of internal processor
+ * states some of which can be exported in a SPSR bitfield. This is
+ * only valid for A64 hardware although can be read when in AArch32
+ * mode.
  */
 static inline uint32_t pstate_read(CPUARMState *env)
 {
     int ZF;
+
+    g_assert(is_a64(env));
 
     ZF = (env->ZF == 0);
     return (env->NF & 0x80000000) | (ZF << 30)
@@ -489,8 +501,11 @@ static inline uint32_t pstate_read(CPUARMState *env)
         | env->pstate | env->daif;
 }
 
+/* Update the current PSTATE value. This doesn't include nRW which is */
 static inline void pstate_write(CPUARMState *env, uint32_t val)
 {
+    g_assert(is_a64(env));
+
     env->ZF = (~val) & PSTATE_Z;
     env->NF = val;
     env->CF = (val >> 29) & 1;
@@ -499,15 +514,22 @@ static inline void pstate_write(CPUARMState *env, uint32_t val)
     env->pstate = val & ~CACHED_PSTATE_BITS;
 }
 
-/* Return the current CPSR value.  */
+/* ARMv7-AR ARM B1.3.3 Current Program Status Register, CPSR
+ *
+ * Unlike the above PSTATE implementation these functions will attempt
+ * to switch processor mode when the M[4:0] bits are set.
+ */
 uint32_t cpsr_read(CPUARMState *env);
 /* Set the CPSR.  Note that some bits of mask must be all-set or all-clear.  */
 void cpsr_write(CPUARMState *env, uint32_t val, uint32_t mask);
 
-/* Return the current xPSR value.  */
+/* ARMv7-M ARM B1.4.2, special purpose program status register xPSR */
 static inline uint32_t xpsr_read(CPUARMState *env)
 {
     int ZF;
+
+    g_assert(!is_a64(env));
+
     ZF = (env->ZF == 0);
     return (env->NF & 0x80000000) | (ZF << 30)
         | (env->CF << 29) | ((env->VF & 0x80000000) >> 3) | (env->QF << 27)
@@ -519,6 +541,8 @@ static inline uint32_t xpsr_read(CPUARMState *env)
 /* Set the xPSR.  Note that some bits of mask must be all-set or all-clear.  */
 static inline void xpsr_write(CPUARMState *env, uint32_t val, uint32_t mask)
 {
+    g_assert(!is_a64(env));
+
     if (mask & CPSR_NZCV) {
         env->ZF = (~val) & CPSR_Z;
         env->NF = val;

@@ -3013,6 +3013,8 @@ static int bad_mode_switch(CPUARMState *env, int mode)
 uint32_t cpsr_read(CPUARMState *env)
 {
     int ZF;
+    g_assert(!is_a64(env));
+
     ZF = (env->ZF == 0);
     return env->uncached_cpsr | (env->NF & 0x80000000) | (ZF << 30) |
         (env->CF << 29) | ((env->VF & 0x80000000) >> 3) | (env->QF << 27)
@@ -3023,6 +3025,8 @@ uint32_t cpsr_read(CPUARMState *env)
 
 void cpsr_write(CPUARMState *env, uint32_t val, uint32_t mask)
 {
+    g_assert(!is_a64(env));
+
     if (mask & CPSR_NZCV) {
         env->ZF = (~val) & CPSR_Z;
         env->NF = val;
