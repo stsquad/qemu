@@ -161,6 +161,7 @@ static const VMStateInfo vmstate_cpsr = {
     .put = put_cpsr,
 };
 
+
 static void cpu_pre_save(void *opaque)
 {
     ARMCPU *cpu = opaque;
@@ -170,6 +171,20 @@ static void cpu_pre_save(void *opaque)
             /* This should never fail */
             abort();
         }
+#if defined CONFIG_KVM
+        if (kvm_check_extension(CPU(cpu)->kvm_state, KVM_CAP_MP_STATE)) {
+            struct kvm_mp_state mp_state;
+            int ret = kvm_vcpu_ioctl(CPU(cpu), KVM_GET_MP_STATE, &mp_state);
+            if (ret) {
+                fprintf(stderr, "%s: failed to get MP_STATE %d/%s\n",
+                        __func__, ret, strerror(ret));
+                abort();
+            }
+            cpu->powered_off =
+                (mp_state.mp_state == KVM_MP_STATE_RUNNABLE)
+                ? false : true;
+        }
+#endif
     } else {
         if (!write_cpustate_to_list(cpu)) {
             /* This should never fail. */
@@ -222,6 +237,20 @@ static int cpu_post_load(void *opaque, int version_id)
          * we're using it.
          */
         write_list_to_cpustate(cpu);
+#if defined CONFIG_KVM
+        if (kvm_check_extension(CPU(cpu)->kvm_state, KVM_CAP_MP_STATE)) {
+            struct kvm_mp_state mp_state = {
+                .mp_state =
+                cpu->powered_off ? KVM_MP_STATE_HALTED : KVM_MP_STATE_RUNNABLE
+            };
+            int ret = kvm_vcpu_ioctl(CPU(cpu), KVM_SET_MP_STATE, &mp_state);
+            if (ret) {
+                fprintf(stderr, "%s: failed to set MP_STATE %d/%s\n",
+                        __func__, ret, strerror(ret));
+                return -1;
+            }
+        }
+#endif
     } else {
         if (!write_list_to_cpustate(cpu)) {
             return -1;
