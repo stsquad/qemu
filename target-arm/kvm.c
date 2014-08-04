@@ -25,7 +25,8 @@
 #include "hw/arm/arm.h"
 
 const KVMCapabilityInfo kvm_arch_required_capabilities[] = {
-    KVM_CAP_LAST_INFO
+    KVM_CAP_LAST_INFO,
+    KVM_CAP_MP_STATE
 };
 
 int kvm_arm_vcpu_init(CPUState *cs)
