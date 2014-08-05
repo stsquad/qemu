@@ -546,6 +546,20 @@ static inline void pstate_write(CPUARMState *env, uint32_t val)
     env->pstate = val & ~AARCH64_CACHED_PSTATE_BITS;
 }
 
+/* Return result of pstate & mask, ensuring we access the correct bits
+ * This is to discourage fishing env->pstate directly
+ */
+static inline uint32_t pstate_check(CPUARMState *env, const uint32_t flag_bits)
+{
+    g_assert(is_a64(env));
+
+    if (flag_bits & AARCH64_CACHED_PSTATE_BITS) {
+        return (pstate_read(env) & flag_bits);
+    } else {
+        return env->pstate & flag_bits;
+    }
+}
+
 /* ARMv7-AR ARM B1.3.3 Current Program Status Register, CPSR
  *
  * Unlike the above PSTATE implementation these functions will attempt
@@ -976,7 +990,7 @@ static inline bool cptype_valid(int cptype)
 static inline int arm_current_pl(CPUARMState *env)
 {
     if (env->aarch64) {
-        return extract32(env->pstate, 2, 2);
+        return extract32(pstate_check(env, PSTATE_M), 2, 2);
     }
 
     if ((env->uncached_cpsr & 0x1f) == ARM_CPU_MODE_USR) {

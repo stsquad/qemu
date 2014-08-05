@@ -1859,7 +1859,7 @@ static uint64_t aa64_dczid_read(CPUARMState *env, const ARMCPRegInfo *ri)
 
 static CPAccessResult sp_el0_access(CPUARMState *env, const ARMCPRegInfo *ri)
 {
-    if (!(env->pstate & PSTATE_SP)) {
+    if (!(pstate_check(env, PSTATE_SP))) {
         /* Access to SP_EL0 is undefined if it's being used as
          * the stack pointer.
          */
@@ -1870,7 +1870,7 @@ static CPAccessResult sp_el0_access(CPUARMState *env, const ARMCPRegInfo *ri)
 
 static uint64_t spsel_read(CPUARMState *env, const ARMCPRegInfo *ri)
 {
-    return env->pstate & PSTATE_SP;
+    return pstate_check(env, PSTATE_SP);
 }
 
 static void spsel_write(CPUARMState *env, const ARMCPRegInfo *ri, uint64_t val)
