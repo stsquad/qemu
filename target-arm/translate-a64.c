@@ -1185,7 +1185,7 @@ static void handle_sync(DisasContext *s, uint32_t insn,
     }
 }
 
-/* C5.6.130 MSR (immediate) - move immediate to processor state field */
+/* C6.6.130 MSR (immediate) - move immediate to processor state field */
 static void handle_msr_i(DisasContext *s, uint32_t insn,
                          unsigned int op1, unsigned int op2, unsigned int crm)
 {
