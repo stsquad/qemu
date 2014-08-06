@@ -424,11 +424,10 @@ illegal_return:
      * restore PC from ELR_ELx
      * no change to exception level, execution state or stack pointer
      */
-    env->pstate |= PSTATE_IL;
     env->pc = env->elr_el[cur_el];
     spsr &= PSTATE_NZCV | PSTATE_DAIF;
     spsr |= pstate_read(env) & ~(PSTATE_NZCV | PSTATE_DAIF);
-    pstate_write(env, spsr);
+    pstate_write(env, spsr | PSTATE_IL);
 }
 
 /* ??? Flag setting arithmetic is awkward because we need to do comparisons.

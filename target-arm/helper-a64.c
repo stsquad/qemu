@@ -505,8 +505,8 @@ void aarch64_cpu_do_interrupt(CPUState *cs)
         env->condexec_bits = 0;
     }
 
-    pstate_write(env, PSTATE_DAIF | PSTATE_MODE_EL1h);
     env->aarch64 = 1;
+    pstate_write(env, PSTATE_DAIF | PSTATE_MODE_EL1h);
     aarch64_restore_sp(env, 1);
 
     env->pc = addr;

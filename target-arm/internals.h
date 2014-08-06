@@ -132,7 +132,7 @@ static inline void update_spsel(CPUARMState *env, uint32_t imm)
     imm &= PSTATE_SP;
     if (imm ^ pstate_check(env, PSTATE_SP)) {
         aarch64_save_sp(env, cur_el);
-        env->pstate = deposit32(env->pstate, 0, 1, imm);
+        pstate_write(env, deposit32(pstate_read(env), 0, 1, imm));
 
         /* We rely on illegal updates to SPsel from EL0 to get trapped
          * at translation time.
