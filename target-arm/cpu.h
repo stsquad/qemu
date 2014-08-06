@@ -569,6 +569,19 @@ uint32_t cpsr_read(CPUARMState *env);
 /* Set the CPSR.  Note that some bits of mask must be all-set or all-clear.  */
 void cpsr_write(CPUARMState *env, uint32_t val, uint32_t mask);
 
+/* Read flag_bits of the cpsr state. This is to discourage fishing
+ * env->uncached_cpsr directly */
+static inline uint32_t cpsr_check(CPUARMState *env, const uint32_t flag_bits)
+{
+    g_assert(!is_a64(env));
+
+    if (flag_bits & AARCH32_CACHED_PSTATE_BITS) {
+        return (cpsr_read(env) & flag_bits);
+    } else {
+        return env->uncached_cpsr & flag_bits;
+    }
+}
+
 /* ARMv7-M ARM B1.4.2, special purpose program status register xPSR */
 static inline uint32_t xpsr_read(CPUARMState *env)
 {
@@ -993,7 +1006,7 @@ static inline int arm_current_pl(CPUARMState *env)
         return extract32(pstate_check(env, PSTATE_M), 2, 2);
     }
 
-    if ((env->uncached_cpsr & 0x1f) == ARM_CPU_MODE_USR) {
+    if (cpsr_check(env, CPSR_M) == ARM_CPU_MODE_USR) {
         return 0;
     }
     /* We don't currently implement the Virtualization or TrustZone
@@ -1326,7 +1339,7 @@ static inline void cpu_get_tb_cpu_state(CPUARMState *env, target_ulong *pc,
         if (arm_feature(env, ARM_FEATURE_M)) {
             privmode = !((env->v7m.exception == 0) && (env->v7m.control & 1));
         } else {
-            privmode = (env->uncached_cpsr & CPSR_M) != ARM_CPU_MODE_USR;
+            privmode = cpsr_check(env, CPSR_M) != ARM_CPU_MODE_USR;
         }
         if (privmode) {
             *flags |= ARM_TBFLAG_PRIV_MASK;

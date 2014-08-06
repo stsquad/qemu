@@ -276,7 +276,7 @@ uint32_t HELPER(get_user_reg)(CPUARMState *env, uint32_t regno)
     } else if (regno == 14) {
         val = env->banked_r14[0];
     } else if (regno >= 8
-               && (env->uncached_cpsr & 0x1f) == ARM_CPU_MODE_FIQ) {
+               && (cpsr_check(env, CPSR_M) == ARM_CPU_MODE_FIQ)) {
         val = env->usr_regs[regno - 8];
     } else {
         val = env->regs[regno];
@@ -291,7 +291,7 @@ void HELPER(set_user_reg)(CPUARMState *env, uint32_t regno, uint32_t val)
     } else if (regno == 14) {
         env->banked_r14[0] = val;
     } else if (regno >= 8
-               && (env->uncached_cpsr & 0x1f) == ARM_CPU_MODE_FIQ) {
+               && (cpsr_check(env, CPSR_M) == ARM_CPU_MODE_FIQ)) {
         env->usr_regs[regno - 8] = val;
     } else {
         env->regs[regno] = val;

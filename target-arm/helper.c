@@ -3210,7 +3210,7 @@ void switch_mode(CPUARMState *env, int mode)
     int old_mode;
     int i;
 
-    old_mode = env->uncached_cpsr & CPSR_M;
+    old_mode = cpsr_check(env, CPSR_M);
     if (mode == old_mode)
         return;
 
@@ -3418,7 +3418,7 @@ void arm_cpu_do_interrupt(CPUState *cs)
                semblance of security.  */
             if (((mask == 0x123456 && !env->thumb)
                     || (mask == 0xab && env->thumb))
-                  && (env->uncached_cpsr & CPSR_M) != ARM_CPU_MODE_USR) {
+                && (cpsr_check(env, CPSR_M) != ARM_CPU_MODE_USR)) {
                 env->regs[0] = do_arm_semihosting(env);
                 qemu_log_mask(CPU_LOG_INT, "...handled as semihosting call\n");
                 return;
@@ -3435,7 +3435,7 @@ void arm_cpu_do_interrupt(CPUState *cs)
         if (env->thumb && semihosting_enabled) {
             mask = arm_lduw_code(env, env->regs[15], env->bswap_code) & 0xff;
             if (mask == 0xab
-                  && (env->uncached_cpsr & CPSR_M) != ARM_CPU_MODE_USR) {
+                && (cpsr_check(env, CPSR_M) != ARM_CPU_MODE_USR)) {
                 env->regs[15] += 2;
                 env->regs[0] = do_arm_semihosting(env);
                 qemu_log_mask(CPU_LOG_INT, "...handled as semihosting call\n");
@@ -4215,7 +4215,7 @@ hwaddr arm_cpu_get_phys_page_debug(CPUState *cs, vaddr addr)
 
 void HELPER(set_r13_banked)(CPUARMState *env, uint32_t mode, uint32_t val)
 {
-    if ((env->uncached_cpsr & CPSR_M) == mode) {
+    if (cpsr_check(env, CPSR_M) == mode) {
         env->regs[13] = val;
     } else {
         env->banked_r13[bank_number(mode)] = val;
@@ -4224,7 +4224,7 @@ void HELPER(set_r13_banked)(CPUARMState *env, uint32_t mode, uint32_t val)
 
 uint32_t HELPER(get_r13_banked)(CPUARMState *env, uint32_t mode)
 {
-    if ((env->uncached_cpsr & CPSR_M) == mode) {
+    if (cpsr_check(env, CPSR_M) == mode) {
         return env->regs[13];
     } else {
         return env->banked_r13[bank_number(mode)];

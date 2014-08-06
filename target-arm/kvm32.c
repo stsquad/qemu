@@ -362,7 +362,7 @@ int kvm_arch_put_registers(CPUState *cs, int level)
     uint32_t cpsr, fpscr;
 
     /* Make sure the banked regs are properly set */
-    mode = env->uncached_cpsr & CPSR_M;
+    mode = cpsr_check(env, CPSR_M);
     bn = bank_number(mode);
     if (mode == ARM_CPU_MODE_FIQ) {
         memcpy(env->fiq_regs, env->regs + 8, 5 * sizeof(uint32_t));
@@ -467,7 +467,7 @@ int kvm_arch_get_registers(CPUState *cs)
     cpsr_write(env, cpsr, 0xffffffff);
 
     /* Make sure the current mode regs are properly set */
-    mode = env->uncached_cpsr & CPSR_M;
+    mode = cpsr_check(env, CPSR_M);
     bn = bank_number(mode);
     if (mode == ARM_CPU_MODE_FIQ) {
         memcpy(env->regs + 8, env->fiq_regs, 5 * sizeof(uint32_t));
