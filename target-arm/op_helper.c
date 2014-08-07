@@ -384,7 +384,6 @@ void HELPER(exception_return)(CPUARMState *env)
         /* TODO: We currently assume EL1/2/3 are running in AArch64.  */
         env->aarch64 = 0;
         new_el = 0;
-        env->uncached_cpsr = 0x10;
         cpsr_write(env, spsr, ~0);
         for (i = 0; i < 15; i++) {
             env->regs[i] = env->xregs[i];
