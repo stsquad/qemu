@@ -3387,6 +3387,7 @@ void arm_cpu_do_interrupt(CPUState *cs)
     uint32_t mask;
     int new_mode;
     uint32_t offset;
+    uint32_t saved_cpsr;
 
     assert(!IS_M(env));
 
@@ -3498,13 +3499,16 @@ void arm_cpu_do_interrupt(CPUState *cs)
          */
         addr += env->cp15.vbar_el[1];
     }
-    switch_mode (env, new_mode);
-    env->spsr = cpsr_read(env);
-    /* Clear IT bits.  */
-    env->condexec_bits = 0;
-    /* Switch to the new mode, and to the correct instruction set.  */
-    env->uncached_cpsr = (env->uncached_cpsr & ~CPSR_M) | new_mode;
-    env->daif |= mask;
+    /* We need to save the CPSR value before we write the new one and
+     * trigger the mode switch. We'll bank the previous value of
+     * env->spsr and the final env->spsr (representing SPSR_mode)
+     * will contain the CPSR on exception entry.
+     */
+    saved_cpsr = cpsr_read(env);
+
+    /* Switch to new_mode, clear IT bits, set AIF flags */
+    cpsr_write(env, new_mode | mask, CPSR_M | CPSR_IT_2_7 | CPSR_AIF);
+
     /* this is a lie, as the was no c1_sys on V4T/V5, but who cares
      * and we should just guard the thumb mode on V4 */
     if (arm_feature(env, ARM_FEATURE_V4T)) {
@@ -3512,6 +3516,7 @@ void arm_cpu_do_interrupt(CPUState *cs)
     }
     env->regs[14] = env->regs[15] + offset;
     env->regs[15] = addr;
+    env->spsr = saved_cpsr;
     cs->interrupt_request |= CPU_INTERRUPT_EXITTB;
 }
 
