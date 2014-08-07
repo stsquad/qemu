@@ -477,6 +477,42 @@ int arm_cpu_handle_mmu_fault(CPUState *cpu, vaddr address, int rw,
 #define PSTATE_MODE_EL1t 4
 #define PSTATE_MODE_EL0t 0
 
+/* ARM Condition Flags in SPSR Form
+ * ARMv8 ARM D1.6.4 Saved Program Status Registers (SPSRs)
+ * ARMv7AR ARM A2.4 The Application Program Status Register (APSR)
+ * ARMv7-M ARM B1.4.2, special purpose program status register xPSR (APSR)
+ *
+ *  31  30  29  28
+ * +---+---+---+---+-----------------------------+
+ * | N | Z | C | V | ...mode specific format.... |
+ * +---+---+---+---+-----------------------------+
+ *
+ * Fortunately the condition codes appear in the same place for both
+ * AArch64 and AArch32 modes. The following functions pack and de-pack
+ * the condition codes between spsr form and our internal individual flags.
+ */
+static inline uint32_t spsr_read_cc_flags(CPUARMState *env)
+{
+    uint32_t spsr_cc_flags = 0;
+
+    /* Calculate integer flags */
+    spsr_cc_flags |= (env->NF & 0x80000000) ? PSTATE_N : 0; /* bit 31 */
+    spsr_cc_flags |= (env->ZF == 0) ? PSTATE_Z : 0;
+    spsr_cc_flags |= env->CF ? PSTATE_C : 0;                /* or env->CF << 29 */
+    spsr_cc_flags |= (env->VF & 0x80000000) ? PSTATE_V : 0; /* bit 31 */
+    return spsr_cc_flags;
+}
+
+/* Only update the cached condition codes. */
+static inline void spsr_write_cc_flags(CPUARMState *env, uint32_t new_flags)
+{
+    /* Process the integer flags directly */
+    env->ZF = (~new_flags) & CPSR_Z;
+    env->NF = new_flags;
+    env->CF = (new_flags >> 29) & 1;
+    env->VF = (new_flags << 3) & 0x80000000;
+}
+
 /* ARMv8 ARM D1.6.4 Saved Program Status Register (SPSRs)
  *
  *  31  28 27  24 23   22 21 20 22    21  20 19  16 15   8 7   5 4    0
@@ -491,14 +527,8 @@ int arm_cpu_handle_mmu_fault(CPUState *cpu, vaddr address, int rw,
  */
 static inline uint32_t pstate_read(CPUARMState *env)
 {
-    int ZF;
-
     g_assert(is_a64(env));
-
-    ZF = (env->ZF == 0);
-    return (env->NF & 0x80000000) | (ZF << 30)
-        | (env->CF << 29) | ((env->VF & 0x80000000) >> 3)
-        | env->pstate | env->daif;
+    return spsr_read_cc_flags(env) | env->pstate | env->daif;
 }
 
 /* Update the current PSTATE value. This doesn't include nRW which is */
@@ -506,10 +536,7 @@ static inline void pstate_write(CPUARMState *env, uint32_t val)
 {
     g_assert(is_a64(env));
 
-    env->ZF = (~val) & PSTATE_Z;
-    env->NF = val;
-    env->CF = (val >> 29) & 1;
-    env->VF = (val << 3) & 0x80000000;
+    spsr_write_cc_flags(env, val);
     env->daif = val & PSTATE_DAIF;
     env->pstate = val & ~CACHED_PSTATE_BITS;
 }
@@ -526,13 +553,8 @@ void cpsr_write(CPUARMState *env, uint32_t val, uint32_t mask);
 /* ARMv7-M ARM B1.4.2, special purpose program status register xPSR */
 static inline uint32_t xpsr_read(CPUARMState *env)
 {
-    int ZF;
-
     g_assert(!is_a64(env));
-
-    ZF = (env->ZF == 0);
-    return (env->NF & 0x80000000) | (ZF << 30)
-        | (env->CF << 29) | ((env->VF & 0x80000000) >> 3) | (env->QF << 27)
+    return spsr_read_cc_flags(env) | (env->QF << 27)
         | (env->thumb << 24) | ((env->condexec_bits & 3) << 25)
         | ((env->condexec_bits & 0xfc) << 8)
         | env->v7m.exception;
@@ -544,10 +566,7 @@ static inline void xpsr_write(CPUARMState *env, uint32_t val, uint32_t mask)
     g_assert(!is_a64(env));
 
     if (mask & CPSR_NZCV) {
-        env->ZF = (~val) & CPSR_Z;
-        env->NF = val;
-        env->CF = (val >> 29) & 1;
-        env->VF = (val << 3) & 0x80000000;
+        spsr_write_cc_flags(env, val);
     }
     if (mask & CPSR_Q)
         env->QF = ((val & CPSR_Q) != 0);

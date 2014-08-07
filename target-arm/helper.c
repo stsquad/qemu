@@ -3012,15 +3012,14 @@ static int bad_mode_switch(CPUARMState *env, int mode)
 
 uint32_t cpsr_read(CPUARMState *env)
 {
-    int ZF;
     g_assert(!is_a64(env));
 
-    ZF = (env->ZF == 0);
-    return env->uncached_cpsr | (env->NF & 0x80000000) | (ZF << 30) |
-        (env->CF << 29) | ((env->VF & 0x80000000) >> 3) | (env->QF << 27)
+    return spsr_read_cc_flags(env)
+        | (env->QF << 27)
         | (env->thumb << 5) | ((env->condexec_bits & 3) << 25)
         | ((env->condexec_bits & 0xfc) << 8)
-        | (env->GE << 16) | (env->daif & CPSR_AIF);
+        | (env->GE << 16) | (env->daif & CPSR_AIF)
+        | (env->uncached_cpsr & ~AARCH32_CACHED_PSTATE_BITS);
 }
 
 void cpsr_write(CPUARMState *env, uint32_t val, uint32_t mask)
@@ -3028,10 +3027,7 @@ void cpsr_write(CPUARMState *env, uint32_t val, uint32_t mask)
     g_assert(!is_a64(env));
 
     if (mask & CPSR_NZCV) {
-        env->ZF = (~val) & CPSR_Z;
-        env->NF = val;
-        env->CF = (val >> 29) & 1;
-        env->VF = (val << 3) & 0x80000000;
+        spsr_write_cc_flags(env, val);
     }
     if (mask & CPSR_Q)
         env->QF = ((val & CPSR_Q) != 0);
