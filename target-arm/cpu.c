@@ -75,12 +75,33 @@ static void cp_reg_reset(gpointer key, gpointer value, gpointer opaque)
     }
 }
 
+#ifndef CONFIG_USER_ONLY
+/* Set up the pc for an ARMv7M ROM */
+static void armv7m_setup_rom(CPUARMState *env)
+{
+    uint32_t pc;
+    uint8_t *rom;
+    rom = rom_ptr(0);
+    if (rom) {
+        /* We should really use ldl_phys here, in case the guest
+           modified flash and reset itself.  However images
+           loaded via -kernel have not been copied yet, so load the
+           values directly from there.  */
+        env->regs[13] = ldl_p(rom) & 0xFFFFFFFC;
+        pc = ldl_p(rom + 4);
+        env->thumb = pc & 1;
+        env->regs[15] = pc & ~1;
+    }
+}
+#endif
+
 /* CPUClass::reset() */
 static void arm_cpu_reset(CPUState *s)
 {
     ARMCPU *cpu = ARM_CPU(s);
     ARMCPUClass *acc = ARM_CPU_GET_CLASS(cpu);
     CPUARMState *env = &cpu->env;
+    uint32_t initial_spsr = 0;
 
     acc->parent_reset(s);
 
@@ -97,26 +118,39 @@ static void arm_cpu_reset(CPUState *s)
 
     if (arm_feature(env, ARM_FEATURE_AARCH64)) {
         /* 64 bit CPUs always start in 64 bit mode */
-        env->aarch64 = 1;
+        initial_spsr = 0;
 #if defined(CONFIG_USER_ONLY)
-        env->pstate = PSTATE_MODE_EL0t;
+        initial_spsr |= PSTATE_MODE_EL0t;
         /* Userspace expects access to CTL_EL0 and the cache ops */
         env->cp15.c1_sys |= SCTLR_UCT | SCTLR_UCI;
         /* and to the FP/Neon instructions */
         env->cp15.c1_coproc = deposit64(env->cp15.c1_coproc, 20, 2, 3);
 #else
-        env->pstate = PSTATE_MODE_EL1h;
+        initial_spsr |= PSTATE_MODE_EL1h;
         env->pc = cpu->rvbar;
 #endif
     } else {
+        /* 32 bit mode - all modes have M[4] set (PSTATE.nRW in aarch64)*/
 #if defined(CONFIG_USER_ONLY)
+        initial_spsr |= ARM_CPU_MODE_USR;
         /* Userspace expects access to cp10 and cp11 for FP/Neon */
         env->cp15.c1_coproc = deposit64(env->cp15.c1_coproc, 20, 4, 0xf);
+#else
+        /* SVC mode with interrupts disabled.  */
+        initial_spsr |= ARM_CPU_MODE_SVC;
+
+        /* On ARMv7-M the CPSR_I is the value of the PRIMASK register, and is
+           clear at reset.  Initial SP and PC are loaded from ROM.  */
+        if (IS_M(env)) {
+            initial_spsr |= PSTATE_D | PSTATE_A | PSTATE_F;
+            armv7m_setup_rom(env);
+        } else {
+            initial_spsr |= PSTATE_D | PSTATE_A | PSTATE_I | PSTATE_F;
+        }
 #endif
     }
 
 #if defined(CONFIG_USER_ONLY)
-    env->uncached_cpsr = ARM_CPU_MODE_USR;
     /* For user mode we must enable access to coprocessors */
     env->vfp.xregs[ARM_VFP_FPEXC] = 1 << 30;
     if (arm_feature(env, ARM_FEATURE_IWMMXT)) {
@@ -125,34 +159,12 @@ static void arm_cpu_reset(CPUState *s)
         env->cp15.c15_cpar = 1;
     }
 #else
-    /* SVC mode with interrupts disabled.  */
-    env->uncached_cpsr = ARM_CPU_MODE_SVC;
-    env->daif = PSTATE_D | PSTATE_A | PSTATE_I | PSTATE_F;
-    /* On ARMv7-M the CPSR_I is the value of the PRIMASK register, and is
-       clear at reset.  Initial SP and PC are loaded from ROM.  */
-    if (IS_M(env)) {
-        uint32_t pc;
-        uint8_t *rom;
-        env->daif &= ~PSTATE_I;
-        rom = rom_ptr(0);
-        if (rom) {
-            /* We should really use ldl_phys here, in case the guest
-               modified flash and reset itself.  However images
-               loaded via -kernel have not been copied yet, so load the
-               values directly from there.  */
-            env->regs[13] = ldl_p(rom) & 0xFFFFFFFC;
-            pc = ldl_p(rom + 4);
-            env->thumb = pc & 1;
-            env->regs[15] = pc & ~1;
-        }
-    }
-
     if (env->cp15.c1_sys & SCTLR_V) {
-            env->regs[15] = 0xFFFF0000;
+        env->regs[15] = 0xFFFF0000;
     }
-
     env->vfp.xregs[ARM_VFP_FPEXC] = 0;
 #endif
+
     set_flush_to_zero(1, &env->vfp.standard_fp_status);
     set_flush_inputs_to_zero(1, &env->vfp.standard_fp_status);
     set_default_nan_mode(1, &env->vfp.standard_fp_status);
@@ -172,6 +184,9 @@ static void arm_cpu_reset(CPUState *s)
         kvm_arm_reset_vcpu(cpu);
     }
 #endif
+
+    /* Currently breaks mixed-mode (aarch32 userspace/aarch64 kernel) */
+    restore_state_from_spsr(env, initial_spsr);
 }
 
 #ifndef CONFIG_USER_ONLY
