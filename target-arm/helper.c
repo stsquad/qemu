@@ -3019,7 +3019,7 @@ uint32_t cpsr_read(CPUARMState *env)
         | (env->thumb << 5) | ((env->condexec_bits & 3) << 25)
         | ((env->condexec_bits & 0xfc) << 8)
         | (env->GE << 16) | (env->daif & CPSR_AIF)
-        | (env->uncached_cpsr & ~AARCH32_CACHED_PSTATE_BITS);
+        | (env->uncached_psr_bits & ~AARCH32_CACHED_PSTATE_BITS);
 }
 
 void cpsr_write(CPUARMState *env, uint32_t val, uint32_t mask)
@@ -3048,7 +3048,7 @@ void cpsr_write(CPUARMState *env, uint32_t val, uint32_t mask)
     env->daif &= ~(CPSR_AIF & mask);
     env->daif |= val & CPSR_AIF & mask;
 
-    if ((env->uncached_cpsr ^ val) & mask & CPSR_M) {
+    if ((env->uncached_psr_bits ^ val) & mask & CPSR_M) {
         if (bad_mode_switch(env, val & CPSR_M)) {
             /* Attempt to switch to an invalid mode: this is UNPREDICTABLE.
              * We choose to ignore the attempt and leave the CPSR M field
@@ -3060,7 +3060,7 @@ void cpsr_write(CPUARMState *env, uint32_t val, uint32_t mask)
         }
     }
     mask &= ~CACHED_CPSR_BITS;
-    env->uncached_cpsr = (env->uncached_cpsr & ~mask) | (val & mask);
+    env->uncached_psr_bits = (env->uncached_psr_bits & ~mask) | (val & mask);
 }
 
 /* Sign/zero extend */

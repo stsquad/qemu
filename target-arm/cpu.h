@@ -122,24 +122,6 @@ typedef struct CPUARMState {
     /* Regs for A64 mode.  */
     uint64_t xregs[32];
     uint64_t pc;
-    /* PSTATE isn't an architectural register for ARMv8. However, it is
-     * convenient for us to assemble the underlying state into a 32 bit format
-     * identical to the architectural format used for the SPSR. (This is also
-     * what the Linux kernel's 'pstate' field in signal handlers and KVM's
-     * 'pstate' register are.) Of the PSTATE bits:
-     *  NZCV are kept in the split out env->CF/VF/NF/ZF, (which have the same
-     *    semantics as for AArch32, as described in the comments on each field)
-     *  nRW (also known as M[4]) is kept, inverted, in env->aarch64
-     *  DAIF (exception masks) are kept in env->daif
-     *  all other bits are stored in their correct places in env->pstate
-     */
-    uint32_t pstate;
-    uint32_t aarch64; /* 1 if CPU is in aarch64 state; inverse of PSTATE.nRW */
-
-    /* Frequently accessed CPSR bits are stored separately for efficiency.
-       This contains all the other bits.  Use cpsr_{read,write} to access
-       the whole CPSR.  */
-    uint32_t uncached_cpsr;
 
     /* SPSR_mode - the Saved Program state on entry to current mode */
     uint32_t spsr;
@@ -153,7 +135,29 @@ typedef struct CPUARMState {
     uint32_t usr_regs[5];
     uint32_t fiq_regs[5];
 
-    /* cpsr flag cache for faster execution */
+    /* Frequently accessed PSTATE/CPSR bits are stored separately for
+     * efficiency. In the case of ARMv8 PSTATE there isn't even an
+     * architectural register for it. However, it is convenient for us
+     * to assemble the underlying state into a 32 bit format
+     * identical to the architectural format used for the SPSR. (This is also
+     * what the Linux kernel's 'pstate' field in signal handlers and KVM's
+     * 'pstate' register are.)
+     *
+     * Of the various flag bits:
+     *  NZCV are kept in the split out env->CF/VF/NF/ZF, (same aarch32/aarch64)
+     *  nRW (also known as M[4]) is kept, inverted, in env->aarch64
+     *  DAIF (exception masks) are kept in env->daif
+     *
+     * This contains all the other bits. As the underlying storage
+     * could evolve in the future it's important code not intimately
+     * familiar with the split (i.e. not cpu.[ch] code) use the
+     * access functions (xpsr|cpsr|pstate)_(read|write_check) to
+     * access the required data.
+     */
+    uint32_t uncached_psr_bits;
+
+    /* CPSR/PSTATE flag cache for faster execution */
+    uint32_t aarch64; /* 1 if CPU is in aarch64 state; inverse of PSTATE.nRW */
     uint32_t CF; /* 0 or 1 */
     uint32_t VF; /* V is the bit 31. All other bits are undefined */
     uint32_t NF; /* N is bit 31. All other bits are undefined.  */
@@ -533,7 +537,7 @@ static inline void spsr_write_cc_flags(CPUARMState *env, uint32_t new_flags)
 static inline uint32_t pstate_read(CPUARMState *env)
 {
     g_assert(is_a64(env));
-    return spsr_read_cc_flags(env) | env->pstate | env->daif;
+    return spsr_read_cc_flags(env) | env->uncached_psr_bits | env->daif;
 }
 
 /* Update the current PSTATE value. This doesn't include nRW which is */
@@ -543,7 +547,7 @@ static inline void pstate_write(CPUARMState *env, uint32_t val)
 
     spsr_write_cc_flags(env, val);
     env->daif = val & PSTATE_DAIF;
-    env->pstate = val & ~AARCH64_CACHED_PSTATE_BITS;
+    env->uncached_psr_bits = val & ~AARCH64_CACHED_PSTATE_BITS;
 }
 
 /* Return result of pstate & mask, ensuring we access the correct bits
@@ -556,7 +560,7 @@ static inline uint32_t pstate_check(CPUARMState *env, const uint32_t flag_bits)
     if (flag_bits & AARCH64_CACHED_PSTATE_BITS) {
         return (pstate_read(env) & flag_bits);
     } else {
-        return env->pstate & flag_bits;
+        return env->uncached_psr_bits & flag_bits;
     }
 }
 
@@ -578,7 +582,7 @@ static inline uint32_t cpsr_check(CPUARMState *env, const uint32_t flag_bits)
     if (flag_bits & AARCH32_CACHED_PSTATE_BITS) {
         return (cpsr_read(env) & flag_bits);
     } else {
-        return env->uncached_cpsr & flag_bits;
+        return env->uncached_psr_bits & flag_bits;
     }
 }
 
