@@ -23,14 +23,19 @@
 #ifdef CONFIG_SOFTMMU
 #define TCG_MAX_QEMU_LDST       640
 
+QEMU_BUILD_BUG_ON(TCG_TARGET_NB_REGS > 32);
+QEMU_BUILD_BUG_ON(NB_MMU_MODES > 8);
+
 typedef struct TCGLabelQemuLdst {
-    bool is_ld:1;           /* qemu_ld: true, qemu_st: false */
-    TCGMemOp opc:4;
-    TCGReg addrlo_reg;      /* reg index for low word of guest virtual addr */
-    TCGReg addrhi_reg;      /* reg index for high word of guest virtual addr */
-    TCGReg datalo_reg;      /* reg index for low word to be loaded or stored */
-    TCGReg datahi_reg;      /* reg index for high word to be loaded or stored */
-    int mem_index;          /* soft MMU memory index */
+    TCGMemOp opc : 4;
+    bool is_ld : 1;         /* qemu_ld: true, qemu_st: false */
+    TCGReg addrlo_reg : 5;  /* reg index for low word of guest virtual addr */
+    TCGReg addrhi_reg : 5;  /* reg index for high word of guest virtual addr */
+    TCGReg datalo_reg : 5;  /* reg index for low word to be loaded or stored */
+    TCGReg datahi_reg : 5;  /* reg index for high word to be loaded or stored */
+    unsigned mem_index : 3; /* soft MMU memory index */
+    /* 4 bits unused in 32-bit word */
+
     tcg_insn_unit *raddr;   /* gen code addr of the next IR of qemu_ld/st IR */
     tcg_insn_unit *label_ptr[2]; /* label pointers to be updated */
 } TCGLabelQemuLdst;
