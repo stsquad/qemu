@@ -29,6 +29,7 @@ QEMU_BUILD_BUG_ON(NB_MMU_MODES > 8);
 typedef struct TCGLabelQemuLdst {
     TCGMemOp opc : 4;
     bool is_ld : 1;         /* qemu_ld: true, qemu_st: false */
+    TCGType type : 1;       /* result type of a load */
     TCGReg addrlo_reg : 5;  /* reg index for low word of guest virtual addr */
     TCGReg addrhi_reg : 5;  /* reg index for high word of guest virtual addr */
     TCGReg datalo_reg : 5;  /* reg index for low word to be loaded or stored */
