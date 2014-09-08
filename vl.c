@@ -1,4 +1,6 @@
 /*
+ *  This is a test
+ *
  * QEMU System Emulator
  *
  * Copyright (c) 2003-2008 Fabrice Bellard
