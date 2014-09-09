@@ -25,6 +25,7 @@
 #include "hw/arm/arm.h"
 
 const KVMCapabilityInfo kvm_arch_required_capabilities[] = {
+    KVM_CAP_INFO(SET_GUEST_DEBUG),
     KVM_CAP_LAST_INFO
 };
 
@@ -466,9 +467,40 @@ void kvm_arch_post_run(CPUState *cs, struct kvm_run *run)
 {
 }
 
+static int kvm_handle_debug(CPUState *cs, struct kvm_run *run)
+{
+    struct kvm_debug_exit_arch *arch_info = &run->debug.arch;
+    int handle = 0;
+
+    if (cs->singlestep_enabled) {
+        qemu_log_mask(LOG_UNIMP, "%s: single step not yet implemented\n", __func__);
+    } else if (kvm_find_sw_breakpoint(cs, arch_info->address)) {
+        handle = 1;
+    } else {
+        /* If we don't handle this it could be it's really for the
+           guest to handle */
+        qemu_log_mask(LOG_UNIMP, "%s: re-injecting exception not yet implemented\n", __func__);
+    }
+
+    return handle;
+}
+
 int kvm_arch_handle_exit(CPUState *cs, struct kvm_run *run)
 {
-    return 0;
+    int ret = 0;
+
+    switch (run->exit_reason) {
+    case KVM_EXIT_DEBUG:
+        if (kvm_handle_debug(cs, run)) {
+            ret = EXCP_DEBUG;
+        } /* otherwise return to guest */
+        break;
+    default:
+        qemu_log_mask(LOG_UNIMP, "%s: un-handled exit reason %d\n",
+                      __func__, run->exit_reason);
+        break;
+    }
+    return ret;
 }
 
 bool kvm_arch_stop_on_emulation_error(CPUState *cs)
@@ -493,14 +525,33 @@ int kvm_arch_on_sigbus(int code, void *addr)
 
 void kvm_arch_update_guest_debug(CPUState *cs, struct kvm_guest_debug *dbg)
 {
-    qemu_log_mask(LOG_UNIMP, "%s: not implemented\n", __func__);
+    if (kvm_sw_breakpoints_active(cs)) {
+        dbg->control |= KVM_GUESTDBG_ENABLE | KVM_GUESTDBG_USE_SW_BP;
+    }
 }
 
-int kvm_arch_insert_sw_breakpoint(CPUState *cs,
-                                  struct kvm_sw_breakpoint *bp)
+/* C6.6.29 BRK instruction */
+int kvm_arch_insert_sw_breakpoint(CPUState *cs, struct kvm_sw_breakpoint *bp)
 {
-    qemu_log_mask(LOG_UNIMP, "%s: not implemented\n", __func__);
-    return -EINVAL;
+    static const uint32_t brk = 0xd4200000;
+
+    if (cpu_memory_rw_debug(cs, bp->pc, (uint8_t *)&bp->saved_insn, 4, 0) ||
+        cpu_memory_rw_debug(cs, bp->pc, (uint8_t *)&brk, 4, 1)) {
+        return -EINVAL;
+    }
+    return 0;
+}
+
+int kvm_arch_remove_sw_breakpoint(CPUState *cs, struct kvm_sw_breakpoint *bp)
+{
+    static uint32_t brk;
+
+    if (cpu_memory_rw_debug(cs, bp->pc, (uint8_t *)&brk, 4, 0) ||
+        brk != 0xd4200000 ||
+        cpu_memory_rw_debug(cs, bp->pc, (uint8_t *)&bp->saved_insn, 4, 1)) {
+        return -EINVAL;
+    }
+    return 0;
 }
 
 int kvm_arch_insert_hw_breakpoint(target_ulong addr,
@@ -517,12 +568,6 @@ int kvm_arch_remove_hw_breakpoint(target_ulong addr,
     return -EINVAL;
 }
 
-int kvm_arch_remove_sw_breakpoint(CPUState *cs,
-                                  struct kvm_sw_breakpoint *bp)
-{
-    qemu_log_mask(LOG_UNIMP, "%s: not implemented\n", __func__);
-    return -EINVAL;
-}
 
 void kvm_arch_remove_all_hw_breakpoints(void)
 {
