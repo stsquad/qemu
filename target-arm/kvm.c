@@ -473,7 +473,8 @@ static int kvm_handle_debug(CPUState *cs, struct kvm_run *run)
     int handle = 0;
 
     if (cs->singlestep_enabled) {
-        qemu_log_mask(LOG_UNIMP, "%s: single step not yet implemented\n", __func__);
+        /* TODO: check it was a ss event */
+        handle = 1;
     } else if (kvm_find_sw_breakpoint(cs, arch_info->address)) {
         handle = 1;
     } else {
@@ -525,6 +526,9 @@ int kvm_arch_on_sigbus(int code, void *addr)
 
 void kvm_arch_update_guest_debug(CPUState *cs, struct kvm_guest_debug *dbg)
 {
+    if (cs->singlestep_enabled) {
+        dbg->control |= KVM_GUESTDBG_ENABLE | KVM_GUESTDBG_SINGLESTEP;
+    }
     if (kvm_sw_breakpoints_active(cs)) {
         dbg->control |= KVM_GUESTDBG_ENABLE | KVM_GUESTDBG_USE_SW_BP;
     }
