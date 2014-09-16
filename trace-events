@@ -1909,3 +1909,10 @@ aspeed_vic_update_fiq(int flags) "Raising FIQ: %d"
 aspeed_vic_update_irq(int flags) "Raising IRQ: %d"
 aspeed_vic_read(uint64_t offset, unsigned size, uint32_t value) "From 0x%" PRIx64 " of size %u: 0x%" PRIx32
 aspeed_vic_write(uint64_t offset, unsigned size, uint32_t data) "To 0x%" PRIx64 " of size %u: 0x%" PRIx32
+
+# hw/display/goldfish_fb.c
+goldfish_fb_memory_read(uint32_t addr, uint32_t value) "addr %08x value %08x"
+goldfish_fb_memory_write(uint32_t addr, uint32_t value) "addr %08x value %08x"
+goldfish_fb_update_display(int y, int h, int x, int w) "y:%d,h:%d,x=%d,w=%d"
+goldfish_fb_update_stats(float peak, float total) "peak %.2f %%  total %.2f %%"
+
