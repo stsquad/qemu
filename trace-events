@@ -1370,5 +1370,13 @@ mhp_pc_dimm_assigned_address(uint64_t addr) "0x%"PRIx64
 kvm_enable_cmma(int rc) "CMMA: enabling with result code %d"
 kvm_clear_cmma(int rc) "CMMA: clearing with result code %d"
 
+
 # hw/dma/i8257.c
 i8257_unregistered_dma(int nchan, int dma_pos, int dma_len) "unregistered DMA channel used nchan=%d dma_pos=%d dma_len=%d"
+
+# hw/display/goldfish_fb.c
+goldfish_fb_memory_read(uint32_t addr, uint32_t value) "addr %08x value %08x"
+goldfish_fb_memory_write(uint32_t addr, uint32_t value) "addr %08x value %08x"
+goldfish_fb_update_display(int y, int h, int x, int w) "y:%d,h:%d,x=%d,w=%d"
+goldfish_fb_update_stats(float peak, float total) "peak %.2f %%  total %.2f %%"
+
