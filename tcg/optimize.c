@@ -1160,14 +1160,21 @@ static void tcg_constant_folding(TCGContext *s)
             goto do_default;
 
         case INDEX_op_mulu2_i32:
+        case INDEX_op_muls2_i32:
             if (temps[args[2]].state == TCG_TEMP_CONST
                 && temps[args[3]].state == TCG_TEMP_CONST) {
                 uint32_t a = temps[args[2]].val;
                 uint32_t b = temps[args[3]].val;
-                uint64_t r = (uint64_t)a * b;
+                uint64_t r;
                 TCGArg rl, rh;
                 TCGOp *op2 = insert_op_before(s, op, INDEX_op_movi_i32, 2);
                 TCGArg *args2 = &s->gen_opparam_buf[op2->args];
+
+                if (opc == INDEX_op_mulu2_i32) {
+                    r = (uint64_t)a * b;
+                } else {
+                    r = (uint64_t)(int32_t)a * (int32_t)b;
+                }
 
                 rl = args[0];
                 rh = args[1];
