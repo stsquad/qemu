@@ -1129,33 +1129,74 @@ static void tcg_constant_folding(TCGContext *s)
         case INDEX_op_add2_i32:
         case INDEX_op_sub2_i32:
             if (temps[args[2]].state == TCG_TEMP_CONST
-                && temps[args[3]].state == TCG_TEMP_CONST
-                && temps[args[4]].state == TCG_TEMP_CONST
-                && temps[args[5]].state == TCG_TEMP_CONST) {
+                && temps[args[4]].state == TCG_TEMP_CONST) {
                 uint32_t al = temps[args[2]].val;
-                uint32_t ah = temps[args[3]].val;
                 uint32_t bl = temps[args[4]].val;
-                uint32_t bh = temps[args[5]].val;
-                uint64_t a = ((uint64_t)ah << 32) | al;
-                uint64_t b = ((uint64_t)bh << 32) | bl;
-                TCGArg rl, rh;
-                TCGOp *op2 = insert_op_before(s, op, INDEX_op_movi_i32, 2);
+
+                if (temps[args[3]].state == TCG_TEMP_CONST
+                    && temps[args[5]].state == TCG_TEMP_CONST) {
+                    /* The entire 64-bit quantity is a constant.  */
+                    uint32_t ah = temps[args[3]].val;
+                    uint32_t bh = temps[args[5]].val;
+                    uint64_t a = ((uint64_t)ah << 32) | al;
+                    uint64_t b = ((uint64_t)bh << 32) | bl;
+                    TCGArg rl, rh;
+                    TCGOp *op2 = insert_op_before(s, op, INDEX_op_movi_i32, 2);
+                    TCGArg *args2 = &s->gen_opparam_buf[op2->args];
+
+                    if (opc == INDEX_op_add2_i32) {
+                        a += b;
+                    } else {
+                        a -= b;
+                    }
+
+                    rl = args[0];
+                    rh = args[1];
+                    tcg_opt_gen_movi(s, op, args, opc, rl, (uint32_t)a);
+                    tcg_opt_gen_movi(s, op2, args2, opc, rh,
+                                     (uint32_t)(a >> 32));
+
+                    /* We've done all we need to do with the movi.  Skip it.  */
+                    oi_next = op2->next;
+                    break;
+                }
+                if (opc == INDEX_op_add2_i32 ? al + bl >= al : al >= bl) {
+                    /* The low part of the operation is constant,
+                       and does not produce a carry/borrow.  */
+                    TCGOp *op2 = insert_op_before(s, op, INDEX_op_movi_i32, 2);
+                    TCGArg *args2 = &s->gen_opparam_buf[op2->args];
+
+                    if (opc == INDEX_op_add2_i32) {
+                        al += bl;
+                    } else {
+                        al -= bl;
+                    }
+
+                    tcg_opt_gen_movi(s, op2, args2, opc, args[0], al);
+                do_addsub2_high:
+                    if (opc == INDEX_op_add2_i32) {
+                        op->opc = INDEX_op_add_i32;
+                    } else {
+                        op->opc = INDEX_op_sub_i32;
+                    }
+                    args[0] = args[1];
+                    args[1] = args[3];
+                    args[2] = args[5];
+
+                    /* We may be able to simplify the new op further.  */
+                    break;
+                }
+            }
+            if (temps[args[4]].state == TCG_TEMP_CONST
+                && temps[args[4]].val == 0
+                && args[3] != args[0] && args[5] != args[0]) {
+                /* The second low part of the operation is zero,
+                   and thus cannot produce a carry/borrow.  */
+                TCGOp *op2 = insert_op_before(s, op, INDEX_op_mov_i32, 2);
                 TCGArg *args2 = &s->gen_opparam_buf[op2->args];
 
-                if (opc == INDEX_op_add2_i32) {
-                    a += b;
-                } else {
-                    a -= b;
-                }
-
-                rl = args[0];
-                rh = args[1];
-                tcg_opt_gen_movi(s, op, args, opc, rl, (uint32_t)a);
-                tcg_opt_gen_movi(s, op2, args2, opc, rh, (uint32_t)(a >> 32));
-
-                /* We've done all we need to do with the movi.  Skip it.  */
-                oi_next = op2->next;
-                break;
+                tcg_opt_gen_mov(s, op2, args2, opc, args[0], args[2]);
+                goto do_addsub2_high;
             }
             goto do_default;
 
