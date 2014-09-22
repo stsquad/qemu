@@ -194,7 +194,6 @@ typedef struct TCGPool {
 typedef enum TCGType {
     TCG_TYPE_I32,
     TCG_TYPE_I64,
-    TCG_TYPE_COUNT, /* number of different types */
 
     /* An alias for the size of the host register.  */
 #if TCG_TARGET_REG_BITS == 32
@@ -217,6 +216,8 @@ typedef enum TCGType {
     TCG_TYPE_TL = TCG_TYPE_I32,
 #endif
 } TCGType;
+
+#define TCG_TYPE_COUNT 2
 
 /* Constants for qemu_ld and qemu_st for the Memory Operation field.  */
 typedef enum TCGMemOp {
