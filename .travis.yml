@@ -12,7 +12,7 @@ notifications:
     on_failure: always
 env:
   global:
-    - TEST_CMD=""
+    - TEST_CMD="make check"
     - EXTRA_CONFIG=""
     # Development packages, EXTRA_PKGS saved for additional builds
     - CORE_PKGS="libusb-1.0-0-dev libiscsi-dev librados-dev libncurses5-dev"
