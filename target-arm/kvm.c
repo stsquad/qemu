@@ -17,6 +17,7 @@
 
 #include "qemu-common.h"
 #include "qemu/timer.h"
+#include "qemu/error-report.h"
 #include "sysemu/sysemu.h"
 #include "sysemu/kvm.h"
 #include "kvm_arm.h"
@@ -360,23 +361,42 @@ void kvm_arch_post_run(CPUState *cs, struct kvm_run *run)
 {
 }
 
-static int kvm_handle_debug(CPUState *cs, struct kvm_run *run)
+static bool kvm_handle_debug(CPUState *cs, struct kvm_run *run)
 {
     struct kvm_debug_exit_arch *arch_info = &run->debug.arch;
-    int handle = 0;
 
-    if (cs->singlestep_enabled) {
-        /* TODO: check it was a ss event */
-        handle = 1;
-    } else if (kvm_find_sw_breakpoint(cs, arch_info->address)) {
-        handle = 1;
-    } else {
-        /* If we don't handle this it could be it's really for the
-           guest to handle */
-        qemu_log_mask(LOG_UNIMP, "%s: re-injecting exception not yet implemented\n", __func__);
+    switch (arch_info->exit_type) {
+    case KVM_DEBUG_EXIT_SINGLE_STEP:
+        if (cs->singlestep_enabled) {
+            return true;
+        } else {
+            error_report("Came out of SINGLE STEP when not enabled");
+        }
+        break;
+    case KVM_DEBUG_EXIT_SW_BKPT:
+        if (kvm_find_sw_breakpoint(cs, arch_info->address)) {
+            return true;
+        }
+        break;
+    case KVM_DEBUG_EXIT_HW_BKPT:
+        if (kvm_arm_find_hw_breakpoint(cs, arch_info->address)) {
+            return true;
+        }
+        break;
+    case KVM_DEBUG_EXIT_HW_WTPT:
+        if (kvm_arm_find_hw_watchpoint(cs, arch_info->address)) {
+            return true;
+        }
+        break;
+    default:
+        error_report("%s: unhandled debug exit (%x, %llx)\n",
+                     __func__, arch_info->exit_type, arch_info->address);
     }
 
-    return handle;
+    /* If we don't handle this it could be it's really for the
+       guest to handle */
+    qemu_log_mask(LOG_UNIMP, "%s: re-injecting exception not yet implemented\n", __func__);
+    return false;
 }
 
 int kvm_arch_handle_exit(CPUState *cs, struct kvm_run *run)
@@ -425,6 +445,10 @@ void kvm_arch_update_guest_debug(CPUState *cs, struct kvm_guest_debug *dbg)
     if (kvm_sw_breakpoints_active(cs)) {
         dbg->control |= KVM_GUESTDBG_ENABLE | KVM_GUESTDBG_USE_SW_BP;
     }
+    if (kvm_hw_breakpoints_active(cs)) {
+        dbg->control |= KVM_GUESTDBG_ENABLE | KVM_GUESTDBG_USE_HW_BP;
+        kvm_copy_hw_breakpoint_data(&dbg->arch);
+    }
 }
 
 /* C6.6.29 BRK instruction */
@@ -449,26 +473,6 @@ int kvm_arch_remove_sw_breakpoint(CPUState *cs, struct kvm_sw_breakpoint *bp)
         return -EINVAL;
     }
     return 0;
-}
-
-int kvm_arch_insert_hw_breakpoint(target_ulong addr,
-                                  target_ulong len, int type)
-{
-    qemu_log_mask(LOG_UNIMP, "%s: not implemented\n", __func__);
-    return -EINVAL;
-}
-
-int kvm_arch_remove_hw_breakpoint(target_ulong addr,
-                                  target_ulong len, int type)
-{
-    qemu_log_mask(LOG_UNIMP, "%s: not implemented\n", __func__);
-    return -EINVAL;
-}
-
-
-void kvm_arch_remove_all_hw_breakpoints(void)
-{
-    qemu_log_mask(LOG_UNIMP, "%s: not implemented\n", __func__);
 }
 
 void kvm_arch_init_irq_routing(KVMState *s)
