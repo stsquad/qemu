@@ -215,4 +215,42 @@ static inline const char *gic_class_name(void)
  */
 const char *gicv3_class_name(void);
 
+/**
+ * kvm_arm_hw_debug_active:
+ *
+ * Return TRUE is any hardware breakpoints in use.
+ */
+
+bool kvm_arm_hw_debug_active(CPUState *cs);
+
+/**
+ * kvm_arm_copy_hw_debug_data:
+ *
+ * @ptr: kvm_guest_debug_arch structure
+ *
+ * Copy the architecture specific debug registers into the
+ * kvm_guest_debug ioctl structure.
+ */
+struct kvm_guest_debug_arch;
+
+void kvm_arm_copy_hw_debug_data(struct kvm_guest_debug_arch *ptr);
+
+/**
+ * kvm_arm_find_hw_breakpoint:
+ * @cpu: CPUState
+ * @pc: pc of breakpoint
+ *
+ * Return TRUE if the pc matches one of our breakpoints.
+ */
+bool kvm_arm_find_hw_breakpoint(CPUState *cpu, target_ulong pc);
+
+/**
+ * kvm_arm_find_hw_watchpoint:
+ * @cpu: CPUState
+ * @addr: address of watchpoint
+ *
+ * Return the CPUWatchpoint structure the addr matches one of our watchpoints.
+ */
+CPUWatchpoint *kvm_arm_find_hw_watchpoint(CPUState *cpu, target_ulong addr);
+
 #endif
