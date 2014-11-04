@@ -1113,7 +1113,7 @@ bool qemu_cpu_is_self(CPUState *cpu)
 
 bool qemu_in_vcpu_thread(void)
 {
-    return current_cpu && qemu_cpu_is_self(current_cpu);
+    return current_cpu != NULL;
 }
 
 void qemu_mutex_lock_iothread(void)
