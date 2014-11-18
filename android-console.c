@@ -25,6 +25,7 @@
 #include "hw/misc/goldfish_battery.h"
 #include "hw/input/goldfish_events.h"
 #include "sysemu/sysemu.h"
+#include "hmp.h"
 
 typedef struct {
     int is_udp;
@@ -731,6 +732,7 @@ void android_console_event(Monitor *mon, const QDict *qdict)
 
 enum {
     CMD_AVD,
+    CMD_AVD_STOP,
     CMD_AVD_STATUS,
 };
 
@@ -745,9 +747,24 @@ static const char *avd_help[] = {
     "   avd status           query virtual device status\n"
     "   avd name             query virtual device name\n"
     "   avd snapshot         state snapshot commands\n",
+    /* CMD_AVD_STOP */
+    "'avd stop' stops the virtual device immediately, use 'avd start' to "
+    "continue execution",
     /* CMD_AVD_STATUS */
     "'avd status' will indicate whether the virtual device is running or not",
 };
+
+void android_console_avd_stop(Monitor *mon, const QDict *qdict)
+{
+    if (!runstate_is_running()) {
+        monitor_printf(mon, "KO: virtual device already stopped\n");
+        return;
+    }
+
+    qmp_stop(NULL);
+
+    monitor_printf(mon, "OK\n");
+}
 
 void android_console_avd_status(Monitor *mon, const QDict *qdict)
 {
@@ -766,7 +783,9 @@ void android_console_avd(Monitor *mon, const QDict *qdict)
     int cmd = CMD_AVD;
 
     if (helptext) {
-        if (strstr(helptext, "status")) {
+        if (strstr(helptext, "stop")) {
+            cmd = CMD_AVD_STOP;
+        } else if (strstr(helptext, "status")) {
             cmd = CMD_AVD_STATUS;
         }
     }
