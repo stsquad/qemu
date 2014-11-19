@@ -735,6 +735,7 @@ enum {
     CMD_AVD_STOP,
     CMD_AVD_START,
     CMD_AVD_STATUS,
+    CMD_AVD_NAME,
 };
 
 static const char *avd_help[] = {
@@ -756,6 +757,8 @@ static const char *avd_help[] = {
     "stop it",
     /* CMD_AVD_STATUS */
     "'avd status' will indicate whether the virtual device is running or not",
+    /* CMD_AVD_NAME */
+    "'avd name' will return the name of this virtual device",
 };
 
 void android_console_avd_stop(Monitor *mon, const QDict *qdict)
@@ -790,6 +793,11 @@ void android_console_avd_status(Monitor *mon, const QDict *qdict)
     monitor_printf(mon, "OK\n");
 }
 
+void android_console_avd_name(Monitor *mon, const QDict *qdict)
+{
+    monitor_printf(mon, "KO: 'avd name' is currently unsupported\n");
+}
+
 void android_console_avd(Monitor *mon, const QDict *qdict)
 {
     /* This only gets called for bad subcommands and help requests */
@@ -805,6 +813,8 @@ void android_console_avd(Monitor *mon, const QDict *qdict)
             cmd = CMD_AVD_START;
         } else if (strstr(helptext, "status")) {
             cmd = CMD_AVD_STATUS;
+        } else if (strstr(helptext, "name")) {
+            cmd = CMD_AVD_NAME;
         }
     }
 
