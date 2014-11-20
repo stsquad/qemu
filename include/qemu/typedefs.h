@@ -7,6 +7,8 @@ typedef struct QEMUTimer QEMUTimer;
 typedef struct QEMUTimerListGroup QEMUTimerListGroup;
 typedef struct QEMUFile QEMUFile;
 typedef struct QEMUBH QEMUBH;
+typedef struct QEMUPoll QEMUPoll;
+typedef struct QEMUPollEvent QEMUPollEvent;
 
 typedef struct AioContext AioContext;
 
