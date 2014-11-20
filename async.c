@@ -27,6 +27,7 @@
 #include "block/thread-pool.h"
 #include "qemu/main-loop.h"
 #include "qemu/atomic.h"
+#include "qemu/poll.h"
 
 /***********************************************************/
 /* bottom halves (can be seen as timers which expire ASAP) */
@@ -292,6 +293,8 @@ AioContext *aio_context_new(Error **errp)
         return NULL;
     }
     g_source_set_can_recurse(&ctx->source, true);
+    ctx->qpoll = qemu_poll_new();
+    ctx->events = g_array_new(FALSE, FALSE, sizeof(QEMUPollEvent));
     aio_set_event_notifier(ctx, &ctx->notifier,
                            (EventNotifierHandler *)
                            event_notifier_test_and_clear);

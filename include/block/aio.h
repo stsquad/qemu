@@ -82,6 +82,12 @@ struct AioContext {
     /* Used for aio_notify.  */
     EventNotifier notifier;
 
+    /* qemu_poll context */
+    QEMUPoll *qpoll;
+
+    /* QEMUPollEvents for qemu_poll_get_events() */
+    GArray *events;
+
     /* Thread pool for performing work and receiving completion callbacks */
     struct ThreadPool *thread_pool;
 

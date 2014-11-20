@@ -17,6 +17,7 @@
 #include "block/block.h"
 #include "qemu/queue.h"
 #include "qemu/sockets.h"
+#include "qemu/poll.h"
 
 struct AioHandler
 {
@@ -54,6 +55,7 @@ void aio_set_fd_handler(AioContext *ctx,
     /* Are we deleting the fd handler? */
     if (!io_read && !io_write) {
         if (node) {
+            qemu_poll_del(ctx->qpoll, fd);
             g_source_remove_poll(&ctx->source, &node->pfd);
 
             /* If the lock is held, just mark the node as deleted */
@@ -70,13 +72,15 @@ void aio_set_fd_handler(AioContext *ctx,
             }
         }
     } else {
-        if (node == NULL) {
+        if (node) {
+            /* Remove the old */
+            qemu_poll_del(ctx->qpoll, fd);
+            g_source_remove_poll(&ctx->source, &node->pfd);
+        } else {
             /* Alloc and insert if it's not already there */
             node = g_new0(AioHandler, 1);
             node->pfd.fd = fd;
             QLIST_INSERT_HEAD(&ctx->aio_handlers, node, node);
-
-            g_source_add_poll(&ctx->source, &node->pfd);
         }
         /* Update handler with latest information */
         node->io_read = io_read;
@@ -85,6 +89,8 @@ void aio_set_fd_handler(AioContext *ctx,
 
         node->pfd.events = (io_read ? G_IO_IN | G_IO_HUP | G_IO_ERR : 0);
         node->pfd.events |= (io_write ? G_IO_OUT | G_IO_ERR : 0);
+        qemu_poll_add(ctx->qpoll, fd, node->pfd.events, node);
+        g_source_add_poll(&ctx->source, &node->pfd);
     }
 
     aio_notify(ctx);
@@ -271,15 +277,23 @@ bool aio_poll(AioContext *ctx, bool blocking)
     if (timeout) {
         aio_context_release(ctx);
     }
-    ret = qemu_poll_ns((GPollFD *)pollfds, npfd, timeout);
+    ret = qemu_poll(ctx->qpoll, timeout);
     if (timeout) {
         aio_context_acquire(ctx);
     }
 
     /* if we have any readable fds, dispatch event */
     if (ret > 0) {
-        for (i = 0; i < npfd; i++) {
-            nodes[i]->pfd.revents = pollfds[i].revents;
+        int r;
+        g_array_set_size(ctx->events, ret);
+        r = qemu_poll_get_events(ctx->qpoll,
+                                (QEMUPollEvent *)ctx->events->data,
+                                ret);
+        assert(r == ret);
+        for (i = 0; i < r; i++) {
+            QEMUPollEvent *e = &g_array_index(ctx->events, QEMUPollEvent, i);
+            node = e->opaque;
+            node->pfd.revents = e->revents;
         }
     }
 
