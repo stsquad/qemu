@@ -27,6 +27,7 @@
 #include "block/thread-pool.h"
 #include "qemu/main-loop.h"
 #include "qemu/atomic.h"
+#include "qemu/poll.h"
 
 /***********************************************************/
 /* bottom halves (can be seen as timers which expire ASAP) */
@@ -232,7 +233,6 @@ aio_ctx_finalize(GSource     *source)
     event_notifier_cleanup(&ctx->notifier);
     rfifolock_destroy(&ctx->lock);
     qemu_mutex_destroy(&ctx->bh_lock);
-    g_array_free(ctx->pollfds, TRUE);
     timerlistgroup_deinit(&ctx->tlg);
 }
 
@@ -300,10 +300,11 @@ AioContext *aio_context_new(Error **errp)
         error_setg_errno(errp, -ret, "Failed to initialize event notifier");
         return NULL;
     }
+    ctx->qpoll = qemu_poll_new();
+    ctx->events = g_array_new(FALSE, FALSE, sizeof(QEMUPollEvent));
     aio_set_event_notifier(ctx, &ctx->notifier,
                            (EventNotifierHandler *)
                            event_notifier_test_and_clear);
-    ctx->pollfds = g_array_new(FALSE, FALSE, sizeof(GPollFD));
     ctx->thread_pool = NULL;
     qemu_mutex_init(&ctx->bh_lock);
     rfifolock_init(&ctx->lock, aio_rfifolock_cb, ctx);
