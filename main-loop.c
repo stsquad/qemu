@@ -29,6 +29,7 @@
 #include "slirp/libslirp.h"
 #include "qemu/main-loop.h"
 #include "block/aio.h"
+#include "qemu/poll.h"
 
 #ifndef _WIN32
 
@@ -130,6 +131,7 @@ void qemu_notify_event(void)
 }
 
 static GArray *gpollfds;
+static QEMUPoll *qpoll;
 
 int qemu_init_main_loop(Error **errp)
 {
@@ -150,6 +152,7 @@ int qemu_init_main_loop(Error **errp)
         return -EMFILE;
     }
     gpollfds = g_array_new(FALSE, FALSE, sizeof(GPollFD));
+    qpoll = qemu_poll_new();
     src = aio_get_g_source(qemu_aio_context);
     g_source_attach(src, NULL);
     g_source_unref(src);
@@ -207,6 +210,8 @@ static int os_host_main_loop_wait(int64_t timeout)
 {
     int ret;
     static int spin_counter;
+    QEMUPollEvent events[1024];
+    int r, i;
 
     glib_pollfds_fill(&timeout);
 
@@ -236,7 +241,17 @@ static int os_host_main_loop_wait(int64_t timeout)
         spin_counter++;
     }
 
-    ret = qemu_poll_ns((GPollFD *)gpollfds->data, gpollfds->len, timeout);
+    qemu_poll_set_fds(qpoll, (GPollFD *)gpollfds->data, gpollfds->len);
+    ret = qemu_poll(qpoll, timeout);
+    if (ret > 0) {
+        ret = MIN(ret, sizeof(events) / sizeof(QEMUPollEvent));
+        r = qemu_poll_get_events(qpoll, events, ret);
+        for (i = 0; i < r; i++) {
+            GPollFD *fd = events[i].opaque;
+            fd->revents = events[i].revents;
+        }
+        ret = r;
+    }
 
     if (timeout) {
         qemu_mutex_lock_iothread();
@@ -389,9 +404,11 @@ static int os_host_main_loop_wait(int64_t timeout)
 {
     GMainContext *context = g_main_context_default();
     GPollFD poll_fds[1024 * 2]; /* this is probably overkill */
+    QEMUPollEvent poll_events[1024 * 2];
     int select_ret = 0;
-    int g_poll_ret, ret, i, n_poll_fds;
+    int nevents, ret, i, n_poll_fds;
     PollingEntry *pe;
+    QEMUPollEvent *events;
     WaitObjects *w = &wait_objects;
     gint poll_timeout;
     int64_t poll_timeout_ns;
@@ -441,10 +458,18 @@ static int os_host_main_loop_wait(int64_t timeout)
     poll_timeout_ns = qemu_soonest_timeout(poll_timeout_ns, timeout);
 
     qemu_mutex_unlock_iothread();
-    g_poll_ret = qemu_poll_ns(poll_fds, n_poll_fds + w->num, poll_timeout_ns);
+
+    qemu_poll_set_fds(qpoll, (GPollFD *)poll_fds, n_poll_fds + w->num)
+    nevents = qemu_poll(qpoll, poll_timeout_ns);
 
     qemu_mutex_lock_iothread();
-    if (g_poll_ret > 0) {
+    if (nevents > 0) {
+        r = qemu_poll_get_events(qpoll, poll_events, nevents);
+        for (i = 0; i < r; i++) {
+            GPollFD *fd = poll_events[i].opaque;
+            fd->revents = poll_events[i].revents;
+        }
+
         for (i = 0; i < w->num; i++) {
             w->revents[i] = poll_fds[n_poll_fds + i].revents;
         }
@@ -459,7 +484,7 @@ static int os_host_main_loop_wait(int64_t timeout)
         g_main_context_dispatch(context);
     }
 
-    return select_ret || g_poll_ret;
+    return select_ret || nevents;
 }
 #endif
 
