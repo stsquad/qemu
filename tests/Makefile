@@ -41,6 +41,7 @@ check-unit-$(CONFIG_POSIX) += tests/test-rfifolock$(EXESUF)
 check-unit-y += tests/test-throttle$(EXESUF)
 gcov-files-test-aio-$(CONFIG_WIN32) = aio-win32.c
 gcov-files-test-aio-$(CONFIG_POSIX) = aio-posix.c
+check-unit-y += tests/test-poll$(EXESUF)
 check-unit-y += tests/test-thread-pool$(EXESUF)
 gcov-files-test-thread-pool-y = thread-pool.c
 gcov-files-test-hbitmap-y = util/hbitmap.c
@@ -251,6 +252,7 @@ tests/check-qjson$(EXESUF): tests/check-qjson.o libqemuutil.a libqemustub.a
 tests/check-qom-interface$(EXESUF): tests/check-qom-interface.o $(qom-core-obj) libqemuutil.a libqemustub.a
 tests/test-coroutine$(EXESUF): tests/test-coroutine.o $(block-obj-y) libqemuutil.a libqemustub.a
 tests/test-aio$(EXESUF): tests/test-aio.o $(block-obj-y) libqemuutil.a libqemustub.a
+tests/test-poll$(EXESUF): tests/test-poll.o $(block-obj-y) libqemuutil.a libqemustub.a
 tests/test-rfifolock$(EXESUF): tests/test-rfifolock.o libqemuutil.a libqemustub.a
 tests/test-throttle$(EXESUF): tests/test-throttle.o $(block-obj-y) libqemuutil.a libqemustub.a
 tests/test-thread-pool$(EXESUF): tests/test-thread-pool.o $(block-obj-y) libqemuutil.a libqemustub.a
