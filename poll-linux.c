@@ -12,19 +12,51 @@
  */
 
 #include <sys/epoll.h>
+
+#define USE_TIMERFD CONFIG_TIMERFD
+
+#ifdef USE_TIMERFD
+#include <sys/timerfd.h>
+#endif
+
 #include <glib.h>
 #include <poll.h>
 #include "qemu-common.h"
 #include "qemu/timer.h"
 #include "qemu/poll.h"
 
+
 struct QEMUPoll {
     int epollfd;
+#if USE_TIMERFD
+    int timerfd;
+#endif
     struct epoll_event *events;
     int max_events;
     int nevents;
     GHashTable *fds;
 };
+
+static void qemu_poll_init_timerfd(QEMUPoll *qpoll)
+{
+#if USE_TIMERFD
+    int r;
+    struct epoll_event ev;
+    qpoll->timerfd = timerfd_create(CLOCK_MONOTONIC,
+                                    TFD_NONBLOCK | TFD_CLOEXEC);
+    if (qpoll->timerfd < 0) {
+        perror("timerfd_create");
+        abort();
+    }
+    ev.events = EPOLLIN | EPOLLOUT | EPOLLERR | EPOLLHUP;
+    ev.data.fd = qpoll->timerfd;
+    r = epoll_ctl(qpoll->epollfd, EPOLL_CTL_ADD, qpoll->timerfd, &ev);
+    if (r) {
+        perror("epoll_ctl add timerfd");
+        abort();
+    }
+#endif
+}
 
 QEMUPoll *qemu_poll_new(void)
 {
@@ -40,6 +72,7 @@ QEMUPoll *qemu_poll_new(void)
     qpoll->events = g_new(struct epoll_event, 1);
     qpoll->fds = g_hash_table_new_full(g_int_hash, g_int_equal,
                                        NULL, g_free);
+    qemu_poll_init_timerfd(qpoll);
     return qpoll;
 }
 
@@ -48,10 +81,13 @@ void qemu_poll_free(QEMUPoll *qpoll)
     g_free(qpoll->events);
     g_hash_table_destroy(qpoll->fds);
     close(qpoll->epollfd);
+#if USE_TIMERFD
+    close(qpoll->timerfd);
+#endif
     g_free(qpoll);
 }
 
-int qemu_poll(QEMUPoll *qpoll, int64_t timeout_ns)
+static int qemu_poll_ppoll(QEMUPoll *qpoll, int64_t timeout_ns)
 {
     int r;
     struct pollfd fd = {
@@ -76,6 +112,43 @@ int qemu_poll(QEMUPoll *qpoll, int64_t timeout_ns)
         qpoll->nevents = r;
     }
     return r;
+}
+
+#if USE_TIMERFD
+static int qemu_poll_timerfd(QEMUPoll *qpoll, int64_t timeout_ns)
+{
+    int r;
+    struct itimerspec its = { { 0 } };
+
+    if (timeout_ns > 0) {
+        its.it_value.tv_sec = timeout_ns / 1000000000LL;
+        its.it_value.tv_nsec = timeout_ns % 1000000000LL;
+    }
+
+    /* The timer must be set even when there is no timeout so the readable
+     * timerfd is cleared (we never call read(2) on it).
+     */
+    r = timerfd_settime(qpoll->timerfd, 0, &its, NULL);
+
+    assert(r == 0);
+    if (r < 0) {
+        return r;
+    }
+    r = epoll_wait(qpoll->epollfd,
+                   qpoll->events,
+                   qpoll->max_events,
+                   timeout_ns > 0 ? -1 : timeout_ns);
+    qpoll->nevents = r;
+    return r;
+}
+#endif
+
+int qemu_poll(QEMUPoll *qpoll, int64_t timeout_ns)
+{
+#if USE_TIMERFD
+    return qemu_poll_timerfd(qpoll, timeout_ns);
+#endif
+    return qemu_poll_ppoll(qpoll, timeout_ns);
 }
 
 static inline uint32_t epoll_event_from_gio_events(int gio_events)
@@ -220,6 +293,11 @@ int qemu_poll_get_events(QEMUPoll *qpoll,
     for (i = 0; i < MIN(qpoll->nevents, max_events); i++) {
         ev = &qpoll->events[i];
         fd = ev->data.fd;
+#if USE_TIMERFD
+        if (fd == qpoll->timerfd) {
+            continue;
+        }
+#endif
         p = g_hash_table_lookup(qpoll->fds, &fd);
         assert(p);
 
