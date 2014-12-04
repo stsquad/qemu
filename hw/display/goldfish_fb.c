@@ -15,6 +15,8 @@
 #include "ui/console.h"
 #include "ui/pixel_ops.h"
 #include "trace.h"
+#include "android-console.h"
+#include "monitor/monitor.h"
 
 #define BITS 8
 #include "goldfish_fb_template.h"
@@ -63,7 +65,22 @@ struct goldfish_fb_state {
     int      dpi;
 };
 
-#define  GOLDFISH_FB_SAVE_VERSION  2
+/* Console hooks */
+void android_console_rotate_screen(Monitor *mon, const QDict *qdict)
+{
+    DeviceState *dev = qdev_find_recursive(sysbus_get_default(), TYPE_GOLDFISH_FB);
+    if (dev) {
+        struct goldfish_fb_state *s = GOLDFISH_FB(dev);
+        DisplaySurface *ds = qemu_console_surface(s->con);
+        s->rotation = ((s->rotation + 1) % 4);
+        s->need_update = 1;
+        fprintf(stderr,"%s: rotate screen to %d\n", __func__, s->rotation);
+        qemu_console_resize(s->con, surface_height(ds), surface_width(ds));
+    } else {
+        fprintf(stderr,"%s: unable to find FB dev\n", __func__);
+    }
+}
+
 #define  GOLDFISH_FB_SAVE_VERSION  3
 
 static void goldfish_fb_save(QEMUFile*  f, void*  opaque)
@@ -395,6 +412,8 @@ static int goldfish_fb_init(SysBusDevice *sbdev)
 {
     DeviceState *dev = DEVICE(sbdev);
     struct goldfish_fb_state *s = GOLDFISH_FB(dev);
+
+    dev->id = g_strdup(TYPE_GOLDFISH_FB);
 
     sysbus_init_irq(sbdev, &s->irq);
 

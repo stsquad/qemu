@@ -53,7 +53,7 @@ static mon_cmd_t android_cmds[] = {
         .params = "",
         .help = "manage port redirections",
         .mhandler.cmd = android_console_redir,
-        .sub_table = android_redir_cmds,
+        .sub_cmds.static_table = android_redir_cmds,
     },
     { NULL, NULL, },
 };
