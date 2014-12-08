@@ -22,6 +22,7 @@
  * THE SOFTWARE.
  */
 #include <dirent.h>
+#include <glib.h>
 #include "hw/hw.h"
 #include "monitor/qdev.h"
 #include "hw/usb.h"
@@ -124,27 +125,6 @@ struct MonitorCompletionData {
     void (*user_print)(Monitor *mon, const QObject *data);
 };
 
-typedef struct mon_cmd_t {
-    const char *name;
-    const char *args_type;
-    const char *params;
-    const char *help;
-    void (*user_print)(Monitor *mon, const QObject *data);
-    union {
-        void (*cmd)(Monitor *mon, const QDict *qdict);
-        int  (*cmd_new)(Monitor *mon, const QDict *params, QObject **ret_data);
-        int  (*cmd_async)(Monitor *mon, const QDict *params,
-                          MonitorCompletion *cb, void *opaque);
-    } mhandler;
-    int flags;
-    /* @sub_table is a list of 2nd level of commands. If it do not exist,
-     * mhandler should be used. If it exist, sub_table[?].mhandler should be
-     * used, and mhandler of 1st level plays the role of help function.
-     */
-    struct mon_cmd_t *sub_table;
-    void (*command_completion)(ReadLineState *rs, int nb_args, const char *str);
-} mon_cmd_t;
-
 /* file descriptors passed via SCM_RIGHTS */
 typedef struct mon_fd_t mon_fd_t;
 struct mon_fd_t {
@@ -211,7 +191,13 @@ struct Monitor {
     CPUState *mon_cpu;
     BlockDriverCompletionFunc *password_completion_cb;
     void *password_opaque;
-    mon_cmd_t *cmd_table;
+
+    /* Monitors created with the MONITOR_DYNAMIC_CMDS flag
+     * will index the dynamic table. This table can be modified on the
+     * fly to add new target specific commands.
+     */
+    cmd_table_t cmds;
+
     QError *error;
     const char *prompt;
     const char *banner;
@@ -619,7 +605,7 @@ static void monitor_data_init(Monitor *mon)
     qemu_mutex_init(&mon->out_lock);
     mon->outbuf = qstring_new();
     /* Use *mon_cmds by default. */
-    mon->cmd_table = mon_cmds;
+    mon->cmds.static_table = mon_cmds;
 }
 
 static void monitor_data_destroy(Monitor *mon)
@@ -826,9 +812,12 @@ static void help_cmd_dump_one(Monitor *mon,
     monitor_printf(mon, "%s %s -- %s\n", cmd->name, cmd->params, cmd->help);
 }
 
+static void help_cmd_dump_dynamic(Monitor *mon, GArray *cmd_array,
+                                  char **args, int nb_args, int arg_index);
+
 /* @args[@arg_index] is the valid command need to find in @cmds */
-static void help_cmd_dump(Monitor *mon, const mon_cmd_t *cmds,
-                          char **args, int nb_args, int arg_index)
+static void help_cmd_dump_static(Monitor *mon, const mon_cmd_t *cmds,
+                                 char **args, int nb_args, int arg_index)
 {
     const mon_cmd_t *cmd;
 
@@ -843,16 +832,38 @@ static void help_cmd_dump(Monitor *mon, const mon_cmd_t *cmds,
     /* Find one entry to dump */
     for (cmd = cmds; cmd->name != NULL; cmd++) {
         if (compare_cmd(args[arg_index], cmd->name)) {
-            if (cmd->sub_table) {
-                /* continue with next arg */
-                help_cmd_dump(mon, cmd->sub_table,
-                              args, nb_args, arg_index + 1);
+            if (mon->flags & MONITOR_DYNAMIC_CMDS) {
+                if (cmd->sub_cmds.dynamic_table) {
+                    /* continue with next arg */
+                    help_cmd_dump_dynamic(mon, cmd->sub_cmds.dynamic_table,
+                                          args, nb_args, arg_index + 1);
+
+                } else {
+                    help_cmd_dump_one(mon, cmd, args, arg_index);
+                }
             } else {
-                help_cmd_dump_one(mon, cmd, args, arg_index);
+                if (cmd->sub_cmds.static_table) {
+                    /* continue with next arg */
+                    help_cmd_dump_static(mon, cmd->sub_cmds.static_table,
+                                         args, nb_args, arg_index + 1);
+                } else {
+                    help_cmd_dump_one(mon, cmd, args, arg_index);
+                }
             }
             break;
         }
     }
+}
+
+/* @args[@arg_index] is the valid command need to find in @cmds */
+static void help_cmd_dump_dynamic(Monitor *mon, GArray *cmd_array,
+                                  char **args, int nb_args, int arg_index)
+{
+    mon_cmd_t *cmds = (mon_cmd_t *) cmd_array->data;
+
+    g_assert(mon->flags & MONITOR_DYNAMIC_CMDS);
+
+    help_cmd_dump_static(mon, cmds, args, nb_args, arg_index);
 }
 
 static void help_cmd(Monitor *mon, const char *name)
@@ -879,8 +890,11 @@ static void help_cmd(Monitor *mon, const char *name)
     }
 
     /* 2. dump the contents according to parsed args */
-    help_cmd_dump(mon, mon->cmd_table, args, nb_args, 0);
-
+    if (mon->flags & MONITOR_DYNAMIC_CMDS) {
+        help_cmd_dump_dynamic(mon, mon->cmds.dynamic_table, args, nb_args, 0);
+    } else {
+        help_cmd_dump_static(mon, mon->cmds.static_table, args, nb_args, 0);
+    }
     free_cmdline_args(args, nb_args);
 }
 
@@ -889,11 +903,20 @@ static void do_help_cmd(Monitor *mon, const QDict *qdict)
     help_cmd(mon, qdict_get_try_str(qdict, "name"));
 }
 
+static mon_cmd_t * get_command_table(Monitor *mon, cmd_table_t cmds)
+{
+    if (mon->flags & MONITOR_DYNAMIC_CMDS) {
+        return (mon_cmd_t *) (cmds.dynamic_table?cmds.dynamic_table->data:NULL);
+    } else {
+        return cmds.static_table;
+    }
+}
+
 static void android_console_help(Monitor *mon, const QDict *qdict)
 {
     const char *name = qdict_get_try_str(qdict, "helptext");
     const mon_cmd_t *cmd;
-    const mon_cmd_t *cmds = mon->cmd_table;
+    const mon_cmd_t *cmds = get_command_table(mon, mon->cmds);
     char *args[MAX_ARGS];
     int nb_args = 0;
     int thisarg = 0;
@@ -917,6 +940,8 @@ static void android_console_help(Monitor *mon, const QDict *qdict)
     }
 
     for (;;) {
+        mon_cmd_t *sub_cmds;
+
         for (cmd = cmds; cmd->name; cmd++) {
             if (compare_cmd(args[thisarg], cmd->name)) {
                 break;
@@ -938,8 +963,9 @@ static void android_console_help(Monitor *mon, const QDict *qdict)
         }
 
         thisarg++;
+        sub_cmds = get_command_table(mon, cmd->sub_cmds);
 
-        if (thisarg >= nb_args || !cmd->sub_table) {
+        if (thisarg >= nb_args || !sub_cmds) {
             /* For subtables, the command handler for the entry in the 1st
              * level of commands deals with help (including "help subcommand"
              * where there is no following second level command in the help
@@ -947,7 +973,7 @@ static void android_console_help(Monitor *mon, const QDict *qdict)
              */
             if (parent_cmd) {
                 parent_cmd->mhandler.cmd(mon, qdict);
-            } else if (cmd->sub_table) {
+            } else if (sub_cmds) {
                 cmd->mhandler.cmd(mon, qdict);
             } else {
                 monitor_printf(mon, "%s\nOK\n", cmd->help);
@@ -956,7 +982,7 @@ static void android_console_help(Monitor *mon, const QDict *qdict)
         }
 
         parent_cmd = cmd;
-        cmds = cmd->sub_table;
+        cmds = sub_cmds;
     }
 }
 
@@ -3770,12 +3796,13 @@ static const mon_cmd_t *qmp_find_cmd(const char *cmdname)
 static const mon_cmd_t *monitor_parse_command(Monitor *mon,
                                               const char *cmdline,
                                               int start,
-                                              mon_cmd_t *table,
+                                              const mon_cmd_t *table,
                                               QDict *qdict)
 {
     const char *p, *typestr;
     int c;
     const mon_cmd_t *cmd;
+    const mon_cmd_t *sub_cmds;
     char cmdname[256];
     char buf[1024];
     char *key;
@@ -3791,7 +3818,7 @@ static const mon_cmd_t *monitor_parse_command(Monitor *mon,
 
     cmd = search_dispatch_table(table, cmdname);
     if (!cmd) {
-        if (mon->cmd_table == android_cmds) {
+        if (mon->flags & MONITOR_ANDROID_CONSOLE) {
             monitor_printf(mon, "KO: unknown command, try 'help'\n");
         } else {
             monitor_printf(mon, "unknown command: '%.*s'\n",
@@ -3805,13 +3832,14 @@ static const mon_cmd_t *monitor_parse_command(Monitor *mon,
         p++;
     }
     /* search sub command */
-    if (cmd->sub_table != NULL) {
+    sub_cmds = get_command_table(mon, cmd->sub_cmds);
+    if (sub_cmds) {
         /* check if user set additional command */
         if (*p == '\0') {
             return cmd;
         }
         return monitor_parse_command(mon, cmdline, p - cmdline,
-                                     cmd->sub_table, qdict);
+                                     sub_cmds, qdict);
     }
 
     /* parse the parameters */
@@ -4195,7 +4223,9 @@ static void handle_user_command(Monitor *mon, const char *cmdline)
 
     qdict = qdict_new();
 
-    cmd = monitor_parse_command(mon, cmdline, 0, mon->cmd_table, qdict);
+    cmd = monitor_parse_command(mon, cmdline, 0,
+                                get_command_table(mon, mon->cmds),
+                                qdict);
     if (!cmd)
         goto out;
 
@@ -4771,6 +4801,7 @@ static void monitor_find_completion_by_table(Monitor *mon,
             cmd_completion(mon, cmdname, cmd->name);
         }
     } else {
+        mon_cmd_t *sub_cmds;
         /* find the command */
         for (cmd = cmd_table; cmd->name != NULL; cmd++) {
             if (compare_cmd(args[0], cmd->name)) {
@@ -4781,9 +4812,10 @@ static void monitor_find_completion_by_table(Monitor *mon,
             return;
         }
 
-        if (cmd->sub_table) {
+        sub_cmds = get_command_table(mon, cmd->sub_cmds);
+        if (sub_cmds) {
             /* do the job again */
-            return monitor_find_completion_by_table(mon, cmd->sub_table,
+            return monitor_find_completion_by_table(mon, sub_cmds,
                                                     &args[1], nb_args - 1);
         }
         if (cmd->command_completion) {
@@ -4859,7 +4891,9 @@ static void monitor_find_completion(void *opaque,
     }
 
     /* 2. auto complete according to args */
-    monitor_find_completion_by_table(mon, mon->cmd_table, args, nb_args);
+    monitor_find_completion_by_table(mon,
+                                     get_command_table(mon, mon->cmds),
+                                     args, nb_args);
 
 cleanup:
     free_cmdline_args(args, nb_args);
@@ -5418,7 +5452,48 @@ static void __attribute__((constructor)) monitor_lock_init(void)
     qemu_mutex_init(&monitor_lock);
 }
 
-void monitor_init(CharDriverState *chr, int flags)
+void monitor_add_command(Monitor *mon, mon_cmd_t *cmd)
+{
+    if (mon->flags & MONITOR_DYNAMIC_CMDS) {
+        qemu_mutex_lock(&monitor_lock);
+        g_array_append_val(mon->cmds.dynamic_table, *cmd);
+        qemu_mutex_unlock(&monitor_lock);
+    } else {
+        mon->print_error(mon,
+                         "Unable to add %s to non-dynamic monitor\n",
+                         cmd->name);
+    }
+}
+
+/* Create a dynamic copy of a static command table */
+static GArray * make_dynamic_table(mon_cmd_t *cmds)
+{
+    int i = 0;
+    GArray *cmd_array;
+
+    while (cmds[i].name) {
+        i++;
+    }
+
+    cmd_array = g_array_sized_new(true, true,
+                                  sizeof(mon_cmd_t),
+                                  i);
+    g_array_append_vals(cmd_array, cmds, i);
+
+    /* Now go through the array and convert any static sub_cmd tables
+     * into dynamic ones */
+    for (i=0; i<cmd_array->len; i++) {
+        mon_cmd_t *cmd = &g_array_index(cmd_array, mon_cmd_t, i);
+        if (cmd->sub_cmds.static_table) {
+            cmd->sub_cmds.dynamic_table =
+                make_dynamic_table(cmd->sub_cmds.static_table);
+        }
+    }
+
+    return cmd_array;
+}
+
+Monitor * monitor_init(CharDriverState *chr, int flags)
 {
     static int is_first_init = 1;
     Monitor *mon;
@@ -5437,10 +5512,14 @@ void monitor_init(CharDriverState *chr, int flags)
     mon->print_error = monitor_printf;
 
     if (flags & MONITOR_ANDROID_CONSOLE) {
-        mon->cmd_table = android_cmds;
+        mon->cmds.static_table = android_cmds;
         mon->prompt = "";
         mon->banner = "Android Console: type 'help' for a list of commands";
         mon->print_error = android_monitor_print_error;
+    }
+
+    if (flags & MONITOR_DYNAMIC_CMDS) {
+        mon->cmds.dynamic_table = make_dynamic_table(mon->cmds.static_table);
     }
 
     mon->chr = chr;
@@ -5472,6 +5551,8 @@ void monitor_init(CharDriverState *chr, int flags)
 
     if (!default_mon || (flags & MONITOR_IS_DEFAULT))
         default_mon = mon;
+
+    return mon;
 }
 
 static void bdrv_password_cb(void *opaque, const char *password,
