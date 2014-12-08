@@ -8,15 +8,45 @@
 
 extern Monitor *cur_mon;
 
+typedef void (MonitorCompletion)(void *opaque, QObject *ret_data);
+
+typedef union cmd_table_t {
+    struct mon_cmd_t *static_table;
+    GArray           *dynamic_table;
+} cmd_table_t;
+
+typedef struct mon_cmd_t {
+    const char *name;
+    const char *args_type;
+    const char *params;
+    const char *help;
+    union {
+        void (*cmd)(Monitor *mon, const QDict *qdict);
+        void (*cmd_new)(QDict *params, QObject **ret_data, Error **errp);
+    } mhandler;
+    /* @sub_cmd is a list of 2nd level of commands. If it do not exist,
+     * mhandler should be used. If it exist, sub_table[?].mhandler should be
+     * used, and mhandler of 1st level plays the role of help
+     * function.
+     *
+     * .hx defined sub_cmds can only be static.
+     */
+    cmd_table_t sub_cmds;
+
+    void (*command_completion)(ReadLineState *rs, int nb_args, const char *str);
+} mon_cmd_t;
+
 /* flags for monitor_init */
 #define MONITOR_IS_DEFAULT    0x01
 #define MONITOR_USE_READLINE  0x02
 #define MONITOR_USE_CONTROL   0x04
 #define MONITOR_USE_PRETTY    0x08
+#define MONITOR_DYNAMIC_CMDS  0x10
 
 bool monitor_cur_is_qmp(void);
 
-void monitor_init(CharDriverState *chr, int flags);
+Monitor * monitor_init(CharDriverState *chr, int flags);
+void monitor_add_command(Monitor *mon, mon_cmd_t *cmd);
 
 int monitor_suspend(Monitor *mon);
 void monitor_resume(Monitor *mon);

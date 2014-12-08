@@ -1753,7 +1753,7 @@ ETEXI
         .params     = "[subcommand]",
         .help       = "show various information about the system state",
         .mhandler.cmd = hmp_info_help,
-        .sub_table = info_cmds,
+        .sub_cmds.static_table = info_cmds,
     },
 
 STEXI
