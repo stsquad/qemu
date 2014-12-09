@@ -462,7 +462,21 @@ static CharDriverState *try_to_create_console_chardev(int portno)
     return chr;
 }
 
-static void initialize_console_and_adb(void)
+/* Console hooks */
+static void android_console_rotate_screen(Monitor *mon, const QDict *qdict)
+{
+    fprintf(stderr,"%s: I'm here\n", __func__);
+}
+
+static mon_cmd_t rotate_cmd = {
+    .name = "rotate",
+    .args_type = "",
+    .params = "",
+    .help = "rotate the screen by 90 degrees",
+    .mhandler.cmd = android_console_rotate_screen,
+};
+
+static void initialize_console_and_adb(VirtBoardInfo *vbi)
 {
     /* Initialize the console and ADB, which must listen on two
      * consecutive TCP ports starting from 5555 and working up until
@@ -488,7 +502,12 @@ static void initialize_console_and_adb(void)
          * This is equivalent to
          * "-mon chardev=private-chardev,mode=android-console"
          */
-        monitor_init(chr, MONITOR_ANDROID_CONSOLE | MONITOR_USE_READLINE);
+        vbi->android_monitor = monitor_init(chr,
+                                            MONITOR_ANDROID_CONSOLE |
+                                            MONITOR_USE_READLINE |
+                                            MONITOR_DYNAMIC_CMDS);
+        monitor_add_command(vbi->android_monitor,
+                            &rotate_cmd);
 
         printf("console on port %d, ADB on port %d\n", baseport, baseport + 1);
         return;
@@ -580,7 +599,7 @@ static void ranchu_init(MachineState *machine)
     /* Initialize the Android console and adb connection
      * (must be done after the pipe has been realized).
      */
-    initialize_console_and_adb();
+    initialize_console_and_adb(vbi);
 
     vbi->bootinfo.ram_size = machine->ram_size;
     vbi->bootinfo.kernel_filename = machine->kernel_filename;
