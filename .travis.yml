@@ -19,6 +19,8 @@ env:
     - NET_PKGS="libseccomp-dev libgnutls-dev libssh2-1-dev  libspice-server-dev libspice-protocol-dev libnss3-dev"
     - GUI_PKGS="libgtk-3-dev libvte-2.90-dev libsdl1.2-dev libpng12-dev libpixman-1-dev"
     - EXTRA_PKGS=""
+    - BEFORE_INSTALL=""
+    - AFTER_SUCCESS=""
   matrix:
     # Group major targets together with their linux-user counterparts
     - TARGETS=alpha-softmmu,alpha-linux-user
@@ -45,10 +47,13 @@ before_install:
   - git submodule update --init --recursive
   - sudo apt-get update -qq
   - sudo apt-get install -qq ${CORE_PKGS} ${NET_PKGS} ${GUI_PKGS} ${EXTRA_PKGS}
+  - ${BEFORE_INSTALL}
 before_script:
   - ./configure --target-list=${TARGETS} --enable-debug-tcg ${EXTRA_CONFIG}
 script:
   - make -j2 && ${TEST_CMD}
+after_success:
+  - ${AFTER_SUCCESS}
 matrix:
   # We manually include a number of additional build for non-standard bits
   include:
@@ -79,6 +84,9 @@ matrix:
     # Currently configure doesn't force --disable-pie
     - env: TARGETS=i386-softmmu,x86_64-softmmu
            EXTRA_CONFIG="--enable-gprof --enable-gcov --disable-pie"
+           BEFORE_INSTALL="sudo pip install cpp-coveralls"
+           TEST_CMD="make check"
+           AFTER_SUCCESS="coveralls --exclude lib --exclude tests --gcov-options '\-lp'"
       compiler: gcc
     - env: TARGETS=i386-softmmu,x86_64-softmmu
            EXTRA_PKGS="sparse"
