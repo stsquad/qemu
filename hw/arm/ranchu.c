@@ -39,6 +39,8 @@
 #include "sysemu/char.h"
 #include "monitor/monitor.h"
 #include "hw/misc/android_pipe.h"
+#include "hw/display/goldfish_fb.h"
+#include "hw/input/goldfish_events.h"
 
 /* Maximum number of emulators that can run at once (affects how
  * far through the TCP port space from 5554 we will scan to find
@@ -92,6 +94,7 @@ typedef struct VirtBoardInfo {
     void *fdt;
     int fdt_size;
     uint32_t clock_phandle;
+    struct Monitor *android_monitor;
 } VirtBoardInfo;
 
 /* Addresses and sizes of our components.
@@ -462,10 +465,15 @@ static CharDriverState *try_to_create_console_chardev(int portno)
     return chr;
 }
 
-/* Console hooks */
+/* Console hooks for rotation state */
+
+static int ranchu_rotation_state = 0;       /* 0-3 */
+
 static void android_console_rotate_screen(Monitor *mon, const QDict *qdict)
 {
-    fprintf(stderr,"%s: I'm here\n", __func__);
+    ranchu_rotation_state = ((ranchu_rotation_state + 1) % 4);
+    goldfish_fb_set_rotation(ranchu_rotation_state);
+    goldfish_events_set_rotation(ranchu_rotation_state);
 }
 
 static mon_cmd_t rotate_cmd = {

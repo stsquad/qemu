@@ -18,6 +18,7 @@
 #include "ui/input.h"
 #include "ui/console.h"
 #include "hw/input/linux_keycodes.h"
+#include "hw/input/goldfish_events.h"
 
 /* Multitouch specific code is defined out via EVDEV_MULTITOUCH currently,
  * because upstream has no multitouch related APIs.
@@ -124,6 +125,8 @@ typedef struct GoldfishEvDevState {
 
     uint32_t modifier_state;
 
+    int      rotation; /* 0-3 */
+
     /* All data below here is set up at realize and not modified thereafter */
 
     const char *name;
@@ -168,6 +171,17 @@ static const VMStateDescription vmstate_gf_evdev = {
         VMSTATE_END_OF_LIST()
     }
 };
+
+void goldfish_events_set_rotation(int rotation)
+{
+    DeviceState *dev = qdev_find_recursive(sysbus_get_default(), TYPE_GOLDFISHEVDEV);
+    if (dev) {
+        struct GoldfishEvDevState *s = GOLDFISHEVDEV(dev);
+        s->rotation = rotation;
+    } else {
+        fprintf(stderr,"%s: unable to find event dev\n", __func__);
+    }
+}
 
 static void enqueue_event(GoldfishEvDevState *s,
                           unsigned int type, unsigned int code, int value)

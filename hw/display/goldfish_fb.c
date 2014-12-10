@@ -17,6 +17,7 @@
 #include "trace.h"
 #include "android-console.h"
 #include "monitor/monitor.h"
+#include "hw/display/goldfish_fb.h"
 
 #define BITS 8
 #include "goldfish_fb_template.h"
@@ -66,15 +67,14 @@ struct goldfish_fb_state {
 };
 
 /* Console hooks */
-void android_console_rotate_screen(Monitor *mon, const QDict *qdict)
+void goldfish_fb_set_rotation(int rotation)
 {
     DeviceState *dev = qdev_find_recursive(sysbus_get_default(), TYPE_GOLDFISH_FB);
     if (dev) {
         struct goldfish_fb_state *s = GOLDFISH_FB(dev);
         DisplaySurface *ds = qemu_console_surface(s->con);
-        s->rotation = ((s->rotation + 1) % 4);
+        s->rotation = rotation;
         s->need_update = 1;
-        fprintf(stderr,"%s: rotate screen to %d\n", __func__, s->rotation);
         qemu_console_resize(s->con, surface_height(ds), surface_width(ds));
     } else {
         fprintf(stderr,"%s: unable to find FB dev\n", __func__);
