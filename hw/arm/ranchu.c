@@ -473,7 +473,23 @@ static void android_console_rotate_screen(Monitor *mon, const QDict *qdict)
 {
     ranchu_rotation_state = ((ranchu_rotation_state + 1) % 4);
     goldfish_fb_set_rotation(ranchu_rotation_state);
-    goldfish_events_set_rotation(ranchu_rotation_state);
+    /* For events we can map the input driver */
+    switch (ranchu_rotation_state) {
+    case 0:
+        graphic_rotate = 0;
+        break;
+    case 1:
+        graphic_rotate = 270;
+        break;
+    case 2:
+        graphic_rotate = 180;
+        break;
+    case 3:
+        graphic_rotate = 90;
+        break;
+    default:
+        g_assert_not_reached();
+    }
 }
 
 static mon_cmd_t rotate_cmd = {
