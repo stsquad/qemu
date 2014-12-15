@@ -1019,8 +1019,8 @@ static void *qemu_tcg_cpu_thread_fn(void *arg)
 
     qemu_cond_signal(&qemu_cpu_cond);
 
-    /* process any pending work */
-    exit_request = 1;
+/*     /\* process any pending work *\/ */
+/*     exit_request = 1; */
 
     while (1) {
         if (!cpu->stopped) {

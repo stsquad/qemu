@@ -449,7 +449,7 @@ typedef struct CPUARMState {
         float_status fp_status;
         float_status standard_fp_status;
     } vfp;
-    uint64_t exclusive_addr;
+    uint32_t exclusive_addr;
     uint64_t exclusive_val;
     uint64_t exclusive_high;
 #if defined(CONFIG_USER_ONLY)
@@ -505,6 +505,11 @@ static inline bool is_a64(CPUARMState *env)
    is returned if the signal was handled by the virtual CPU.  */
 int cpu_arm_signal_handler(int host_signum, void *pinfo,
                            void *puc);
+
+int arm_get_phys_addr(CPUARMState *env, target_ulong address,
+                                int access_type,
+                                hwaddr *phys_ptr, int *prot,
+                                target_ulong *page_size);
 
 /**
  * pmccntr_sync
@@ -1921,5 +1926,8 @@ enum {
     QEMU_PSCI_CONDUIT_SMC = 1,
     QEMU_PSCI_CONDUIT_HVC = 2,
 };
+
+void arm_exclusive_lock(void);
+void arm_exclusive_unlock(void);
 
 #endif
