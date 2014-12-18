@@ -4,12 +4,6 @@ python:
 compiler:
   - gcc
   - clang
-notifications:
-  irc:
-    channels:
-      - "irc.oftc.net#qemu"
-    on_success: change
-    on_failure: always
 env:
   global:
     - TEST_CMD=""
@@ -21,22 +15,7 @@ env:
     - EXTRA_PKGS=""
   matrix:
     # Group major targets together with their linux-user counterparts
-    - TARGETS=alpha-softmmu,alpha-linux-user
-    - TARGETS=arm-softmmu,arm-linux-user,armeb-linux-user,aarch64-softmmu,aarch64-linux-user
-    - TARGETS=cris-softmmu,cris-linux-user
-    - TARGETS=i386-softmmu,i386-linux-user,x86_64-softmmu,x86_64-linux-user
-    - TARGETS=m68k-softmmu,m68k-linux-user
-    - TARGETS=microblaze-softmmu,microblazeel-softmmu,microblaze-linux-user,microblazeel-linux-user
-    - TARGETS=mips-softmmu,mips64-softmmu,mips64el-softmmu,mipsel-softmmu
-    - TARGETS=mips-linux-user,mips64-linux-user,mips64el-linux-user,mipsel-linux-user,mipsn32-linux-user,mipsn32el-linux-user
-    - TARGETS=or32-softmmu,or32-linux-user
-    - TARGETS=ppc-softmmu,ppc64-softmmu,ppcemb-softmmu,ppc-linux-user,ppc64-linux-user,ppc64abi32-linux-user,ppc64le-linux-user
-    - TARGETS=s390x-softmmu,s390x-linux-user
-    - TARGETS=sh4-softmmu,sh4eb-softmmu,sh4-linux-user sh4eb-linux-user
-    - TARGETS=sparc-softmmu,sparc64-softmmu,sparc-linux-user,sparc32plus-linux-user,sparc64-linux-user
-    - TARGETS=unicore32-softmmu,unicore32-linux-user
-    # Group remaining softmmu only targets into one build
-    - TARGETS=lm32-softmmu,moxie-softmmu,tricore-softmmu,xtensa-softmmu,xtensaeb-softmmu
+    - TARGETS=arm-softmmu,arm-linux-user,aarch64-softmmu
 git:
   # we want to do this ourselves
   submodules: false
@@ -49,52 +28,3 @@ before_script:
   - ./configure --target-list=${TARGETS} --enable-debug-tcg ${EXTRA_CONFIG}
 script:
   - make -j2 && ${TEST_CMD}
-matrix:
-  # We manually include a number of additional build for non-standard bits
-  include:
-    # Make check target (we only do this once)
-    - env:
-        - TARGETS=alpha-softmmu,arm-softmmu,aarch64-softmmu,cris-softmmu,
-                  i386-softmmu,x86_64-softmmu,m68k-softmmu,microblaze-softmmu,
-                  microblazeel-softmmu,mips-softmmu,mips64-softmmu,
-                  mips64el-softmmu,mipsel-softmmu,or32-softmmu,ppc-softmmu,
-                  ppc64-softmmu,ppcemb-softmmu,s390x-softmmu,sh4-softmmu,
-                  sh4eb-softmmu,sparc-softmmu,sparc64-softmmu,
-                  unicore32-softmmu,unicore32-linux-user,
-                  lm32-softmmu,moxie-softmmu,tricore-softmmu,xtensa-softmmu,
-                  xtensaeb-softmmu
-          TEST_CMD="make check"
-      compiler: gcc
-    # Debug related options
-    - env: TARGETS=i386-softmmu,x86_64-softmmu
-           EXTRA_CONFIG="--enable-debug"
-      compiler: gcc
-    - env: TARGETS=i386-softmmu,x86_64-softmmu
-           EXTRA_CONFIG="--enable-debug --enable-tcg-interpreter"
-      compiler: gcc
-    # All the extra -dev packages
-    - env: TARGETS=i386-softmmu,x86_64-softmmu
-           EXTRA_PKGS="libaio-dev libcap-ng-dev libattr1-dev libbrlapi-dev uuid-dev libusb-1.0.0-dev"
-      compiler: gcc
-    # Currently configure doesn't force --disable-pie
-    - env: TARGETS=i386-softmmu,x86_64-softmmu
-           EXTRA_CONFIG="--enable-gprof --enable-gcov --disable-pie"
-      compiler: gcc
-    - env: TARGETS=i386-softmmu,x86_64-softmmu
-           EXTRA_PKGS="sparse"
-           EXTRA_CONFIG="--enable-sparse"
-      compiler: gcc
-    # All the trace backends (apart from dtrace)
-    - env: TARGETS=i386-softmmu,x86_64-softmmu
-           EXTRA_CONFIG="--enable-trace-backends=stderr"
-      compiler: gcc
-    - env: TARGETS=i386-softmmu,x86_64-softmmu
-           EXTRA_CONFIG="--enable-trace-backends=simple"
-      compiler: gcc
-    - env: TARGETS=i386-softmmu,x86_64-softmmu
-           EXTRA_CONFIG="--enable-trace-backends=ftrace"
-      compiler: gcc
-    - env: TARGETS=i386-softmmu,x86_64-softmmu
-          EXTRA_PKGS="liblttng-ust-dev liburcu-dev"
-          EXTRA_CONFIG="--enable-trace-backends=ust"
-      compiler: gcc
