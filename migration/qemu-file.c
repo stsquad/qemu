@@ -440,6 +440,11 @@ int qemu_get_byte(QEMUFile *f)
     return result;
 }
 
+int64_t qemu_ftell_fast(QEMUFile *f)
+{
+    return f->pos + f->buf_index;
+}
+
 int64_t qemu_ftell(QEMUFile *f)
 {
     qemu_fflush(f);
