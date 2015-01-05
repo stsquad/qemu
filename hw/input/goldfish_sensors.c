@@ -28,6 +28,7 @@
 #include "trace.h"
 #include "hw/input/goldfish_sensors.h"
 #include "hw/misc/android_pipe.h"
+#include "hw/misc/android_qemud.h"
 
 //#define DEBUG_SENSORS
 
@@ -75,8 +76,13 @@ typedef struct SensorsPipe {
     void*     hwpipe;
     /* Sensor Ticks */
     QEMUTimer   *periodic_tick;
-    /* Output reply data */
-    GString *send_data;
+    /* Arrays containing framed strings, outstanding is used for
+     * building up the frames as the come in, go outcome
+     */
+    GPtrArray *send_data;
+    GString   *send_outstanding;
+    GPtrArray *recv_data;
+    GString   *recv_outstanding;
 } SensorsPipe;
 
 #define RADIANS_PER_DEGREE (M_PI / 180.0)
@@ -136,7 +142,8 @@ void goldfish_sensors_set_rotation(int rotation)
  */
 static void sensor_send_data(SensorsPipe *sp, const uint8_t *buf, int len)
 {
-    g_string_append_len(sp->send_data, (gchar *) buf, len);
+    gchar *msg = g_strndup( (gchar *) buf, len);
+    g_ptr_array_add(sp->send_data, msg);
     android_pipe_wake(sp->hwpipe, PIPE_WAKE_READ);
 }
 
@@ -221,14 +228,14 @@ goldfish_sensor_tick( void*  opaque )
 }
 
 /* Incoming command from the guest */
-static ssize_t goldfish_sensors_have_data(SensorsPipe *sp, const uint8_t *buf,
-                                          ssize_t len)
+static ssize_t goldfish_sensors_have_data(SensorsPipe *sp, const gchar *buf)
 {
+    int len = strlen(buf);
     /* "list-sensors" is used to get an integer bit map of
      * available emulated sensors. We compute the mask from the
      * current hardware configuration.
      */
-    if (len == 12 && !memcmp(buf, "list-sensors", 12)) {
+    if (len == 12 && g_str_has_prefix(buf, "list-sensors")) {
         sensor_send_data(sp, (const uint8_t*)"1", 1);
         return len;
     }
@@ -236,7 +243,7 @@ static ssize_t goldfish_sensors_have_data(SensorsPipe *sp, const uint8_t *buf,
     /* "wake" is a special message that must be sent back through
      * the channel. It is used to exit a blocking read.
      */
-    if (len == 4 && !memcmp(buf, "wake", 4)) {
+    if (len == 4 && g_str_has_prefix(buf, "wake")) {
         sensor_send_data(sp, (const uint8_t*)"wake", 4);
         return len;
     }
@@ -244,7 +251,7 @@ static ssize_t goldfish_sensors_have_data(SensorsPipe *sp, const uint8_t *buf,
     /* "set-delay:<delay>" is used to set the delay in milliseconds
      * between sensor events
      */
-    if (len > 10 && !memcmp(buf, "set-delay:", 10)) {
+    if (len > 10 && g_str_has_prefix(buf, "set-delay:")) {
         sensor_config.delay_ms = atoi((const char*)buf+10);
         if (sensor_config.enabled_mask != 0)
             goldfish_sensor_tick(sp);
@@ -254,13 +261,10 @@ static ssize_t goldfish_sensors_have_data(SensorsPipe *sp, const uint8_t *buf,
     /* "set:<name>:<state>" is used to enable/disable a given
      * sensor. <state> must be 0 or 1
      */
-    if (len > 4 && !memcmp(buf, "set:", 4)) {
-        gchar *name, *state;
+    if (len > 4 && g_str_has_prefix(buf, "set:")) {
         int mask = 0;
-
-        name = (gchar *)&buf[4];
-        state = g_strrstr_len((gchar *)buf, len, ":");
-        if (g_strstr_len(name, len - 4, "acceleration")) {
+        gchar *state = g_strrstr_len(buf, len, ":");
+        if (g_str_has_prefix(buf, "set:acceleration")) {
             mask = (1<<ANDROID_SENSOR_ACCELERATION);
         }
         if (state && mask) {
@@ -291,7 +295,10 @@ static void* sensors_pipe_init(void *hwpipe, void *opaque, const char *args)
     pipe = g_malloc0(sizeof(SensorsPipe));
     pipe->hwpipe = hwpipe;
     pipe->periodic_tick = timer_new_ms(QEMU_CLOCK_VIRTUAL, goldfish_sensor_tick, pipe);
-    pipe->send_data = g_string_sized_new(1024);
+    pipe->send_data = g_ptr_array_new_full( 8, g_free );
+    pipe->recv_data = g_ptr_array_new_full( 8, g_free );
+    pipe->send_outstanding = g_string_sized_new(128);
+    pipe->recv_outstanding = g_string_sized_new(128);
     return pipe;
 }
 
@@ -302,7 +309,10 @@ static void sensors_pipe_close( void* opaque )
     timer_del(pipe->periodic_tick);
     timer_free(pipe->periodic_tick);
     pipe->periodic_tick = NULL;
-    g_string_free(pipe->send_data, TRUE);
+    g_ptr_array_free(pipe->send_data, TRUE);
+    g_ptr_array_free(pipe->recv_data, TRUE);
+    g_string_free(pipe->send_outstanding, TRUE);
+    g_string_free(pipe->recv_outstanding, TRUE);
     g_free(pipe);
 }
 
@@ -311,8 +321,11 @@ static void sensors_pipe_wake(void *opaque, int flags)
     SensorsPipe *pipe = opaque;
 
     /* we have data for the guest to read */
-    if (flags & PIPE_WAKE_READ && (pipe->send_data->len > 0)) {
-        DPRINTF("0x%x:PIPE_WAKE_READ we have %ld bytes\n", flags, pipe->send_data->len);
+    if (flags & PIPE_WAKE_READ
+        && (pipe->send_outstanding->len > 0 || pipe->send_data->len > 0) ) {
+        DPRINTF("0x%x:PIPE_WAKE_READ we have %d bytes, %d msgs\n", flags,
+                (int) pipe->send_outstanding->len,
+                pipe->send_data->len);
         android_pipe_wake(pipe->hwpipe, PIPE_WAKE_READ);
     }
 
@@ -327,40 +340,35 @@ static int sensors_pipe_recv(void *opaque, AndroidPipeBuffer *buffers,
                              int cnt)
 {
     SensorsPipe *pipe = opaque;
-    int i, bytes=0;
 
-    if (pipe->send_data->len > 0) {
-        for (i=0; i<cnt && pipe->send_data->len; i++) {
-            int to_copy =
-                pipe->send_data->len <= buffers[i].size ?
-                pipe->send_data->len : buffers[i].size;
-            memcpy(buffers[i].data, pipe->send_data->str, to_copy);
-            g_string_erase(pipe->send_data, 0, to_copy);
-            bytes += to_copy;
-        }
-        DPRINTF("pipe %p, hwpipe %p, read %d bytes\n", pipe, pipe->hwpipe, bytes);
-        return bytes;
+    DPRINTF("%d outstanding msgs\n", pipe->send_data->len);
+    if (pipe->send_outstanding->len > 0 || pipe->send_data->len > 0) {
+        return qemud_pipe_write_buffers(pipe->send_data, pipe->send_outstanding,
+                                        buffers, cnt);
     } else {
         return PIPE_ERROR_AGAIN;
     }
 }
 
 /*
- * ASSUMPTIONS: we assume any given write will be consumed in entirely
- * one buffer which is not unreasonable given the guest writes them as
- * such. If we ever see a count of > 1 we should join the buffers
- * together and drip feed the contents to goldfish_sensors_have_data.
+ * We use the qemud helper functions to de-serialise the qemud framed
+ * messages into a series of strings. We then just process each entry
+ * in the array and free the strings when done.
  */
 static int sensors_pipe_send(void *opaque, const AndroidPipeBuffer* buffers,
                              int cnt)
 {
     SensorsPipe *pipe = opaque;
-    int i, consumed = 0;
-    DPRINTF("pipe %p, buffers %p, cnt: %d\n", pipe, buffers, cnt);
+    int consumed = qemud_pipe_read_buffers(buffers, cnt,
+                                           pipe->recv_data,
+                                           pipe->recv_outstanding);
 
-    for (i=0; i<cnt; i++) {
-        consumed += goldfish_sensors_have_data(pipe,
-                                               buffers[i].data, buffers[i].size);
+    DPRINTF("pipe %p, messages: %d\n", pipe, pipe->recv_data->len);
+
+    while (pipe->recv_data->len > 0) {
+        gchar *msg = g_ptr_array_index(pipe->recv_data, 0);
+        goldfish_sensors_have_data(pipe, msg);
+        g_ptr_array_remove(pipe->recv_data, msg);
     }
 
     return consumed;
@@ -370,8 +378,8 @@ static unsigned sensors_pipe_poll(void *opaque)
 {
     SensorsPipe *pipe = opaque;
     unsigned flags = 0;
-    
-    if (pipe->send_data->len > 0) {
+
+    if (pipe->send_outstanding->len > 0 || pipe->send_data->len > 0) {
         flags |= PIPE_POLL_IN;
     }
     flags |= PIPE_POLL_OUT;
@@ -391,5 +399,5 @@ static const AndroidPipeFuncs  sensors_pipe_funcs = {
 void android_sensors_init(void)
 {
     goldfish_sensors_set_rotation(0);
-    android_pipe_add_type("sensors", NULL, &sensors_pipe_funcs);
+    android_pipe_add_type("qemud:sensors", NULL, &sensors_pipe_funcs);
 }
