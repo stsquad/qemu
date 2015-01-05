@@ -350,7 +350,6 @@ static int sensors_pipe_recv(void *opaque, AndroidPipeBuffer *buffers,
  * one buffer which is not unreasonable given the guest writes them as
  * such. If we ever see a count of > 1 we should join the buffers
  * together and drip feed the contents to goldfish_sensors_have_data.
- 
  */
 static int sensors_pipe_send(void *opaque, const AndroidPipeBuffer* buffers,
                              int cnt)
@@ -363,7 +362,7 @@ static int sensors_pipe_send(void *opaque, const AndroidPipeBuffer* buffers,
         consumed += goldfish_sensors_have_data(pipe,
                                                buffers[i].data, buffers[i].size);
     }
-    
+
     return consumed;
 }
 
