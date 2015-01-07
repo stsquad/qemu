@@ -24,6 +24,10 @@
 
 #include "tcg-be-ldst.h"
 
+#if defined(CONFIG_USER_ONLY)
+extern QemuMutex global_cpu_lock;
+#endif
+
 #ifndef NDEBUG
 static const char * const tcg_target_reg_names[TCG_TARGET_NB_REGS] = {
 #if TCG_TARGET_REG_BITS == 64
@@ -2372,6 +2376,10 @@ static void tcg_target_init(TCGContext *s)
     tcg_regset_set_reg(s->reserved_regs, TCG_REG_CALL_STACK);
 
     tcg_add_target_add_op_defs(x86_op_defs);
+
+#if defined(CONFIG_USER_ONLY)
+    qemu_mutex_init(global_cpu_lock);
+#endif
 }
 
 typedef struct {
