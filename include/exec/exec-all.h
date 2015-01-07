@@ -176,7 +176,7 @@ struct TranslationBlock {
     struct TranslationBlock *jmp_first;
 };
 
-#include "exec/spinlock.h"
+#include "qemu/thread.h"
 
 typedef struct TBContext TBContext;
 
@@ -186,7 +186,7 @@ struct TBContext {
     TranslationBlock *tb_phys_hash[CODE_GEN_PHYS_HASH_SIZE];
     int nb_tbs;
     /* any access to the tbs or the page table must use this lock */
-    spinlock_t tb_lock;
+    QemuMutex tb_lock;
 
     /* statistics */
     int tb_flush_count;
