@@ -131,6 +131,8 @@ static void init_delay_params(SyncClocks *sc, const CPUState *cpu)
 void cpu_loop_exit(CPUState *cpu)
 {
     cpu->current_tb = NULL;
+    /* Release those mutex before long jump so other thread can work. */
+    tb_lock_reset();
     siglongjmp(cpu->jmp_env, 1);
 }
 
@@ -143,6 +145,8 @@ void cpu_resume_from_signal(CPUState *cpu, void *puc)
     /* XXX: restore cpu registers saved in host registers */
 
     cpu->exception_index = -1;
+    /* Release those mutex before long jump so other thread can work. */
+    tb_lock_reset();
     siglongjmp(cpu->jmp_env, 1);
 }
 
@@ -253,10 +257,8 @@ static void cpu_exec_nocache(CPUState *cpu, int max_cycles,
     tb_free(tb);
 }
 
-static TranslationBlock *tb_find_slow(CPUState *cpu,
-                                      target_ulong pc,
-                                      target_ulong cs_base,
-                                      uint64_t flags)
+static TranslationBlock *tb_find_physical(CPUState *cpu, target_ulong pc,
+                                          target_ulong cs_base, uint64_t flags)
 {
     CPUArchState *env = (CPUArchState *)cpu->env_ptr;
     TranslationBlock *tb, **ptb1;
@@ -273,8 +275,9 @@ static TranslationBlock *tb_find_slow(CPUState *cpu,
     ptb1 = &tcg_ctx.tb_ctx.tb_phys_hash[h];
     for(;;) {
         tb = *ptb1;
-        if (!tb)
-            goto not_found;
+        if (!tb) {
+            return tb;
+        }
         if (tb->pc == pc &&
             tb->page_addr[0] == phys_page1 &&
             tb->cs_base == cs_base &&
@@ -282,28 +285,42 @@ static TranslationBlock *tb_find_slow(CPUState *cpu,
             /* check next page if needed */
             if (tb->page_addr[1] != -1) {
                 tb_page_addr_t phys_page2;
-
                 virt_page2 = (pc & TARGET_PAGE_MASK) +
                     TARGET_PAGE_SIZE;
                 phys_page2 = get_page_addr_code(env, virt_page2);
-                if (tb->page_addr[1] == phys_page2)
-                    goto found;
+                if (tb->page_addr[1] == phys_page2) {
+                    return tb;
+                }
             } else {
-                goto found;
+                return tb;
             }
         }
         ptb1 = &tb->phys_hash_next;
     }
- not_found:
-   /* if no translated code available, then translate it now */
-    tb = tb_gen_code(cpu, pc, cs_base, flags, 0);
+    return tb;
+}
 
- found:
-    /* Move the last found TB to the head of the list */
-    if (likely(*ptb1)) {
-        *ptb1 = tb->phys_hash_next;
-        tb->phys_hash_next = tcg_ctx.tb_ctx.tb_phys_hash[h];
-        tcg_ctx.tb_ctx.tb_phys_hash[h] = tb;
+static TranslationBlock *tb_find_slow(CPUState *cpu, target_ulong pc,
+                                      target_ulong cs_base, uint64_t flags)
+{
+    /*
+     * First try to get the tb if we don't find it we need to lock and compile
+     * it.
+     */
+    TranslationBlock *tb;
+
+    tb = tb_find_physical(cpu, pc, cs_base, flags);
+    if (!tb) {
+        tb_lock();
+        /*
+         * Retry to get the TB in case a CPU just translate it to avoid having
+         * duplicated TB in the pool.
+         */
+        tb = tb_find_physical(cpu, pc, cs_base, flags);
+        if (!tb) {
+            tb = tb_gen_code(cpu, pc, cs_base, flags, 0);
+        }
+        tb_unlock();
     }
     /* we add the TB in the virtual pc hash table */
     cpu->tb_jmp_cache[tb_jmp_cache_hash_func(pc)] = tb;
@@ -326,6 +343,7 @@ static inline TranslationBlock *tb_find_fast(CPUState *cpu)
                  tb->flags != flags)) {
         tb = tb_find_slow(cpu, pc, cs_base, flags);
     }
+
     return tb;
 }
 

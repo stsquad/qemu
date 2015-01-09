@@ -11166,6 +11166,8 @@ static inline void gen_intermediate_code_internal(ARMCPU *cpu,
 
     dc->tb = tb;
 
+    tb_lock();
+
     dc->is_jmp = DISAS_NEXT;
     dc->pc = pc_start;
     dc->singlestep_enabled = cs->singlestep_enabled;
@@ -11506,6 +11508,7 @@ done_generating:
         tb->size = dc->pc - pc_start;
         tb->icount = num_insns;
     }
+    tb_unlock();
 }
 
 void gen_intermediate_code(CPUARMState *env, TranslationBlock *tb)

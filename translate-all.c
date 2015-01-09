@@ -129,6 +129,34 @@ static void *l1_map[V_L1_SIZE];
 /* code generation context */
 TCGContext tcg_ctx;
 
+/* translation block context */
+__thread volatile int have_tb_lock;
+
+void tb_lock(void)
+{
+    if (!have_tb_lock) {
+        qemu_mutex_lock(&tcg_ctx.tb_ctx.tb_lock);
+    }
+    have_tb_lock++;
+}
+
+void tb_unlock(void)
+{
+    assert(have_tb_lock > 0);
+    have_tb_lock--;
+    if (!have_tb_lock) {
+        qemu_mutex_unlock(&tcg_ctx.tb_ctx.tb_lock);
+    }
+}
+
+void tb_lock_reset(void)
+{
+    if (have_tb_lock) {
+        qemu_mutex_unlock(&tcg_ctx.tb_ctx.tb_lock);
+    }
+    have_tb_lock = 0;
+}
+
 static void tb_link_page(TranslationBlock *tb, tb_page_addr_t phys_pc,
                          tb_page_addr_t phys_page2);
 static TranslationBlock *tb_find_pc(uintptr_t tc_ptr);
@@ -217,6 +245,7 @@ static int cpu_restore_state_from_tb(CPUState *cpu, TranslationBlock *tb,
 #ifdef CONFIG_PROFILER
     ti = profile_getclock();
 #endif
+    tb_lock();
     tcg_func_start(s);
 
     gen_intermediate_code_pc(env, tb);
@@ -230,8 +259,10 @@ static int cpu_restore_state_from_tb(CPUState *cpu, TranslationBlock *tb,
 
     /* find opc index corresponding to search_pc */
     tc_ptr = (uintptr_t)tb->tc_ptr;
-    if (searched_pc < tc_ptr)
+    if (searched_pc < tc_ptr) {
+        tb_unlock();
         return -1;
+    }
 
     s->tb_next_offset = tb->tb_next_offset;
 #ifdef USE_DIRECT_JUMP
@@ -243,8 +274,10 @@ static int cpu_restore_state_from_tb(CPUState *cpu, TranslationBlock *tb,
 #endif
     j = tcg_gen_code_search_pc(s, (tcg_insn_unit *)tc_ptr,
                                searched_pc - tc_ptr);
-    if (j < 0)
+    if (j < 0) {
+        tb_unlock();
         return -1;
+    }
     /* now find start of instruction before */
     while (s->gen_opc_instr_start[j] == 0) {
         j--;
@@ -257,6 +290,8 @@ static int cpu_restore_state_from_tb(CPUState *cpu, TranslationBlock *tb,
     s->restore_time += profile_getclock() - ti;
     s->restore_count++;
 #endif
+
+    tb_unlock();
     return 0;
 }
 
@@ -675,6 +710,7 @@ static inline void code_gen_alloc(size_t tb_size)
             CODE_GEN_AVG_BLOCK_SIZE;
     tcg_ctx.tb_ctx.tbs =
             g_malloc(tcg_ctx.code_gen_max_blocks * sizeof(TranslationBlock));
+    qemu_mutex_init(&tcg_ctx.tb_ctx.tb_lock);
 }
 
 /* Must be called before using the QEMU cpus. 'tb_size' is the size
@@ -699,16 +735,22 @@ bool tcg_enabled(void)
     return tcg_ctx.code_gen_buffer != NULL;
 }
 
-/* Allocate a new translation block. Flush the translation buffer if
-   too many translation blocks or too much generated code. */
+/*
+ * Allocate a new translation block. Flush the translation buffer if
+ * too many translation blocks or too much generated code.
+ * tb_alloc is not thread safe but tb_gen_code is protected by a mutex so this
+ * function is called only by one thread.
+ */
 static TranslationBlock *tb_alloc(target_ulong pc)
 {
-    TranslationBlock *tb;
+    TranslationBlock *tb = NULL;
 
     if (tcg_ctx.tb_ctx.nb_tbs >= tcg_ctx.code_gen_max_blocks ||
         (tcg_ctx.code_gen_ptr - tcg_ctx.code_gen_buffer) >=
          tcg_ctx.code_gen_buffer_max_size) {
-        return NULL;
+        tb = &tcg_ctx.tb_ctx.tbs[tcg_ctx.tb_ctx.nb_tbs++];
+        tb->pc = pc;
+        tb->cflags = 0;
     }
     tb = &tcg_ctx.tb_ctx.tbs[tcg_ctx.tb_ctx.nb_tbs++];
     tb->pc = pc;
@@ -721,11 +763,16 @@ void tb_free(TranslationBlock *tb)
     /* In practice this is mostly used for single use temporary TB
        Ignore the hard cases and just back up if this TB happens to
        be the last one generated.  */
+
+    tb_lock();
+
     if (tcg_ctx.tb_ctx.nb_tbs > 0 &&
             tb == &tcg_ctx.tb_ctx.tbs[tcg_ctx.tb_ctx.nb_tbs - 1]) {
         tcg_ctx.code_gen_ptr = tb->tc_ptr;
         tcg_ctx.tb_ctx.nb_tbs--;
     }
+
+    tb_unlock();
 }
 
 static inline void invalidate_page_bitmap(PageDesc *p)
@@ -774,6 +821,8 @@ static void page_flush_tb(void)
 /* XXX: tb_flush is currently not thread safe */
 void tb_flush(CPUState *cpu)
 {
+    tb_lock();
+
 #if defined(DEBUG_FLUSH)
     printf("qemu: flush code_size=%ld nb_tbs=%d avg_tb_size=%ld\n",
            (unsigned long)(tcg_ctx.code_gen_ptr - tcg_ctx.code_gen_buffer),
@@ -798,6 +847,8 @@ void tb_flush(CPUState *cpu)
     /* XXX: flush processor icache at this point if cache flush is
        expensive */
     tcg_ctx.tb_ctx.tb_flush_count++;
+
+    tb_unlock();
 }
 
 #ifdef DEBUG_TB_CHECK
@@ -806,6 +857,8 @@ static void tb_invalidate_check(target_ulong address)
 {
     TranslationBlock *tb;
     int i;
+
+    tb_lock();
 
     address &= TARGET_PAGE_MASK;
     for (i = 0; i < CODE_GEN_PHYS_HASH_SIZE; i++) {
@@ -818,6 +871,8 @@ static void tb_invalidate_check(target_ulong address)
             }
         }
     }
+
+    tb_unlock();
 }
 
 /* verify that all the pages have correct rights for code */
@@ -825,6 +880,8 @@ static void tb_page_check(void)
 {
     TranslationBlock *tb;
     int i, flags1, flags2;
+
+    tb_lock();
 
     for (i = 0; i < CODE_GEN_PHYS_HASH_SIZE; i++) {
         for (tb = tcg_ctx.tb_ctx.tb_phys_hash[i]; tb != NULL;
@@ -837,6 +894,8 @@ static void tb_page_check(void)
             }
         }
     }
+
+    tb_unlock();
 }
 
 #endif
@@ -917,6 +976,8 @@ void tb_phys_invalidate(TranslationBlock *tb, tb_page_addr_t page_addr)
     tb_page_addr_t phys_pc;
     TranslationBlock *tb1, *tb2;
 
+    tb_lock();
+
     /* remove the TB from the hash list */
     phys_pc = tb->page_addr[0] + (tb->pc & ~TARGET_PAGE_MASK);
     h = tb_phys_hash_func(phys_pc);
@@ -964,6 +1025,7 @@ void tb_phys_invalidate(TranslationBlock *tb, tb_page_addr_t page_addr)
     tb->jmp_first = (TranslationBlock *)((uintptr_t)tb | 2); /* fail safe */
 
     tcg_ctx.tb_ctx.tb_phys_invalidate_count++;
+    tb_unlock();
 }
 
 static void build_page_bitmap(PageDesc *p)
@@ -1005,6 +1067,8 @@ TranslationBlock *tb_gen_code(CPUState *cpu,
     target_ulong virt_page2;
     int code_gen_size;
 
+    tb_lock();
+
     phys_pc = get_page_addr_code(env, pc);
     if (use_icount) {
         cflags |= CF_USE_ICOUNT;
@@ -1033,6 +1097,8 @@ TranslationBlock *tb_gen_code(CPUState *cpu,
         phys_page2 = get_page_addr_code(env, virt_page2);
     }
     tb_link_page(tb, phys_pc, phys_page2);
+
+    tb_unlock();
     return tb;
 }
 
@@ -1331,12 +1397,14 @@ static inline void tb_alloc_page(TranslationBlock *tb,
 }
 
 /* add a new TB and link it to the physical page tables. phys_page2 is
-   (-1) to indicate that only one page contains the TB. */
+ * (-1) to indicate that only one page contains the TB. */
 static void tb_link_page(TranslationBlock *tb, tb_page_addr_t phys_pc,
                          tb_page_addr_t phys_page2)
 {
     unsigned int h;
     TranslationBlock **ptb;
+
+    tb_lock();
 
     /* Grab the mmap lock to stop another thread invalidating this TB
        before we are done.  */
@@ -1371,6 +1439,8 @@ static void tb_link_page(TranslationBlock *tb, tb_page_addr_t phys_pc,
     tb_page_check();
 #endif
     mmap_unlock();
+
+    tb_unlock();
 }
 
 /* find the TB 'tb' such that tb[0].tc_ptr <= tc_ptr <
@@ -1379,31 +1449,34 @@ static TranslationBlock *tb_find_pc(uintptr_t tc_ptr)
 {
     int m_min, m_max, m;
     uintptr_t v;
-    TranslationBlock *tb;
+    TranslationBlock *tb = NULL;
 
-    if (tcg_ctx.tb_ctx.nb_tbs <= 0) {
-        return NULL;
-    }
-    if (tc_ptr < (uintptr_t)tcg_ctx.code_gen_buffer ||
-        tc_ptr >= (uintptr_t)tcg_ctx.code_gen_ptr) {
-        return NULL;
-    }
-    /* binary search (cf Knuth) */
-    m_min = 0;
-    m_max = tcg_ctx.tb_ctx.nb_tbs - 1;
-    while (m_min <= m_max) {
-        m = (m_min + m_max) >> 1;
-        tb = &tcg_ctx.tb_ctx.tbs[m];
-        v = (uintptr_t)tb->tc_ptr;
-        if (v == tc_ptr) {
-            return tb;
-        } else if (tc_ptr < v) {
-            m_max = m - 1;
-        } else {
-            m_min = m + 1;
+    tb_lock();
+
+    if ((tcg_ctx.tb_ctx.nb_tbs > 0)
+    && (tc_ptr >= (uintptr_t)tcg_ctx.code_gen_buffer &&
+        tc_ptr < (uintptr_t)tcg_ctx.code_gen_ptr)) {
+        /* binary search (cf Knuth) */
+        m_min = 0;
+        m_max = tcg_ctx.tb_ctx.nb_tbs - 1;
+        while (m_min <= m_max) {
+            m = (m_min + m_max) >> 1;
+            tb = &tcg_ctx.tb_ctx.tbs[m];
+            v = (uintptr_t)tb->tc_ptr;
+            if (v == tc_ptr) {
+                tb_unlock();
+                return tb;
+            } else if (tc_ptr < v) {
+                m_max = m - 1;
+            } else {
+                m_min = m + 1;
+            }
         }
+        tb = &tcg_ctx.tb_ctx.tbs[m_max];
     }
-    return &tcg_ctx.tb_ctx.tbs[m_max];
+
+    tb_unlock();
+    return tb;
 }
 
 #if !defined(CONFIG_USER_ONLY)
@@ -1565,6 +1638,8 @@ void dump_exec_info(FILE *f, fprintf_function cpu_fprintf)
     int direct_jmp_count, direct_jmp2_count, cross_page;
     TranslationBlock *tb;
 
+    tb_lock();
+
     target_code_size = 0;
     max_target_code_size = 0;
     cross_page = 0;
@@ -1620,6 +1695,8 @@ void dump_exec_info(FILE *f, fprintf_function cpu_fprintf)
             tcg_ctx.tb_ctx.tb_phys_invalidate_count);
     cpu_fprintf(f, "TLB flush count     %d\n", tlb_flush_count);
     tcg_dump_info(f, cpu_fprintf);
+
+    tb_unlock();
 }
 
 void dump_opcount_info(FILE *f, fprintf_function cpu_fprintf)
