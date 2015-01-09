@@ -271,7 +271,7 @@ gcov_tool="gcov"
 EXESUF=""
 DSOSUF=".so"
 LDFLAGS_SHARED="-shared"
-modules="no"
+modules=""
 prefix="/usr/local"
 mandir="\${prefix}/share/man"
 datadir="\${prefix}/share"
@@ -768,6 +768,9 @@ for opt do
   --enable-modules)
       modules="yes"
   ;;
+  --disable-modules)
+      modules="no"
+  ;;
   --cpu=*)
   ;;
   --target-list=*) target_list="$optarg"
@@ -1259,7 +1262,8 @@ Advanced options (experts only):
   --sysconfdir=PATH        install config in PATH$confsuffix
   --localstatedir=PATH     install local state in PATH (set at runtime on win32)
   --with-confsuffix=SUFFIX suffix for QEMU data inside datadir/libdir/sysconfdir [$confsuffix]
-  --enable-modules         enable modules support
+  --enable-modules         enable modules support (default)
+  --disable-modules        enable modules support
   --enable-debug-tcg       enable TCG debugging
   --disable-debug-tcg      disable TCG debugging (default)
   --enable-debug-info      enable debugging information (default)
@@ -1532,24 +1536,11 @@ if compile_prog "-Werror -fno-gcse" "" ; then
 fi
 
 if test "$static" = "yes" ; then
-  if test "$modules" = "yes" ; then
-    error_exit "static and modules are mutually incompatible"
-  fi
   if test "$pie" = "yes" ; then
     error_exit "static and pie are mutually incompatible"
   else
     pie="no"
   fi
-fi
-
-if test "$pie" = ""; then
-  case "$cpu-$targetos" in
-    i386-Linux|x86_64-Linux|x32-Linux|i386-OpenBSD|x86_64-OpenBSD)
-      ;;
-    *)
-      pie="no"
-      ;;
-  esac
 fi
 
 if test "$pie" != "no" ; then
@@ -2725,22 +2716,25 @@ if test "$mingw32" = yes; then
 else
     glib_req_ver=2.12
 fi
-glib_modules=gthread-2.0
-if test "$modules" = yes; then
-    glib_modules="$glib_modules gmodule-2.0"
-fi
 
-for i in $glib_modules; do
-    if $pkg_config --atleast-version=$glib_req_ver $i; then
-        glib_cflags=`$pkg_config --cflags $i`
-        glib_libs=`$pkg_config --libs $i`
-        CFLAGS="$glib_cflags $CFLAGS"
-        LIBS="$glib_libs $LIBS"
-        libs_qga="$glib_libs $libs_qga"
-    else
-        error_exit "glib-$glib_req_ver $i is required to compile QEMU"
-    fi
-done
+glib_pkg_config()
+{
+  if $pkg_config --atleast-version=$glib_req_ver $1; then
+    local probe_cflags=$($pkg_config --cflags $1)
+    local probe_libs=$($pkg_config --libs $1)
+    CFLAGS="$probe_cflags $CFLAGS"
+    LIBS="$probe_libs $LIBS"
+    libs_qga="$probe_libs $libs_qga"
+    glib_cflags="$probe_cflags $glib_cflags"
+    glib_libs="$probe_libs $glib_libs"
+    return 0
+  else
+    return 1
+  fi
+}
+
+glib_pkg_config gthread-2.0 || \
+  error_exit "glib-$glib_req_ver gthread-2.0 is required to compile QEMU"
 
 # g_test_trap_subprocess added in 2.38. Used by some tests.
 glib_subprocess=yes
@@ -2749,19 +2743,65 @@ if ! $pkg_config --atleast-version=2.38 glib-2.0; then
 fi
 
 ##########################################
-# SHA command probe for modules
-if test "$modules" = yes; then
-    shacmd_probe="sha1sum sha1 shasum"
-    for c in $shacmd_probe; do
-        if has $c; then
-            shacmd="$c"
-            break
-        fi
-    done
-    if test "$shacmd" = ""; then
-        error_exit "one of the checksum commands is required to enable modules: $shacmd_probe"
+# SHA command and gmodule-2.0 probe for modules
+# return 0 if probe succeeds
+# $1: true - force mode, exit if probe fail
+#     false - optoinal mode, return 1 if probe fail
+module_try_enable()
+{
+  force=$1
+  if test "$static" = "yes"; then
+    if $force; then
+      error_exit "static and modules are mutually incompatible"
+    else
+      modules="no"
+      return
     fi
-fi
+  fi
+  shacmd_probe="sha1sum sha1 shasum"
+  for c in $shacmd_probe; do
+    if has $c; then
+      shacmd="$c"
+      break
+    fi
+  done
+  if test "$pie" = "no"; then
+    if $force; then
+      error_exit "PIE support is required to enable modules"
+    else
+      modules="no"
+      return
+    fi
+  fi
+  if test "$shacmd" = ""; then
+    if $force; then
+      error_exit "one of the checksum commands is required to enable modules: $shacmd_probe"
+    else
+      modules="no"
+      return
+    fi
+  fi
+  if ! glib_pkg_config gmodule-2.0; then
+    if $force; then
+      error_exit "glib-$glib_req_ver gmodule-2.0 is required to compile QEMU"
+    else
+      modules="no"
+      return
+    fi
+  fi
+  modules="yes"
+}
+
+case "$modules" in
+  yes)
+    module_try_enable true
+    ;;
+  "")
+    module_try_enable false
+    ;;
+  no)
+    ;;
+esac
 
 ##########################################
 # pixman support probe
