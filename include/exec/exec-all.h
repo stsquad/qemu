@@ -74,6 +74,7 @@ typedef struct TranslationBlock TranslationBlock;
 
 void gen_intermediate_code(CPUArchState *env, struct TranslationBlock *tb);
 void gen_intermediate_code_pc(CPUArchState *env, struct TranslationBlock *tb);
+/* Called with tb_lock held.  */
 void restore_state_to_opc(CPUArchState *env, struct TranslationBlock *tb,
                           int pc_pos);
 
