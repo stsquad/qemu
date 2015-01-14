@@ -815,7 +815,6 @@ static unsigned iothread_requesting_mutex;
 static QemuThread io_thread;
 
 static QemuThread *tcg_cpu_thread;
-static QemuCond *tcg_halt_cond;
 
 /* cpu creation */
 static QemuCond qemu_cpu_cond;
@@ -1038,15 +1037,13 @@ static void qemu_wait_io_event_common(CPUState *cpu)
     cpu->thread_kicked = false;
 }
 
-static void qemu_tcg_wait_io_event(void)
+static void qemu_tcg_wait_io_event(CPUState *cpu)
 {
-    CPUState *cpu;
-
     while (all_cpu_threads_idle()) {
        /* Start accounting real time to the virtual clock if the CPUs
           are idle.  */
         qemu_clock_warp(QEMU_CLOCK_VIRTUAL);
-        qemu_cond_wait(tcg_halt_cond, &qemu_global_mutex);
+        qemu_cond_wait(cpu->halt_cond, &qemu_global_mutex);
     }
 
     while (iothread_requesting_mutex) {
@@ -1172,7 +1169,7 @@ static void *qemu_tcg_cpu_thread_fn(void *arg)
 
     /* wait for initial kick-off after machine start */
     while (first_cpu->stopped) {
-        qemu_cond_wait(tcg_halt_cond, &qemu_global_mutex);
+        qemu_cond_wait(first_cpu->halt_cond, &qemu_global_mutex);
 
         /* process any pending work */
         CPU_FOREACH(cpu) {
@@ -1193,7 +1190,7 @@ static void *qemu_tcg_cpu_thread_fn(void *arg)
                 qemu_clock_notify(QEMU_CLOCK_VIRTUAL);
             }
         }
-        qemu_tcg_wait_io_event();
+        qemu_tcg_wait_io_event(QTAILQ_FIRST(&cpus));
     }
 
     return NULL;
@@ -1334,12 +1331,12 @@ static void qemu_tcg_init_vcpu(CPUState *cpu)
 
     tcg_cpu_address_space_init(cpu, cpu->as);
 
+    cpu->halt_cond = g_malloc0(sizeof(QemuCond));
+    qemu_cond_init(cpu->halt_cond);
+
     /* share a single thread for all cpus with TCG */
     if (!tcg_cpu_thread) {
         cpu->thread = g_malloc0(sizeof(QemuThread));
-        cpu->halt_cond = g_malloc0(sizeof(QemuCond));
-        qemu_cond_init(cpu->halt_cond);
-        tcg_halt_cond = cpu->halt_cond;
         snprintf(thread_name, VCPU_THREAD_NAME_SIZE, "CPU %d/TCG",
                  cpu->cpu_index);
         qemu_thread_create(cpu->thread, thread_name, qemu_tcg_cpu_thread_fn,
@@ -1353,7 +1350,6 @@ static void qemu_tcg_init_vcpu(CPUState *cpu)
         tcg_cpu_thread = cpu->thread;
     } else {
         cpu->thread = tcg_cpu_thread;
-        cpu->halt_cond = tcg_halt_cond;
     }
 }
 
