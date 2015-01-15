@@ -360,6 +360,7 @@ static void mirror_exit(BlockJob *job, void *opaque)
         aio_context_release(replace_aio_context);
     }
     g_free(s->replaces);
+    bdrv_op_unblock_all(s->target, s->common.blocker);
     bdrv_unref(s->target);
     block_job_completed(&s->common, data->ret);
     g_free(data);
@@ -682,6 +683,7 @@ static void mirror_start_job(BlockDriverState *bs, BlockDriverState *target,
         return;
     }
 
+    bdrv_op_block_all(target, s->common.blocker);
     s->replaces = g_strdup(replaces);
     s->on_source_error = on_source_error;
     s->on_target_error = on_target_error;
