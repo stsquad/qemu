@@ -363,19 +363,15 @@ int cpu_exec(CPUState *cpu)
         }
 #endif
         if (!cpu_has_work(cpu)) {
-            current_cpu = NULL;
+            // set stopped? or halted? to break out loop
+            cpu->exit_request = 1;
             return EXCP_HALTED;
         }
 
         cpu->halted = 0;
     }
 
-    atomic_mb_set(&tcg_current_cpu, cpu);
     rcu_read_lock();
-
-    if (unlikely(atomic_mb_read(&exit_request))) {
-        cpu->exit_request = 1;
-    }
 
     cc->cpu_exec_enter(cpu);
 
@@ -600,12 +596,7 @@ int cpu_exec(CPUState *cpu)
     cc->cpu_exec_exit(cpu);
     rcu_read_unlock();
 
-    /* fail safe : never use current_cpu outside cpu_exec() */
-    current_cpu = NULL;
-
     tcg_cpu_allow_execution(cpu);
-    /* Does not need atomic_mb_set because a spurious wakeup is okay.  */
-    atomic_set(&tcg_current_cpu, NULL);
 
     return ret;
 }
