@@ -135,6 +135,8 @@ typedef struct TimersState {
 } TimersState;
 
 static TimersState timers_state;
+/* CPU associated to this thread. */
+static __thread CPUState *tcg_thread_cpu = NULL;
 
 int64_t cpu_get_icount_raw(void)
 {
@@ -631,12 +633,18 @@ static void cpu_handle_guest_debug(CPUState *cpu)
     cpu->stopped = true;
 }
 
+/**
+ * cpu_signal
+ * Signal handler when using TCG.
+ */
 static void cpu_signal(int sig)
 {
     if (current_cpu) {
         cpu_exit(current_cpu);
     }
-    exit_request = 1;
+
+    /* FIXME: We might want to check if the cpu is running? */
+    tcg_thread_cpu->exit_request = true;
 }
 
 #ifdef CONFIG_LINUX
@@ -1001,6 +1009,7 @@ static void *qemu_tcg_cpu_thread_fn(void *arg)
 {
     CPUState *cpu = arg;
 
+    tcg_thread_cpu = cpu;
     qemu_tcg_init_cpu_signals();
     qemu_thread_get_self(cpu->thread);
 
@@ -1366,7 +1375,8 @@ static void tcg_exec_all(void)
     if (next_cpu == NULL) {
         next_cpu = first_cpu;
     }
-    for (; next_cpu != NULL && !exit_request; next_cpu = CPU_NEXT(next_cpu)) {
+    for (; next_cpu != NULL && !first_cpu->exit_request;
+           next_cpu = CPU_NEXT(next_cpu)) {
         CPUState *cpu = next_cpu;
         CPUArchState *env = cpu->env_ptr;
 
@@ -1383,7 +1393,8 @@ static void tcg_exec_all(void)
             break;
         }
     }
-    exit_request = 0;
+
+    first_cpu->exit_request = 0;
 }
 
 void list_cpus(FILE *f, fprintf_function cpu_fprintf, const char *optarg)
