@@ -364,8 +364,6 @@ static void cpu_handle_debug_exception(CPUArchState *env)
 
 /* main execution loop */
 
-volatile sig_atomic_t exit_request;
-
 int cpu_exec(CPUArchState *env)
 {
     CPUState *cpu = ENV_GET_CPU(env);
@@ -394,19 +392,7 @@ int cpu_exec(CPUArchState *env)
 
     current_cpu = cpu;
 
-    /* As long as current_cpu is null, up to the assignment just above,
-     * requests by other threads to exit the execution loop are expected to
-     * be issued using the exit_request global. We must make sure that our
-     * evaluation of the global value is performed past the current_cpu
-     * value transition point, which requires a memory barrier as well as
-     * an instruction scheduling constraint on modern architectures.  */
-    smp_mb();
-
     rcu_read_lock();
-
-    if (unlikely(exit_request)) {
-        cpu->exit_request = 1;
-    }
 
     cc->cpu_exec_enter(cpu);
 
@@ -496,7 +482,6 @@ int cpu_exec(CPUArchState *env)
                     }
                 }
                 if (unlikely(cpu->exit_request)) {
-                    cpu->exit_request = 0;
                     cpu->exception_index = EXCP_INTERRUPT;
                     cpu_loop_exit(cpu);
                 }
