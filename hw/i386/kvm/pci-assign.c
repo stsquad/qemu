@@ -678,13 +678,43 @@ static void free_msi_virqs(AssignedDevice *dev)
     dev->msi_virq_nr = 0;
 }
 
-static void free_assigned_device(AssignedDevice *dev)
+static void unmap_assigned_device(AssignedDevice *dev)
 {
     int i;
 
     if (dev->cap.available & ASSIGNED_DEVICE_CAP_MSIX) {
         assigned_dev_unregister_msix_mmio(dev);
     }
+    for (i = 0; i < dev->real_device.region_number; i++) {
+        PCIRegion *pci_region = &dev->real_device.regions[i];
+        AssignedDevRegion *region = &dev->v_addrs[i];
+
+        if (!pci_region->valid) {
+            continue;
+        }
+        if (pci_region->type & IORESOURCE_MEM) {
+            if (region->u.r_virtbase) {
+                if (munmap(region->u.r_virtbase,
+                           (pci_region->size + 0xFFF) & 0xFFFFF000)) {
+                    error_report("Failed to unmap assigned device region: %s",
+                                 strerror(errno));
+                }
+            }
+        }
+        if (pci_region->resource_fd >= 0) {
+            close(pci_region->resource_fd);
+        }
+    }
+
+    if (dev->real_device.config_fd >= 0) {
+        close(dev->real_device.config_fd);
+    }
+}
+
+static void free_assigned_device(AssignedDevice *dev)
+{
+    int i;
+
     for (i = 0; i < dev->real_device.region_number; i++) {
         PCIRegion *pci_region = &dev->real_device.regions[i];
         AssignedDevRegion *region = &dev->v_addrs[i];
@@ -709,20 +739,8 @@ static void free_assigned_device(AssignedDevice *dev)
                     memory_region_del_subregion(&region->container,
                                                 &dev->mmio);
                 }
-                if (munmap(region->u.r_virtbase,
-                           (pci_region->size + 0xFFF) & 0xFFFFF000)) {
-                    error_report("Failed to unmap assigned device region: %s",
-                                 strerror(errno));
-                }
             }
         }
-        if (pci_region->resource_fd >= 0) {
-            close(pci_region->resource_fd);
-        }
-    }
-
-    if (dev->real_device.config_fd >= 0) {
-        close(dev->real_device.config_fd);
     }
 
     free_msi_virqs(dev);
@@ -1828,10 +1846,19 @@ assigned_out:
 
 out:
     free_assigned_device(dev);
+    unmap_assigned_device(dev);
 
 exit_with_error:
     assert(local_err);
     error_propagate(errp, local_err);
+}
+
+static void assigned_instance_finalize(struct rcu_head *rcu_head)
+{
+    PCIDevice *pci_dev = PCI_DEVICE(obj);
+    AssignedDevice *dev = DO_UPCAST(AssignedDevice, dev, pci_dev);
+
+    unmap_assigned_device(dev);
 }
 
 static void assigned_exitfn(struct PCIDevice *pci_dev)
@@ -1884,6 +1911,7 @@ static const TypeInfo assign_info = {
     .instance_size      = sizeof(AssignedDevice),
     .class_init         = assign_class_init,
     .instance_init      = assigned_dev_instance_init,
+    .instance_finalize  = assigned_dev_instance_finalize,
 };
 
 static void assign_register_types(void)
