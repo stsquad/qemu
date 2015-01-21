@@ -351,6 +351,7 @@ static void create_shared_memory_BAR(IVShmemState *s, int fd) {
 
     s->shm_fd = fd;
 
+    /* FIXME: never munmap-ed? */
     ptr = mmap(0, s->ivshmem_size, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
 
     memory_region_init_ram_ptr(&s->ivshmem, OBJECT(s), "ivshmem.bar2",
@@ -525,7 +526,8 @@ static void ivshmem_read(void *opaque, const uint8_t *buf, int size)
             exit(1);
         }
 
-        /* mmap the region and map into the BAR2 */
+        /* mmap the region and map into the BAR2.
+         * FIXME: never munmap-ed? */
         map_ptr = mmap(0, s->ivshmem_size, PROT_READ|PROT_WRITE, MAP_SHARED,
                                                             incoming_fd, 0);
         memory_region_init_ram_ptr(&s->ivshmem, OBJECT(s),
