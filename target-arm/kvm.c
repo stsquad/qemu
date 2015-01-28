@@ -375,6 +375,8 @@ bool write_kvmstate_to_list(ARMCPU *cpu)
     int i;
     bool ok = true;
 
+    fprintf(stderr,"%s: moving %d regs from kvmstate\n", __func__, cpu->cpreg_array_len);
+
     for (i = 0; i < cpu->cpreg_array_len; i++) {
         struct kvm_one_reg r;
         uint64_t regidx = cpu->cpreg_indexes[i];

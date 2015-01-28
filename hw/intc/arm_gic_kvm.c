@@ -24,7 +24,7 @@
 #include "kvm_arm.h"
 #include "gic_internal.h"
 
-//#define DEBUG_GIC_KVM
+#define DEBUG_GIC_KVM
 
 #ifdef DEBUG_GIC_KVM
 static const int debug_gic_kvm = 1;
@@ -197,9 +197,13 @@ static void translate_pending(GICState *s, int irq, int cpu,
 
     if (to_kernel) {
         *field = gic_test_pending(s, irq, cm);
+        if (*field) {
+            DPRINTF("translate_active: PENDING! %d/%d/%x\n", irq, cpu, *field);
+        }
     } else {
         if (*field & 1) {
             GIC_SET_PENDING(irq, cm);
+            DPRINTF("translate_active: PENDING! %d/%d/%x\n", irq, cpu, cm);
             /* TODO: Capture is level-line is held high in the kernel */
         }
     }
@@ -212,9 +216,13 @@ static void translate_active(GICState *s, int irq, int cpu,
 
     if (to_kernel) {
         *field = GIC_TEST_ACTIVE(irq, cm);
+        if (*field) {
+            DPRINTF("translate_active: ACTIVE! %d/%d/%x\n", irq, cpu, *field);
+        }
     } else {
         if (*field & 1) {
             GIC_SET_ACTIVE(irq, cm);
+            DPRINTF("translate_active: ACTIVE! %d/%d/%x\n", irq, cpu, cm);
         }
     }
 }

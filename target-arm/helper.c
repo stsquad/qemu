@@ -1179,6 +1179,7 @@ static void gt_recalc_timer(ARMCPU *cpu, int timeridx)
         if (nexttick > INT64_MAX / GTIMER_SCALE) {
             nexttick = INT64_MAX / GTIMER_SCALE;
         }
+        fprintf(stderr,"%s: count %"PRIx64 "nexttick %"PRIx64"\n", __func__, count, nexttick);    
         timer_mod(cpu->gt_timer[timeridx], nexttick);
     } else {
         /* Timer disabled: ISTATUS and timer output always clear */
@@ -1206,6 +1207,7 @@ static void gt_cval_write(CPUARMState *env, const ARMCPRegInfo *ri,
 {
     int timeridx = ri->opc1 & 1;
 
+    fprintf(stderr,"%s: val=%"PRIx64"\n", __func__, value);
     env->cp15.c14_timer[timeridx].cval = value;
     gt_recalc_timer(arm_env_get_cpu(env), timeridx);
 }
