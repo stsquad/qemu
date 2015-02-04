@@ -36,6 +36,9 @@ typedef struct PL011State {
     CharDriverState *chr;
     qemu_irq irq;
     const unsigned char *id;
+
+    /* not serialised, prevents pl011_update doing extra set_irqs */
+    uint32_t current_irq;
 } PL011State;
 
 #define PL011_INT_TX 0x20
@@ -53,10 +56,11 @@ static const unsigned char pl011_id_luminary[8] =
 
 static void pl011_update(PL011State *s)
 {
-    uint32_t flags;
-
-    flags = s->int_level & s->int_enabled;
-    qemu_set_irq(s->irq, flags != 0);
+    uint32_t flags = s->int_level & s->int_enabled;
+    if (flags != s->current_irq) {
+        s->current_irq = flags;
+        qemu_set_irq(s->irq, s->current_irq != 0);
+    }
 }
 
 static uint64_t pl011_read(void *opaque, hwaddr offset,
