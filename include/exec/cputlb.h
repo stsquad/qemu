@@ -19,6 +19,14 @@
 #ifndef CPUTLB_H
 #define CPUTLB_H
 
+enum flush_req
+{
+    TLB_NO_REQUEST = 0,
+    TLB_FLUSH,
+    TLB_FLUSH_GLOBAL,
+    TLB_FLUSH_PAGE
+};
+
 #if !defined(CONFIG_USER_ONLY)
 /* cputlb.c */
 void tlb_protect_code(ram_addr_t ram_addr);

@@ -29,6 +29,7 @@
 #include "exec/memory-internal.h"
 #include "exec/ram_addr.h"
 #include "tcg/tcg.h"
+#include "sysemu/cpus.h"
 
 void qemu_mutex_lock_iothread(void);
 void qemu_mutex_unlock_iothread(void);
@@ -38,6 +39,66 @@ void qemu_mutex_unlock_iothread(void);
 
 /* statistics */
 int tlb_flush_count;
+extern __thread CPUState *tcg_thread_cpu;
+
+static bool tlb_all_other_cpu_have_flushed(void)
+{
+    CPUState *cpu;
+
+    CPU_FOREACH(cpu) {
+        if ((!cpu->flushing) && (cpu->flush_request)
+        && (cpu->thread_id != qemu_get_thread_id())) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void tlb_global_flush(int flush_global)
+{
+    CPUState *cpu;
+
+    tcg_thread_cpu->flushing = true;
+
+    CPU_FOREACH(cpu) {
+        if (cpu->thread_id == qemu_get_thread_id()) {
+            cpu->flushing = true;
+            tlb_flush(cpu, flush_global);
+        } else {
+            if (!flush_global) {
+                cpu->flush_request = TLB_FLUSH;
+            } else {
+                cpu->flush_request = TLB_FLUSH_GLOBAL;
+            }
+            qemu_cpu_kick_thread(cpu);
+        }
+    }
+    while (!tlb_all_other_cpu_have_flushed());
+
+    tcg_thread_cpu->flushing = false;
+    tcg_thread_cpu->flush_request = 0;
+}
+
+void tlb_global_flush_page(target_ulong addr)
+{
+    CPUState *cpu;
+
+    tcg_thread_cpu->flushing = true;
+
+    CPU_FOREACH(cpu) {
+        if (cpu->thread_id == qemu_get_thread_id()) {
+            tlb_flush_page(cpu, addr);
+        }
+
+        cpu->flush_request = TLB_FLUSH_PAGE;
+        cpu->flush_addr = addr;
+        qemu_cpu_kick_thread(cpu);
+    }
+    while (!tlb_all_other_cpu_have_flushed());
+
+    tcg_thread_cpu->flushing = false;
+    tcg_thread_cpu->flush_request = 0;
+}
 
 /* NOTE:
  * If flush_global is true (the usual case), flush all tlb entries.
@@ -55,9 +116,6 @@ void tlb_flush(CPUState *cpu, int flush_global)
 {
     CPUArchState *env = cpu->env_ptr;
 
-#if defined(DEBUG_TLB)
-    printf("tlb_flush:\n");
-#endif
     /* must reset current TB so that interrupts cannot modify the
        links while we are modifying them */
     cpu->current_tb = NULL;
@@ -90,9 +148,11 @@ void tlb_flush_page(CPUState *cpu, target_ulong addr)
     int i;
     int mmu_idx;
 
-#if defined(DEBUG_TLB)
-    printf("tlb_flush_page: " TARGET_FMT_lx "\n", addr);
-#endif
+    /* XXX: this is a dirty hack to be sure we flush something when we have two
+            cpu wanting a tlb_flush and tlb_flush_page. */
+    tlb_flush(cpu, 1);
+    return;
+
     /* Check if we need to flush due to large pages.  */
     if ((addr & env->tlb_flush_mask) == env->tlb_flush_addr) {
 #if defined(DEBUG_TLB)

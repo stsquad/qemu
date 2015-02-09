@@ -42,6 +42,8 @@
 #include "qapi-event.h"
 #include "hw/nmi.h"
 
+#include "exec/cputlb.h"
+
 #ifndef _WIN32
 #include "qemu/compatfd.h"
 #endif
@@ -135,7 +137,7 @@ typedef struct TimersState {
 
 static TimersState timers_state;
 /* CPU associated to this thread. */
-static __thread CPUState *tcg_thread_cpu = NULL;
+__thread CPUState *tcg_thread_cpu = NULL;
 
 int64_t cpu_get_icount_raw(void)
 {
@@ -1330,6 +1332,24 @@ static int tcg_cpu_exec(CPUArchState *env)
     qemu_mutex_unlock_iothread();
 
     ret = cpu_exec(env);
+
+    if (cpu->flush_request) {
+        switch (cpu->flush_request) {
+            case TLB_FLUSH:
+                tlb_flush(cpu, 0);
+            break;
+            case TLB_FLUSH_GLOBAL:
+                tlb_flush(cpu, 1);
+            break;
+            case TLB_FLUSH_PAGE:
+                tlb_flush_page(cpu, cpu->flush_addr);
+            break;
+            default:
+            break;
+        }
+
+        cpu->flush_request = 0;
+    }
 
     qemu_mutex_lock_iothread();
 #ifdef CONFIG_PROFILER

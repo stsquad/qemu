@@ -310,6 +310,11 @@ struct CPUState {
     uint32_t can_do_io;
     int32_t exception_index; /* used by m68k TCG */
 
+    /* Somebody asked to flush the tlb of this CPU. */
+    volatile int flush_request;
+    uint64_t flush_addr;
+    volatile bool flushing;
+
     /* Note that this is accessed at the start of every TB via a negative
        offset from AREG0.  Leave this field at the end so as to make the
        (absolute value) offset as small as possible.  This reduces code

@@ -95,6 +95,19 @@ void tb_invalidate_phys_page_range(tb_page_addr_t start, tb_page_addr_t end,
                                    int is_cpu_write_access);
 void tb_invalidate_phys_range(tb_page_addr_t start, tb_page_addr_t end,
                               int is_cpu_write_access);
+/**
+ * tlb_global_flush.
+ * This flush all the CPU. Flush the calling CPU directly and then wait all the
+ * other CPU have finished to flush their TLB.
+ */
+void tlb_global_flush(int flush_global);
+/**
+ * tlb_global_flush_page.
+ * This flush all the CPU page. Flush the calling CPU directly and then wait all
+ * the other CPU have finished to flush their TLB.
+ */
+void tlb_global_flush_page(target_ulong addr);
+
 #if !defined(CONFIG_USER_ONLY)
 bool qemu_in_vcpu_thread(void);
 void cpu_reload_memory_map(CPUState *cpu);
