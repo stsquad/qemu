@@ -99,5 +99,5 @@ matrix:
           EXTRA_CONFIG="--enable-trace-backends=ust"
       compiler: gcc
     - env: TARGETS=i386-softmmu,x86_64-softmmu
-           EXTRA_CONFIG="--enable-modules"
+           EXTRA_CONFIG="--disable-modules"
       compiler: gcc

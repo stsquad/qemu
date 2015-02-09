@@ -271,7 +271,7 @@ gcov_tool="gcov"
 EXESUF=""
 DSOSUF=".so"
 LDFLAGS_SHARED="-shared"
-modules="no"
+modules=""
 prefix="/usr/local"
 mandir="\${prefix}/share/man"
 datadir="\${prefix}/share"
@@ -783,6 +783,9 @@ for opt do
   ;;
   --enable-modules)
       modules="yes"
+  ;;
+  --disable-modules)
+      modules="no"
   ;;
   --cpu=*)
   ;;
@@ -1508,25 +1511,11 @@ if compile_prog "-Werror -fno-gcse" "" ; then
 fi
 
 if test "$static" = "yes" ; then
-  if test "$modules" = "yes" ; then
-    error_exit "static and modules are mutually incompatible"
-  fi
   if test "$pie" = "yes" ; then
     error_exit "static and pie are mutually incompatible"
   else
     pie="no"
   fi
-fi
-
-# Unconditional check for compiler __thread support
-  cat > $TMPC << EOF
-static __thread int tls_var;
-int main(void) { return tls_var; }
-EOF
-
-if ! compile_prog "-Werror" "" ; then
-    error_exit "Your compiler does not support the __thread specifier for " \
-	"Thread-Local Storage (TLS). Please upgrade to a version that does."
 fi
 
 if test "$pie" = ""; then
@@ -1599,6 +1588,17 @@ EOF
     echo "Disabling libtool due to broken toolchain support"
     libtool=
   fi
+fi
+
+# Unconditional check for compiler __thread support
+  cat > $TMPC << EOF
+static __thread int tls_var;
+int main(void) { return tls_var; }
+EOF
+
+if ! compile_prog "-Werror" "" ; then
+    error_exit "Your compiler does not support the __thread specifier for " \
+	"Thread-Local Storage (TLS). Please upgrade to a version that does."
 fi
 
 ##########################################
@@ -2784,17 +2784,26 @@ if test "$modules" = yes; then
     glib_modules="$glib_modules gmodule-2.0"
 fi
 
-for i in $glib_modules; do
-    if $pkg_config --atleast-version=$glib_req_ver $i; then
-        glib_cflags=`$pkg_config --cflags $i`
-        glib_libs=`$pkg_config --libs $i`
-        CFLAGS="$glib_cflags $CFLAGS"
-        LIBS="$glib_libs $LIBS"
-        libs_qga="$glib_libs $libs_qga"
-    else
-        error_exit "glib-$glib_req_ver $i is required to compile QEMU"
-    fi
-done
+glib_pkg_config()
+{
+  if $pkg_config --atleast-version=$glib_req_ver $1; then
+    local probe_cflags
+    local probe_libs
+    probe_cflags=$($pkg_config --cflags $1)
+    probe_libs=$($pkg_config --libs $1)
+    CFLAGS="$probe_cflags $CFLAGS"
+    LIBS="$probe_libs $LIBS"
+    libs_qga="$probe_libs $libs_qga"
+    glib_cflags="$probe_cflags $glib_cflags"
+    glib_libs="$probe_libs $glib_libs"
+    return 0
+  else
+    return 1
+  fi
+}
+
+glib_pkg_config gthread-2.0 || \
+  error_exit "glib-$glib_req_ver gthread-2.0 is required to compile QEMU"
 
 # g_test_trap_subprocess added in 2.38. Used by some tests.
 glib_subprocess=yes
@@ -2815,19 +2824,57 @@ if ! compile_prog "$glib_cflags -Werror" "$glib_libs" ; then
 fi
 
 ##########################################
-# SHA command probe for modules
-if test "$modules" = yes; then
-    shacmd_probe="sha1sum sha1 shasum"
-    for c in $shacmd_probe; do
-        if has $c; then
-            shacmd="$c"
-            break
-        fi
-    done
-    if test "$shacmd" = ""; then
-        error_exit "one of the checksum commands is required to enable modules: $shacmd_probe"
+# SHA command and gmodule-2.0 probe for modules
+# return 0 if probe succeeds
+# $1: true - force mode, exit if probe fail
+#     false - optoinal mode, return 1 if probe fail
+module_try_enable()
+{
+  force=$1
+  if test "$static" = "yes"; then
+    if $force; then
+      error_exit "static and modules are mutually incompatible"
+    else
+      modules="no"
+      return
     fi
-fi
+  fi
+  shacmd_probe="sha1sum sha1 shasum"
+  for c in $shacmd_probe; do
+    if has $c; then
+      shacmd="$c"
+      break
+    fi
+  done
+  if test "$shacmd" = ""; then
+    if $force; then
+      error_exit "one of the checksum commands is required to enable modules: $shacmd_probe"
+    else
+      modules="no"
+      return
+    fi
+  fi
+  if ! glib_pkg_config gmodule-2.0; then
+    if $force; then
+      error_exit "glib-$glib_req_ver gmodule-2.0 is required to compile QEMU"
+    else
+      modules="no"
+      return
+    fi
+  fi
+  modules="yes"
+}
+
+case "$modules" in
+  yes)
+    module_try_enable true
+    ;;
+  "")
+    module_try_enable false
+    ;;
+  no)
+    ;;
+esac
 
 ##########################################
 # pixman support probe
