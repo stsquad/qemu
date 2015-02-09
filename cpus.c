@@ -1067,7 +1067,7 @@ static void *qemu_tcg_cpu_thread_fn(void *arg)
     return NULL;
 }
 
-static void qemu_cpu_kick_thread(CPUState *cpu)
+void qemu_cpu_kick_thread(CPUState *cpu)
 {
 #ifndef _WIN32
     int err;
