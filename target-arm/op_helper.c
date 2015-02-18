@@ -24,6 +24,26 @@
 #define SIGNBIT (uint32_t)0x80000000
 #define SIGNBIT64 ((uint64_t)1 << 63)
 
+#include "qsim-vm.h"
+#include "vm-func.h"
+
+#include "qsim-context.h"
+
+
+extern qsim_ucontext_t qemu_context;
+extern qsim_ucontext_t main_context;
+
+extern int qsim_memop_flag;
+extern uint64_t qsim_phys_addr;
+extern uint64_t qsim_host_addr;
+
+extern int qsim_id;
+
+extern uint64_t qsim_icount;
+uint64_t qsim_eip;
+extern inst_cb_t    qsim_inst_cb;
+extern mem_cb_t     qsim_mem_cb;
+
 static void raise_exception(CPUARMState *env, int tt)
 {
     ARMCPU *cpu = arm_env_get_cpu(env);
@@ -839,4 +859,104 @@ uint32_t HELPER(ror_cc)(CPUARMState *env, uint32_t x, uint32_t i)
         env->CF = (x >> (shift - 1)) & 1;
         return ((uint32_t)x >> shift) | (x << (32 - shift));
     }
+}
+
+void HELPER(inst_callback)(uint32_t vaddr, uint32_t length, uint32_t type)
+{
+	if (qsim_inst_cb != NULL) {
+
+		// get physical addr
+		/*
+		qsim_inst_cb(qsim_id, vaddr, qsim_phys_addr, length,
+					(uint8_t *)qsim_host_addr, type);
+					*/
+		qsim_inst_cb(qsim_id, vaddr, 0, length, 0, type);
+	}
+
+	qsim_icount--;
+	if (qsim_icount == 0) {
+		swapcontext(&qemu_context, &main_context);
+	}
+
+	return;
+}
+
+static inline void memop_callback(uint32_t addr, uint32_t size, int type)
+{
+	if (qsim_mem_cb == NULL)
+		return;
+
+	qsim_mem_cb(qsim_id, addr, 0, size, type);
+}
+
+void HELPER(store_callback_pre)(uint32_t vaddr, uint32_t length, uint32_t type)
+{
+	memop_callback(vaddr, length, type);
+	return;
+}
+
+void HELPER(store_callback_post)(uint32_t vaddr, uint32_t length, uint32_t type)
+{
+	memop_callback(vaddr, length, type);
+	return;
+}
+
+void HELPER(load_callback_pre)(uint32_t vaddr, uint32_t length, uint32_t type)
+{
+	memop_callback(vaddr, length, type);
+	return;
+}
+
+void HELPER(load_callback_post)(uint32_t vaddr, uint32_t length, uint32_t type)
+{
+	memop_callback(vaddr, length, type);
+	return;
+}
+
+void HELPER(reg_read_callback)(CPUARMState *env, uint32_t vaddr, uint32_t length, uint32_t type)
+{
+	memop_callback(vaddr, length, type);
+	return;
+}
+
+void HELPER(reg_write_callback)(CPUARMState *env, uint32_t vaddr, uint32_t length, uint32_t type)
+{
+	memop_callback(vaddr, length, type);
+	return;
+}
+
+uint8_t mem_rd(uint64_t paddr);
+void mem_wr(uint64_t paddr, uint8_t val);
+uint8_t mem_rd_virt(uint64_t vaddr);
+void mem_wr_virt(uint64_t vaddr, uint8_t val);
+
+uint64_t get_reg(enum regs r)
+{
+	//set_reg(r, 0);
+	return 0;
+}
+
+void set_reg(enum regs r, uint64_t val)
+{
+	get_reg(r);
+}
+
+uint8_t mem_rd(uint64_t paddr)
+{
+	return 0;
+}
+
+void mem_wr(uint64_t paddr, uint8_t val)
+{
+	return;
+}
+
+uint8_t mem_rd_virt(uint64_t vaddr)
+{
+	return 0;
+}
+
+void mem_wr_virt(uint64_t vaddr, uint8_t val)
+{
+	return;
 }
