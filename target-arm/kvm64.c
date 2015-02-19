@@ -140,6 +140,7 @@ int kvm_arch_put_registers(CPUState *cs, int level)
     uint64_t val;
     int i;
     int ret;
+    unsigned int el;
 
     ARMCPU *cpu = ARM_CPU(cs);
     CPUARMState *env = &cpu->env;
@@ -206,9 +207,29 @@ int kvm_arch_put_registers(CPUState *cs, int level)
         return ret;
     }
 
+    /* Saved Program State Registers
+     *
+     * Before we restore from the banked_spsr[] array we need to
+     * ensure that any modifications to env->spsr are correctly
+     * reflected and map aarch64 exception levels if required.
+     */
+    el = arm_current_el(env);
+    if (el > 0) {
+        if (is_a64(env)) {
+            g_assert(el == 1);
+            env->banked_spsr[0] = env->spsr;
+            /* QEMUs AARCH64 EL1 SPSR is in bank 0, so map it to
+             * KVM_SPSR_SVC for syncing to KVM */
+            env->banked_spsr[1] = env->banked_spsr[0];
+        } else {
+            i = bank_number(env->uncached_cpsr & CPSR_M);
+            env->banked_spsr[i] = env->spsr;
+        }
+    }
+
     for (i = 0; i < KVM_NR_SPSR; i++) {
         reg.id = AARCH64_CORE_REG(spsr[i]);
-        reg.addr = (uintptr_t) &env->banked_spsr[i - 1];
+        reg.addr = (uintptr_t) &env->banked_spsr[i+1];
         ret = kvm_vcpu_ioctl(cs, KVM_SET_ONE_REG, &reg);
         if (ret) {
             return ret;
@@ -254,6 +275,7 @@ int kvm_arch_get_registers(CPUState *cs)
     struct kvm_one_reg reg;
     uint64_t val;
     uint32_t fpr;
+    unsigned int el;
     int i;
     int ret;
 
@@ -326,13 +348,32 @@ int kvm_arch_get_registers(CPUState *cs)
         return ret;
     }
 
+    /* Fetch the SPSR registers
+     *
+     * KVM has an array of state indexed for all the possible aarch32
+     * privilege levels. These map onto QEMUs aarch32 banks 1 - 4.
+     */
     for (i = 0; i < KVM_NR_SPSR; i++) {
         reg.id = AARCH64_CORE_REG(spsr[i]);
-        reg.addr = (uintptr_t) &env->banked_spsr[i - 1];
+        reg.addr = (uintptr_t) &env->banked_spsr[i+1];
         ret = kvm_vcpu_ioctl(cs, KVM_GET_ONE_REG, &reg);
         if (ret) {
             return ret;
         }
+    }
+
+    el = arm_current_el(env);
+    if (el > 0) {
+        if (is_a64(env)) {
+            g_assert(el == 1);
+            /* KVM_SPSR_SVC holds the AARCH64 EL1 SPSR which QEMU
+             * keeps in bank 0 so copy it across. */
+            env->banked_spsr[0] = env->banked_spsr[1];
+            i = aarch64_banked_spsr_index(el);
+        } else {
+            i = bank_number(env->uncached_cpsr & CPSR_M);
+        }
+        env->spsr = env->banked_spsr[i];
     }
 
     /* Advanced SIMD and FP registers */
