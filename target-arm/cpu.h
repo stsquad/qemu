@@ -155,6 +155,11 @@ typedef struct CPUARMState {
        This contains all the other bits.  Use cpsr_{read,write} to access
        the whole CPSR.  */
     uint32_t uncached_cpsr;
+    /* The spsr is a alias for spsr_elN where N is the current
+     * exception level. It is provided for here so the TCG msr/mrs
+     * implementation can access one register. Care needs to be taken
+     * to ensure the banked_spsr[] is also updated.
+     */
     uint32_t spsr;
 
     /* Banked registers.  */
