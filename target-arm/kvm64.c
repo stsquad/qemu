@@ -192,9 +192,14 @@ int kvm_arch_put_registers(CPUState *cs, int level)
         return ret;
     }
 
-    for (i = 0; i < KVM_NR_SPSR; i++) {
-        reg.id = AARCH64_CORE_REG(spsr[i]);
-        reg.addr = (uintptr_t) &env->banked_spsr[i - 1];
+    /* Make sure banked spsr is properly set */
+    env->banked_spsr[aarch64_banked_spsr_index(arm_current_el(env))] = env->spsr;
+    /* KVM maps SPSR_svc to SPSR_EL1 for arch32 support */
+    env->banked_spsr[1] = env->banked_spsr[0];
+
+    for (i = 1; i <= KVM_NR_SPSR; i++) {
+        reg.id = AARCH64_CORE_REG(spsr[i - 1]);
+        reg.addr = (uintptr_t) &env->banked_spsr[i];
         ret = kvm_vcpu_ioctl(cs, KVM_SET_ONE_REG, &reg);
         if (ret) {
             return ret;
@@ -295,14 +300,19 @@ int kvm_arch_get_registers(CPUState *cs)
         return ret;
     }
 
-    for (i = 0; i < KVM_NR_SPSR; i++) {
-        reg.id = AARCH64_CORE_REG(spsr[i]);
-        reg.addr = (uintptr_t) &env->banked_spsr[i - 1];
+    for (i = 1; i <= KVM_NR_SPSR; i++) {
+        reg.id = AARCH64_CORE_REG(spsr[i - 1]);
+        reg.addr = (uintptr_t) &env->banked_spsr[i];
         ret = kvm_vcpu_ioctl(cs, KVM_GET_ONE_REG, &reg);
         if (ret) {
             return ret;
         }
     }
+
+    /* KVM maps SPSR_svc to SPSR_EL1 for arch32 support */
+    env->banked_spsr[0] = env->banked_spsr[1];
+    /* Make sure current mode spsr is properly set */
+    env->spsr = env->banked_spsr[aarch64_banked_spsr_index(arm_current_el(env))];
 
     /* Advanced SIMD and FP registers */
     for (i = 0; i < 32; i++) {
