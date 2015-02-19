@@ -137,6 +137,7 @@ int kvm_arch_put_registers(CPUState *cs, int level)
     uint64_t val;
     int i;
     int ret;
+    unsigned int el;
 
     ARMCPU *cpu = ARM_CPU(cs);
     CPUARMState *env = &cpu->env;
@@ -192,14 +193,16 @@ int kvm_arch_put_registers(CPUState *cs, int level)
         return ret;
     }
 
-    /* Make sure banked spsr is properly set */
-    env->banked_spsr[aarch64_banked_spsr_index(arm_current_el(env))] = env->spsr;
-    /* KVM maps SPSR_svc to SPSR_EL1 for arch32 support */
-    env->banked_spsr[1] = env->banked_spsr[0];
-
-    for (i = 1; i <= KVM_NR_SPSR; i++) {
-        reg.id = AARCH64_CORE_REG(spsr[i - 1]);
-        reg.addr = (uintptr_t) &env->banked_spsr[i];
+    /* Saved Program State Registers
+     *
+     * We only need to restore banked spsr if the guest is not in EL0 */
+    el = arm_current_el(env);
+    if (el > 0) {
+        g_assert( is_a64(env) );
+        g_assert( el == 1 );
+        g_assert( env->spsr == env->banked_spsr[aarch64_banked_spsr_index(el)] );
+        reg.id = AARCH64_CORE_REG(spsr[KVM_SPSR_EL1]);
+        reg.addr = (uintptr_t) &env->banked_spsr[aarch64_banked_spsr_index(el)];
         ret = kvm_vcpu_ioctl(cs, KVM_SET_ONE_REG, &reg);
         if (ret) {
             return ret;
@@ -244,6 +247,7 @@ int kvm_arch_get_registers(CPUState *cs)
     struct kvm_one_reg reg;
     uint64_t val;
     uint32_t fpr;
+    unsigned int el;
     int i;
     int ret;
 
@@ -300,19 +304,23 @@ int kvm_arch_get_registers(CPUState *cs)
         return ret;
     }
 
-    for (i = 1; i <= KVM_NR_SPSR; i++) {
-        reg.id = AARCH64_CORE_REG(spsr[i - 1]);
-        reg.addr = (uintptr_t) &env->banked_spsr[i];
+    /* Figure out what el the guest is in */
+    el = arm_current_el(env);
+    if ( el > 0 ) {
+        /* Currently we only handle 64 bit guests in EL0/1 state */
+        g_assert(is_a64(env));
+        g_assert(el == 1);
+        reg.id = AARCH64_CORE_REG(spsr[KVM_SPSR_EL1]);
+        reg.addr = (uintptr_t) &env->spsr;
         ret = kvm_vcpu_ioctl(cs, KVM_GET_ONE_REG, &reg);
         if (ret) {
             return ret;
         }
+        env->banked_spsr[aarch64_banked_spsr_index(el)] = env->spsr;
+    } else {
+        /* Invalid at this point */
+        env->spsr = 0;
     }
-
-    /* KVM maps SPSR_svc to SPSR_EL1 for arch32 support */
-    env->banked_spsr[0] = env->banked_spsr[1];
-    /* Make sure current mode spsr is properly set */
-    env->spsr = env->banked_spsr[aarch64_banked_spsr_index(arm_current_el(env))];
 
     /* Advanced SIMD and FP registers */
     for (i = 0; i < 32; i++) {
