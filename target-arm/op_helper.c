@@ -28,6 +28,7 @@
 #include "vm-func.h"
 
 #include "qsim-context.h"
+#include "qsim-arm-regs.h"
 
 
 extern qsim_ucontext_t qemu_context;
@@ -930,15 +931,32 @@ void mem_wr(uint64_t paddr, uint8_t val);
 uint8_t mem_rd_virt(uint64_t vaddr);
 void mem_wr_virt(uint64_t vaddr, uint8_t val);
 
-uint64_t get_reg(enum regs r)
+uint64_t get_reg(CPUARMState *env, enum regs r)
 {
-	//set_reg(r, 0);
+    if (r <= QSIM_R15) {
+        helper_get_user_reg(env, r);
+    } else {
+        switch (r) {
+        case QSIM_CPSR: return cpsr_read(env);
+        default: break;
+        }
+    }
+
 	return 0;
 }
 
-void set_reg(enum regs r, uint64_t val)
+void set_reg(CPUARMState *env, enum regs r, uint64_t val)
 {
-	get_reg(r);
+    if (r <= QSIM_R15) {
+        helper_set_user_reg(env, r, val);
+    } else {
+        switch (r) {
+        case QSIM_CPSR: cpsr_write(env, val, ~0); break;
+        default: break;
+        }
+    }
+
+	return;
 }
 
 uint8_t mem_rd(uint64_t paddr)
