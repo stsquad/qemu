@@ -25,7 +25,7 @@
 #define SIGNBIT64 ((uint64_t)1 << 63)
 
 #include "qsim-vm.h"
-#include "vm-func.h"
+#include "qsim-func.h"
 
 #include "qsim-context.h"
 #include "qsim-arm-regs.h"

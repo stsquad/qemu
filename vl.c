@@ -29,7 +29,7 @@
 #include <sys/time.h>
 
 #include "qsim-vm.h"
-#include "vm-func.h"
+#include "qsim-func.h"
 
 #include "qsim-context.h"
 
