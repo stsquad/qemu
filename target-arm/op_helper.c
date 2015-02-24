@@ -915,6 +915,8 @@ void HELPER(load_callback_post)(uint32_t vaddr, uint32_t length, uint32_t type)
 	return;
 }
 
+CPUARMState *qsim_cpu;
+
 void HELPER(reg_read_callback)(CPUARMState *env, uint32_t vaddr, uint32_t length, uint32_t type)
 {
 	memop_callback(vaddr, length, type);
@@ -944,13 +946,13 @@ void mem_wr(uint64_t paddr, uint8_t val);
 uint8_t mem_rd_virt(uint64_t vaddr);
 void mem_wr_virt(uint64_t vaddr, uint8_t val);
 
-uint64_t get_reg(CPUARMState *env, enum regs r)
+uint64_t get_reg(enum regs r)
 {
     if (r <= QSIM_R15) {
-        helper_get_user_reg(env, r);
+        helper_get_user_reg(qsim_cpu, r);
     } else {
         switch (r) {
-        case QSIM_CPSR: return cpsr_read(env);
+        case QSIM_CPSR: return cpsr_read(qsim_cpu);
         default: break;
         }
     }
@@ -958,13 +960,13 @@ uint64_t get_reg(CPUARMState *env, enum regs r)
 	return 0;
 }
 
-void set_reg(CPUARMState *env, enum regs r, uint64_t val)
+void set_reg(enum regs r, uint64_t val)
 {
     if (r <= QSIM_R15) {
-        helper_set_user_reg(env, r, val);
+        helper_set_user_reg(qsim_cpu, r, val);
     } else {
         switch (r) {
-        case QSIM_CPSR: cpsr_write(env, val, ~0); break;
+        case QSIM_CPSR: cpsr_write(qsim_cpu, val, ~0); break;
         default: break;
         }
     }
