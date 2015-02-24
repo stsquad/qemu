@@ -8369,6 +8369,7 @@ static void disas_arm_insn(DisasContext *s, unsigned int insn)
                         addr = tcg_temp_local_new_i32();
                         load_reg_var(s, addr, rn);
 
+                        gen_helper_atomic_callback();
                         /* Since the emulation does not have barriers,
                            the acquire/release semantics need no special
                            handling */
@@ -8445,6 +8446,7 @@ static void disas_arm_insn(DisasContext *s, unsigned int insn)
                         }
                         tcg_temp_free_i32(addr);
                     } else {
+                        gen_helper_atomic_callback();
                         /* SWP instruction */
                         rm = (insn) & 0xf;
 

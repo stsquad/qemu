@@ -44,6 +44,7 @@ extern uint64_t qsim_icount;
 uint64_t qsim_eip;
 extern inst_cb_t    qsim_inst_cb;
 extern mem_cb_t     qsim_mem_cb;
+extern atomic_cb_t  qsim_atomic_cb;
 
 static void raise_exception(CPUARMState *env, int tt)
 {
@@ -924,6 +925,18 @@ void HELPER(reg_write_callback)(CPUARMState *env, uint32_t vaddr, uint32_t lengt
 {
 	memop_callback(vaddr, length, type);
 	return;
+}
+
+static bool atomic_flag = false;
+
+void HELPER(atomic_callback)(void)
+{
+    atomic_flag = !atomic_flag;
+    /* if atomic callback returns non-zero, suspend execution */
+    if (qsim_atomic_cb && qsim_atomic_cb(qsim_id))
+        swapcontext(&qemu_context, &main_context);
+
+    return;
 }
 
 uint8_t mem_rd(uint64_t paddr);
