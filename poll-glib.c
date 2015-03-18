@@ -14,6 +14,9 @@
 #include "qemu-common.h"
 #include "qemu/timer.h"
 #include "qemu/poll.h"
+#if CONFIG_PPOLL
+#include <poll.h>
+#endif
 
 struct QEMUPoll {
     /* Array of GPollFD for g_poll() */
@@ -42,13 +45,33 @@ void qemu_poll_free(QEMUPoll *qpoll)
 int qemu_poll(QEMUPoll *qpoll, int64_t timeout_ns)
 {
     int i;
+    void *fds = qpoll->gpollfds->data;
+    int nfds = qpoll->gpollfds->len;
+
     for (i = 0; i < qpoll->gpollfds->len; i++) {
         GPollFD *p = &g_array_index(qpoll->gpollfds, GPollFD, i);
         p->revents = 0;
     }
-    return g_poll((GPollFD *)qpoll->gpollfds->data,
-                  qpoll->gpollfds->len,
-                  qemu_timeout_ns_to_ms(timeout_ns));
+#if CONFIG_PPOLL
+    if (timeout_ns < 0) {
+        return ppoll(fds, nfds, NULL, NULL);
+    } else {
+        struct timespec ts;
+        int64_t tvsec = timeout_ns / 1000000000LL;
+        /* Avoid possibly overflowing and specifying a negative number of
+         * seconds, which would turn a very long timeout into a busy-wait.
+         */
+        if (tvsec > (int64_t)INT32_MAX) {
+            tvsec = INT32_MAX;
+        }
+        ts.tv_sec = tvsec;
+        ts.tv_nsec = timeout_ns % 1000000000LL;
+        return ppoll(fds, nfds, &ts, NULL);
+    }
+
+#else
+    return g_poll(data, nfds, qemu_timeout_ns_to_ms(timeout_ns));
+#endif
 }
 
 /* Add an fd to poll. Return -EEXIST if fd already registered. */
