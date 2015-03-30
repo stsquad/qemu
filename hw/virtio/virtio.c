@@ -505,6 +505,9 @@ int virtqueue_pop(VirtQueue *vq, VirtQueueElement *elem, Error **errp)
     VirtIODevice *vdev = vq->vdev;
     Error *local_err = NULL;
 
+    if (virtio_device_needs_reset(vdev)) {
+        return -EINVAL;
+    }
     ret = virtqueue_num_heads(vq, vq->last_avail_idx, &local_err);
     if (ret <= 0) {
         goto err;
