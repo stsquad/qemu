@@ -623,6 +623,10 @@ void virtio_set_status(VirtIODevice *vdev, uint8_t val)
     VirtioDeviceClass *k = VIRTIO_DEVICE_GET_CLASS(vdev);
     trace_virtio_set_status(vdev, val);
 
+    if (val) {
+        /* Unsetting NEED_RESET bit without reset is ignored. */
+        val |= (vdev->status & VIRTIO_CONFIG_S_NEEDS_RESET);
+    }
     if (k->set_status) {
         k->set_status(vdev, val);
     }
@@ -1382,6 +1386,20 @@ static void virtio_device_realize(DeviceState *dev, Error **errp)
         }
     }
     virtio_bus_device_plugged(vdev);
+}
+
+void virtio_device_set_needs_reset(VirtIODevice *vdev)
+{
+    if (vdev->status & VIRTIO_CONFIG_S_NEEDS_RESET) {
+        return;
+    }
+    vdev->status |= VIRTIO_CONFIG_S_NEEDS_RESET;
+    virtio_notify_config(vdev);
+}
+
+bool virtio_device_needs_reset(VirtIODevice *vdev)
+{
+    return vdev->status & VIRTIO_CONFIG_S_NEEDS_RESET;
 }
 
 static void virtio_device_unrealize(DeviceState *dev, Error **errp)

@@ -131,6 +131,8 @@ VirtQueue *virtio_add_queue(VirtIODevice *vdev, int queue_size,
                             void (*handle_output)(VirtIODevice *,
                                                   VirtQueue *),
                             Error **errp);
+void virtio_device_set_needs_reset(VirtIODevice *vdev);
+bool virtio_device_needs_reset(VirtIODevice *vdev);
 
 void virtio_del_queue(VirtIODevice *vdev, int n, Error **errp);
 
