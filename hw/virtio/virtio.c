@@ -432,25 +432,32 @@ int virtqueue_avail_bytes(VirtQueue *vq, unsigned int in_bytes,
 }
 
 void virtqueue_map_sg(struct iovec *sg, hwaddr *addr,
-    size_t num_sg, int is_write)
+                      size_t num_sg, int is_write,
+                      Error **errp)
 {
-    unsigned int i;
+    int i;
     hwaddr len;
 
     if (num_sg > VIRTQUEUE_MAX_SIZE) {
-        error_report("virtio: map attempt out of bounds: %zd > %d",
-                     num_sg, VIRTQUEUE_MAX_SIZE);
-        exit(1);
+        error_setg(errp, "virtio: map attempt out of bounds: %zd > %d",
+                   num_sg, VIRTQUEUE_MAX_SIZE);
+        return;
     }
 
     for (i = 0; i < num_sg; i++) {
         len = sg[i].iov_len;
         sg[i].iov_base = cpu_physical_memory_map(addr[i], &len, is_write);
         if (sg[i].iov_base == NULL || len != sg[i].iov_len) {
-            error_report("virtio: error trying to map MMIO memory");
-            exit(1);
+            goto fail;
         }
     }
+    return;
+fail:
+    for ( ; i >= 0; i--) {
+        cpu_physical_memory_unmap(sg[i].iov_base, sg[i].iov_len,
+                                  is_write, 0);
+    }
+    error_setg(errp, "virtio: error trying to map MMIO memory");
 }
 
 int virtqueue_pop(VirtQueue *vq, VirtQueueElement *elem)
@@ -514,8 +521,10 @@ int virtqueue_pop(VirtQueue *vq, VirtQueueElement *elem)
     } while ((i = virtqueue_next_desc(vdev, desc_pa, i, max)) != max);
 
     /* Now map what we have collected */
-    virtqueue_map_sg(elem->in_sg, elem->in_addr, elem->in_num, 1);
-    virtqueue_map_sg(elem->out_sg, elem->out_addr, elem->out_num, 0);
+    virtqueue_map_sg(elem->in_sg, elem->in_addr, elem->in_num, 1,
+                     &error_abort);
+    virtqueue_map_sg(elem->out_sg, elem->out_addr, elem->out_num, 0,
+                     &error_abort);
 
     elem->index = head;
 

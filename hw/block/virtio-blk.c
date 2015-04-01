@@ -822,9 +822,9 @@ static int virtio_blk_load_device(VirtIODevice *vdev, QEMUFile *f,
         s->rq = req;
 
         virtqueue_map_sg(req->elem.in_sg, req->elem.in_addr,
-            req->elem.in_num, 1);
+            req->elem.in_num, 1, &error_abort);
         virtqueue_map_sg(req->elem.out_sg, req->elem.out_addr,
-            req->elem.out_num, 0);
+            req->elem.out_num, 0, &error_abort);
     }
 
     return 0;
