@@ -94,7 +94,7 @@ static size_t write_to_port(VirtIOSerialPort *port,
     while (offset < size) {
         size_t len;
 
-        if (!virtqueue_pop(vq, &elem)) {
+        if (!virtqueue_pop(vq, &elem, &error_abort)) {
             break;
         }
 
@@ -116,7 +116,7 @@ static void discard_vq_data(VirtQueue *vq, VirtIODevice *vdev)
     if (!virtio_queue_ready(vq)) {
         return;
     }
-    while (virtqueue_pop(vq, &elem)) {
+    while (virtqueue_pop(vq, &elem, &error_abort)) {
         virtqueue_push(vq, &elem, 0);
     }
     virtio_notify(vdev, vq);
@@ -137,7 +137,7 @@ static void do_flush_queued_data(VirtIOSerialPort *port, VirtQueue *vq,
 
         /* Pop an elem only if we haven't left off a previous one mid-way */
         if (!port->elem.out_num) {
-            if (!virtqueue_pop(vq, &port->elem)) {
+            if (!virtqueue_pop(vq, &port->elem, &error_abort)) {
                 break;
             }
             port->iov_idx = 0;
@@ -190,7 +190,7 @@ static size_t send_control_msg(VirtIOSerial *vser, void *buf, size_t len)
     if (!virtio_queue_ready(vq)) {
         return 0;
     }
-    if (!virtqueue_pop(vq, &elem)) {
+    if (!virtqueue_pop(vq, &elem, &error_abort)) {
         return 0;
     }
 
@@ -420,7 +420,7 @@ static void control_out(VirtIODevice *vdev, VirtQueue *vq)
 
     len = 0;
     buf = NULL;
-    while (virtqueue_pop(vq, &elem)) {
+    while (virtqueue_pop(vq, &elem, &error_abort)) {
         size_t cur_len;
 
         cur_len = iov_size(elem.out_sg, elem.out_num);

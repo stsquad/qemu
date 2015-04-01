@@ -481,29 +481,49 @@ fail:
     error_setg(errp, "virtio: error trying to map MMIO memory");
 }
 
-int virtqueue_pop(VirtQueue *vq, VirtQueueElement *elem)
+static void virtqueue_undo_map_sg(struct iovec *sg, hwaddr *addr,
+                                  size_t num_sg, int is_write)
+{
+    int i;
+
+    for (i = 0; i < num_sg; i++) {
+        cpu_physical_memory_unmap(sg[i].iov_base, sg[i].iov_len,
+                                  is_write, 0);
+    }
+}
+
+int virtqueue_pop(VirtQueue *vq, VirtQueueElement *elem, Error **errp)
 {
     unsigned int i, head, max;
+    int ret;
     hwaddr desc_pa = vq->vring.desc;
     VirtIODevice *vdev = vq->vdev;
+    Error *local_err = NULL;
 
-    if (!virtqueue_num_heads(vq, vq->last_avail_idx, &error_abort))
-        return 0;
+    ret = virtqueue_num_heads(vq, vq->last_avail_idx, &local_err);
+    if (ret <= 0) {
+        goto err;
+    }
 
     /* When we start there are none of either input nor output. */
     elem->out_num = elem->in_num = 0;
 
     max = vq->vring.num;
 
-    i = head = virtqueue_get_head(vq, vq->last_avail_idx++, &error_abort);
+    ret = virtqueue_get_head(vq, vq->last_avail_idx++, &local_err);
+    if (ret < 0) {
+        goto err;
+    }
+    head = i = ret;
+
     if (virtio_has_feature(vdev, VIRTIO_RING_F_EVENT_IDX)) {
         vring_set_avail_event(vq, vq->last_avail_idx);
     }
 
     if (vring_desc_flags(vdev, desc_pa, i) & VRING_DESC_F_INDIRECT) {
         if (vring_desc_len(vdev, desc_pa, i) % sizeof(VRingDesc)) {
-            error_report("Invalid size for indirect buffer table");
-            exit(1);
+            error_setg(errp, "Invalid size for indirect buffer table");
+            return -EINVAL;
         }
 
         /* loop over the indirect descriptor table */
@@ -518,15 +538,17 @@ int virtqueue_pop(VirtQueue *vq, VirtQueueElement *elem)
 
         if (vring_desc_flags(vdev, desc_pa, i) & VRING_DESC_F_WRITE) {
             if (elem->in_num >= ARRAY_SIZE(elem->in_sg)) {
-                error_report("Too many write descriptors in indirect table");
-                exit(1);
+                error_setg(errp,
+                           "Too many write descriptors in indirect table");
+                return -EINVAL;
             }
             elem->in_addr[elem->in_num] = vring_desc_addr(vdev, desc_pa, i);
             sg = &elem->in_sg[elem->in_num++];
         } else {
             if (elem->out_num >= ARRAY_SIZE(elem->out_sg)) {
-                error_report("Too many read descriptors in indirect table");
-                exit(1);
+                error_setg(errp,
+                           "Too many read descriptors in indirect table");
+                return -EINVAL;
             }
             elem->out_addr[elem->out_num] = vring_desc_addr(vdev, desc_pa, i);
             sg = &elem->out_sg[elem->out_num++];
@@ -536,20 +558,31 @@ int virtqueue_pop(VirtQueue *vq, VirtQueueElement *elem)
 
         /* If we've got too many, that implies a descriptor loop. */
         if ((elem->in_num + elem->out_num) > max) {
-            error_report("Looped descriptor");
-            exit(1);
+            error_setg(errp, "Looped descriptor");
+            return -EINVAL;
         }
-        i = virtqueue_next_desc(vdev, desc_pa, i, max, &error_abort);
-        if (i == max) {
+        ret = virtqueue_next_desc(vdev, desc_pa, i, max, &local_err);
+        if (ret < 0) {
+            goto err;
+        } else if (ret == max) {
             break;
         }
+        i = ret;
     }
 
     /* Now map what we have collected */
     virtqueue_map_sg(elem->in_sg, elem->in_addr, elem->in_num, 1,
-                     &error_abort);
+                     &local_err);
+    if (local_err) {
+        ret = -EINVAL;
+        goto err;
+    }
     virtqueue_map_sg(elem->out_sg, elem->out_addr, elem->out_num, 0,
-                     &error_abort);
+                     &local_err);
+    if (local_err) {
+        ret = -EINVAL;
+        goto err_unmap;
+    }
 
     elem->index = head;
 
@@ -557,6 +590,11 @@ int virtqueue_pop(VirtQueue *vq, VirtQueueElement *elem)
 
     trace_virtqueue_pop(vq, elem, elem->in_num, elem->out_num);
     return elem->in_num + elem->out_num;
+err_unmap:
+    virtqueue_undo_map_sg(elem->in_sg, elem->in_addr, elem->in_num, 1);
+err:
+    error_propagate(errp, local_err);
+    return ret;
 }
 
 /* virtio device */

@@ -177,7 +177,7 @@ static int virtio_scsi_parse_req(VirtIOSCSIReq *req,
 static VirtIOSCSIReq *virtio_scsi_pop_req(VirtIOSCSI *s, VirtQueue *vq)
 {
     VirtIOSCSIReq *req = virtio_scsi_init_req(s, vq);
-    if (!virtqueue_pop(vq, &req->elem)) {
+    if (!virtqueue_pop(vq, &req->elem, &error_abort)) {
         virtio_scsi_free_req(req);
         return NULL;
     }

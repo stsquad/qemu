@@ -206,7 +206,7 @@ static void virtio_balloon_handle_output(VirtIODevice *vdev, VirtQueue *vq)
     VirtQueueElement elem;
     MemoryRegionSection section;
 
-    while (virtqueue_pop(vq, &elem)) {
+    while (virtqueue_pop(vq, &elem, &error_abort)) {
         size_t offset = 0;
         uint32_t pfn;
 
@@ -246,7 +246,7 @@ static void virtio_balloon_receive_stats(VirtIODevice *vdev, VirtQueue *vq)
     size_t offset = 0;
     qemu_timeval tv;
 
-    if (!virtqueue_pop(vq, elem)) {
+    if (!virtqueue_pop(vq, elem, &error_abort)) {
         goto out;
     }
 

@@ -3259,7 +3259,7 @@ void handle_9p_output(VirtIODevice *vdev, VirtQueue *vq)
     ssize_t len;
 
     while ((pdu = alloc_pdu(s)) &&
-            (len = virtqueue_pop(vq, &pdu->elem)) != 0) {
+            (len = virtqueue_pop(vq, &pdu->elem, &error_abort)) != 0) {
         uint8_t *ptr;
         pdu->s = s;
         BUG_ON(pdu->elem.out_num == 0 || pdu->elem.in_num == 0);

@@ -56,7 +56,7 @@ static void chr_read(void *opaque, const void *buf, size_t size)
 
     offset = 0;
     while (offset < size) {
-        if (!virtqueue_pop(vrng->vq, &elem)) {
+        if (!virtqueue_pop(vrng->vq, &elem, &error_abort)) {
             break;
         }
         len = iov_from_buf(elem.in_sg, elem.in_num,

@@ -804,7 +804,7 @@ static void virtio_net_handle_ctrl(VirtIODevice *vdev, VirtQueue *vq)
     struct iovec *iov, *iov2;
     unsigned int iov_cnt;
 
-    while (virtqueue_pop(vq, &elem)) {
+    while (virtqueue_pop(vq, &elem, &error_abort)) {
         if (iov_size(elem.in_sg, elem.in_num) < sizeof(status) ||
             iov_size(elem.out_sg, elem.out_num) < sizeof(ctrl)) {
             error_report("virtio-net ctrl missing headers");
@@ -1031,7 +1031,7 @@ static ssize_t virtio_net_receive(NetClientState *nc, const uint8_t *buf, size_t
 
         total = 0;
 
-        if (virtqueue_pop(q->rx_vq, &elem) == 0) {
+        if (virtqueue_pop(q->rx_vq, &elem, &error_abort) == 0) {
             if (i == 0)
                 return -1;
             error_report("virtio-net unexpected empty queue: "
@@ -1134,7 +1134,7 @@ static int32_t virtio_net_flush_tx(VirtIONetQueue *q)
         return num_packets;
     }
 
-    while (virtqueue_pop(q->tx_vq, &elem)) {
+    while (virtqueue_pop(q->tx_vq, &elem, &error_abort)) {
         ssize_t ret, len;
         unsigned int out_num = elem.out_num;
         struct iovec *out_sg = &elem.out_sg[0];
