@@ -311,9 +311,10 @@ static int virtqueue_num_heads(VirtQueue *vq, unsigned int idx, Error **errp)
     return num_heads;
 }
 
-static unsigned int virtqueue_get_head(VirtQueue *vq, unsigned int idx)
+static int virtqueue_get_head(VirtQueue *vq, unsigned int idx,
+                              Error **errp)
 {
-    unsigned int head;
+    int head;
 
     /* Grab the next descriptor number they're advertising, and increment
      * the index we've seen. */
@@ -321,8 +322,8 @@ static unsigned int virtqueue_get_head(VirtQueue *vq, unsigned int idx)
 
     /* If their number is silly, that's a fatal mistake. */
     if (head >= vq->vring.num) {
-        error_report("Guest says index %u is available", head);
-        exit(1);
+        error_setg(errp, "Guest says index %u is available", head);
+        return -EINVAL;
     }
 
     return head;
@@ -369,7 +370,7 @@ void virtqueue_get_avail_bytes(VirtQueue *vq, unsigned int *in_bytes,
 
         max = vq->vring.num;
         num_bufs = total_bufs;
-        i = virtqueue_get_head(vq, idx++);
+        i = virtqueue_get_head(vq, idx++, &error_abort);
         desc_pa = vq->vring.desc;
 
         if (vring_desc_flags(vdev, desc_pa, i) & VRING_DESC_F_INDIRECT) {
@@ -474,7 +475,7 @@ int virtqueue_pop(VirtQueue *vq, VirtQueueElement *elem)
 
     max = vq->vring.num;
 
-    i = head = virtqueue_get_head(vq, vq->last_avail_idx++);
+    i = head = virtqueue_get_head(vq, vq->last_avail_idx++, &error_abort);
     if (virtio_has_feature(vdev, VIRTIO_RING_F_EVENT_IDX)) {
         vring_set_avail_event(vq, vq->last_avail_idx);
     }
