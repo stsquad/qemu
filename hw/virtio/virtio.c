@@ -443,12 +443,17 @@ done:
 }
 
 int virtqueue_avail_bytes(VirtQueue *vq, unsigned int in_bytes,
-                          unsigned int out_bytes)
+                          unsigned int out_bytes, Error **errp)
 {
+    Error *local_err = NULL;
     unsigned int in_total, out_total;
 
     virtqueue_get_avail_bytes(vq, &in_total, &out_total, in_bytes, out_bytes,
-                              &error_abort);
+                              &local_err);
+    if (local_err) {
+        error_propagate(errp, local_err);
+        return -EINVAL;
+    }
     return in_bytes <= in_total && out_bytes <= out_total;
 }
 

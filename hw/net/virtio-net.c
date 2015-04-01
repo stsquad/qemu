@@ -877,7 +877,7 @@ static int virtio_net_has_buffers(VirtIONetQueue *q, int bufsize)
     VirtIONet *n = q->n;
     if (virtio_queue_empty(q->rx_vq) ||
         (n->mergeable_rx_bufs &&
-         !virtqueue_avail_bytes(q->rx_vq, bufsize, 0))) {
+         !virtqueue_avail_bytes(q->rx_vq, bufsize, 0, &error_abort))) {
         virtio_queue_set_notification(q->rx_vq, 1);
 
         /* To avoid a race condition where the guest has made some buffers
@@ -886,7 +886,7 @@ static int virtio_net_has_buffers(VirtIONetQueue *q, int bufsize)
          */
         if (virtio_queue_empty(q->rx_vq) ||
             (n->mergeable_rx_bufs &&
-             !virtqueue_avail_bytes(q->rx_vq, bufsize, 0))) {
+             !virtqueue_avail_bytes(q->rx_vq, bufsize, 0, &error_abort))) {
             return 0;
         }
     }
