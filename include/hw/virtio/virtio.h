@@ -132,7 +132,7 @@ VirtQueue *virtio_add_queue(VirtIODevice *vdev, int queue_size,
                                                   VirtQueue *),
                             Error **errp);
 
-void virtio_del_queue(VirtIODevice *vdev, int n);
+void virtio_del_queue(VirtIODevice *vdev, int n, Error **errp);
 
 void virtqueue_push(VirtQueue *vq, const VirtQueueElement *elem,
                     unsigned int len);

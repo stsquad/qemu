@@ -888,10 +888,11 @@ VirtQueue *virtio_add_queue(VirtIODevice *vdev, int queue_size,
     return &vdev->vq[i];
 }
 
-void virtio_del_queue(VirtIODevice *vdev, int n)
+void virtio_del_queue(VirtIODevice *vdev, int n, Error **errp)
 {
     if (n < 0 || n >= VIRTIO_PCI_QUEUE_MAX) {
-        abort();
+        error_setg(errp, "Invalid queue number: %d", n);
+        return;
     }
 
     vdev->vq[n].vring.num = 0;

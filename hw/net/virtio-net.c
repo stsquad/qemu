@@ -1310,7 +1310,7 @@ static void virtio_net_set_multiqueue(VirtIONet *n, int multiqueue)
     n->multiqueue = multiqueue;
 
     for (i = 2; i <= n->max_queues * 2 + 1; i++) {
-        virtio_del_queue(vdev, i);
+        virtio_del_queue(vdev, i, &error_abort);
     }
 
     for (i = 1; i < max; i++) {
