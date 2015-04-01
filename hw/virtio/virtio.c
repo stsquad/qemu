@@ -292,15 +292,15 @@ void virtqueue_push(VirtQueue *vq, const VirtQueueElement *elem,
     virtqueue_flush(vq, 1);
 }
 
-static int virtqueue_num_heads(VirtQueue *vq, unsigned int idx)
+static int virtqueue_num_heads(VirtQueue *vq, unsigned int idx, Error **errp)
 {
     uint16_t num_heads = vring_avail_idx(vq) - idx;
 
     /* Check it isn't doing very strange things with descriptor numbers. */
     if (num_heads > vq->vring.num) {
-        error_report("Guest moved used index from %u to %u",
-                     idx, vring_avail_idx(vq));
-        exit(1);
+        error_setg(errp, "Guest moved used index from %u to %u",
+                   idx, vring_avail_idx(vq));
+        return -EINVAL;
     }
     /* On success, callers read a descriptor at vq->last_avail_idx.
      * Make sure descriptor read does not bypass avail index read. */
@@ -361,7 +361,7 @@ void virtqueue_get_avail_bytes(VirtQueue *vq, unsigned int *in_bytes,
     idx = vq->last_avail_idx;
 
     total_bufs = in_total = out_total = 0;
-    while (virtqueue_num_heads(vq, idx)) {
+    while (virtqueue_num_heads(vq, idx, &error_abort)) {
         VirtIODevice *vdev = vq->vdev;
         unsigned int max, num_bufs, indirect = 0;
         hwaddr desc_pa;
@@ -466,7 +466,7 @@ int virtqueue_pop(VirtQueue *vq, VirtQueueElement *elem)
     hwaddr desc_pa = vq->vring.desc;
     VirtIODevice *vdev = vq->vdev;
 
-    if (!virtqueue_num_heads(vq, vq->last_avail_idx))
+    if (!virtqueue_num_heads(vq, vq->last_avail_idx, &error_abort))
         return 0;
 
     /* When we start there are none of either input nor output. */
