@@ -1314,16 +1314,19 @@ static void virtio_net_set_multiqueue(VirtIONet *n, int multiqueue)
     }
 
     for (i = 1; i < max; i++) {
-        n->vqs[i].rx_vq = virtio_add_queue(vdev, 256, virtio_net_handle_rx);
+        n->vqs[i].rx_vq = virtio_add_queue(vdev, 256, virtio_net_handle_rx,
+                                           &error_abort);
         if (n->vqs[i].tx_timer) {
             n->vqs[i].tx_vq =
-                virtio_add_queue(vdev, 256, virtio_net_handle_tx_timer);
+                virtio_add_queue(vdev, 256, virtio_net_handle_tx_timer,
+                                 &error_abort);
             n->vqs[i].tx_timer = timer_new_ns(QEMU_CLOCK_VIRTUAL,
                                                    virtio_net_tx_timer,
                                                    &n->vqs[i]);
         } else {
             n->vqs[i].tx_vq =
-                virtio_add_queue(vdev, 256, virtio_net_handle_tx_bh);
+                virtio_add_queue(vdev, 256, virtio_net_handle_tx_bh,
+                                 &error_abort);
             n->vqs[i].tx_bh = qemu_bh_new(virtio_net_tx_bh, &n->vqs[i]);
         }
 
@@ -1335,7 +1338,8 @@ static void virtio_net_set_multiqueue(VirtIONet *n, int multiqueue)
      * VIRTIO_NET_F_CTRL_VQ. Create ctrl vq unconditionally to avoid
      * breaking them.
      */
-    n->ctrl_vq = virtio_add_queue(vdev, 64, virtio_net_handle_ctrl);
+    n->ctrl_vq = virtio_add_queue(vdev, 64, virtio_net_handle_ctrl,
+                                  &error_abort);
 
     virtio_net_set_queues(n);
 }
@@ -1596,7 +1600,8 @@ static void virtio_net_device_realize(DeviceState *dev, Error **errp)
         return;
     }
     n->vqs = g_malloc0(sizeof(VirtIONetQueue) * n->max_queues);
-    n->vqs[0].rx_vq = virtio_add_queue(vdev, 256, virtio_net_handle_rx);
+    n->vqs[0].rx_vq = virtio_add_queue(vdev, 256, virtio_net_handle_rx,
+                                       &error_abort);
     n->curr_queues = 1;
     n->vqs[0].n = n;
     n->tx_timeout = n->net_conf.txtimer;
@@ -1611,15 +1616,18 @@ static void virtio_net_device_realize(DeviceState *dev, Error **errp)
 
     if (n->net_conf.tx && !strcmp(n->net_conf.tx, "timer")) {
         n->vqs[0].tx_vq = virtio_add_queue(vdev, 256,
-                                           virtio_net_handle_tx_timer);
+                                           virtio_net_handle_tx_timer,
+                                           &error_abort);
         n->vqs[0].tx_timer = timer_new_ns(QEMU_CLOCK_VIRTUAL, virtio_net_tx_timer,
                                                &n->vqs[0]);
     } else {
         n->vqs[0].tx_vq = virtio_add_queue(vdev, 256,
-                                           virtio_net_handle_tx_bh);
+                                           virtio_net_handle_tx_bh,
+                                           &error_abort);
         n->vqs[0].tx_bh = qemu_bh_new(virtio_net_tx_bh, &n->vqs[0]);
     }
-    n->ctrl_vq = virtio_add_queue(vdev, 64, virtio_net_handle_ctrl);
+    n->ctrl_vq = virtio_add_queue(vdev, 64, virtio_net_handle_ctrl,
+                                  &error_abort);
     qemu_macaddr_default_if_unset(&n->nic_conf.macaddr);
     memcpy(&n->mac[0], &n->nic_conf.macaddr, sizeof(n->mac));
     n->status = VIRTIO_NET_S_LINK_UP;

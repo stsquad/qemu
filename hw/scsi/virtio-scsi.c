@@ -838,12 +838,12 @@ void virtio_scsi_common_realize(DeviceState *dev, Error **errp,
     s->cdb_size = VIRTIO_SCSI_CDB_DEFAULT_SIZE;
 
     s->ctrl_vq = virtio_add_queue(vdev, VIRTIO_SCSI_VQ_SIZE,
-                                  ctrl);
+                                  ctrl, &error_abort);
     s->event_vq = virtio_add_queue(vdev, VIRTIO_SCSI_VQ_SIZE,
-                                   evt);
+                                   evt, &error_abort);
     for (i = 0; i < s->conf.num_queues; i++) {
         s->cmd_vqs[i] = virtio_add_queue(vdev, VIRTIO_SCSI_VQ_SIZE,
-                                         cmd);
+                                         cmd, &error_abort);
     }
 
     if (s->conf.iothread) {

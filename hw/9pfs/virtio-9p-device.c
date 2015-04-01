@@ -61,7 +61,7 @@ static void virtio_9p_device_realize(DeviceState *dev, Error **errp)
         QLIST_INSERT_HEAD(&s->free_list, &s->pdus[i], next);
     }
 
-    s->vq = virtio_add_queue(vdev, MAX_REQ, handle_9p_output);
+    s->vq = virtio_add_queue(vdev, MAX_REQ, handle_9p_output, &error_abort);
 
     v9fs_path_init(&path);
 

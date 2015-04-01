@@ -862,7 +862,8 @@ void virtio_queue_set_vector(VirtIODevice *vdev, int n, uint16_t vector)
 }
 
 VirtQueue *virtio_add_queue(VirtIODevice *vdev, int queue_size,
-                            void (*handle_output)(VirtIODevice *, VirtQueue *))
+                            void (*handle_output)(VirtIODevice *, VirtQueue *),
+                            Error **errp)
 {
     int i;
 
@@ -871,8 +872,14 @@ VirtQueue *virtio_add_queue(VirtIODevice *vdev, int queue_size,
             break;
     }
 
-    if (i == VIRTIO_PCI_QUEUE_MAX || queue_size > VIRTQUEUE_MAX_SIZE)
-        abort();
+    if (i == VIRTIO_PCI_QUEUE_MAX) {
+        error_setg(errp, "Cannot find free vq");
+        return NULL;
+    }
+    if (queue_size > VIRTQUEUE_MAX_SIZE) {
+        error_setg(errp, "Queue size too big: %d", queue_size);
+        return NULL;
+    }
 
     vdev->vq[i].vring.num = queue_size;
     vdev->vq[i].vring.align = VIRTIO_PCI_VRING_ALIGN;
