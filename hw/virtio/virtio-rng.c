@@ -33,7 +33,7 @@ static size_t get_request_size(VirtQueue *vq, unsigned quota)
 {
     unsigned int in, out;
 
-    virtqueue_get_avail_bytes(vq, &in, &out, quota, 0);
+    virtqueue_get_avail_bytes(vq, &in, &out, quota, 0, &error_abort);
     return in;
 }
 

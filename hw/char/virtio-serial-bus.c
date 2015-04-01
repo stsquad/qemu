@@ -272,7 +272,7 @@ size_t virtio_serial_guest_ready(VirtIOSerialPort *port)
     if (use_multiport(port->vser) && !port->guest_connected) {
         return 0;
     }
-    virtqueue_get_avail_bytes(vq, &bytes, NULL, 4096, 0);
+    virtqueue_get_avail_bytes(vq, &bytes, NULL, 4096, 0, &error_abort);
     return bytes;
 }
 

@@ -355,7 +355,8 @@ static int virtqueue_next_desc(VirtIODevice *vdev, hwaddr desc_pa,
 
 void virtqueue_get_avail_bytes(VirtQueue *vq, unsigned int *in_bytes,
                                unsigned int *out_bytes,
-                               unsigned max_in_bytes, unsigned max_out_bytes)
+                               unsigned max_in_bytes, unsigned max_out_bytes,
+                               Error **errp)
 {
     unsigned int idx;
     unsigned int total_bufs, in_total, out_total;
@@ -363,27 +364,38 @@ void virtqueue_get_avail_bytes(VirtQueue *vq, unsigned int *in_bytes,
     idx = vq->last_avail_idx;
 
     total_bufs = in_total = out_total = 0;
-    while (virtqueue_num_heads(vq, idx, &error_abort)) {
+    while (true) {
         VirtIODevice *vdev = vq->vdev;
         unsigned int max, num_bufs, indirect = 0;
         hwaddr desc_pa;
         int i;
 
+        i = virtqueue_num_heads(vq, idx, errp);
+        if (i < 0) {
+            return;
+        } else if (i == 0) {
+            break;
+        }
+
         max = vq->vring.num;
         num_bufs = total_bufs;
-        i = virtqueue_get_head(vq, idx++, &error_abort);
+        i = virtqueue_get_head(vq, idx++, errp);
+        if (i < 0) {
+            return;
+        }
+
         desc_pa = vq->vring.desc;
 
         if (vring_desc_flags(vdev, desc_pa, i) & VRING_DESC_F_INDIRECT) {
             if (vring_desc_len(vdev, desc_pa, i) % sizeof(VRingDesc)) {
-                error_report("Invalid size for indirect buffer table");
-                exit(1);
+                error_setg(errp, "Invalid size for indirect buffer table");
+                return;
             }
 
             /* If we've got too many, that implies a descriptor loop. */
             if (num_bufs >= max) {
-                error_report("Looped descriptor");
-                exit(1);
+                error_setg(errp, "Looped descriptor");
+                return;
             }
 
             /* loop over the indirect descriptor table */
@@ -396,8 +408,8 @@ void virtqueue_get_avail_bytes(VirtQueue *vq, unsigned int *in_bytes,
         while (true) {
             /* If we've got too many, that implies a descriptor loop. */
             if (++num_bufs > max) {
-                error_report("Looped descriptor");
-                exit(1);
+                error_setg(errp, "Looped descriptor");
+                return;
             }
 
             if (vring_desc_flags(vdev, desc_pa, i) & VRING_DESC_F_WRITE) {
@@ -408,8 +420,10 @@ void virtqueue_get_avail_bytes(VirtQueue *vq, unsigned int *in_bytes,
             if (in_total >= max_in_bytes && out_total >= max_out_bytes) {
                 goto done;
             }
-            i = virtqueue_next_desc(vdev, desc_pa, i, max, &error_abort);
-            if (i == max) {
+            i = virtqueue_next_desc(vdev, desc_pa, i, max, errp);
+            if (i < 0) {
+                return;
+            } else if (i == max) {
                 break;
             }
         }
@@ -433,7 +447,8 @@ int virtqueue_avail_bytes(VirtQueue *vq, unsigned int in_bytes,
 {
     unsigned int in_total, out_total;
 
-    virtqueue_get_avail_bytes(vq, &in_total, &out_total, in_bytes, out_bytes);
+    virtqueue_get_avail_bytes(vq, &in_total, &out_total, in_bytes, out_bytes,
+                              &error_abort);
     return in_bytes <= in_total && out_bytes <= out_total;
 }
 
