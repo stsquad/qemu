@@ -329,10 +329,11 @@ static int virtqueue_get_head(VirtQueue *vq, unsigned int idx,
     return head;
 }
 
-static unsigned virtqueue_next_desc(VirtIODevice *vdev, hwaddr desc_pa,
-                                    unsigned int i, unsigned int max)
+static int virtqueue_next_desc(VirtIODevice *vdev, hwaddr desc_pa,
+                               unsigned int i, unsigned int max,
+                               Error **errp)
 {
-    unsigned int next;
+    int next;
 
     /* If this descriptor says it doesn't chain, we're done. */
     if (!(vring_desc_flags(vdev, desc_pa, i) & VRING_DESC_F_NEXT)) {
@@ -345,8 +346,8 @@ static unsigned virtqueue_next_desc(VirtIODevice *vdev, hwaddr desc_pa,
     smp_wmb();
 
     if (next >= max) {
-        error_report("Desc next is %u", next);
-        exit(1);
+        error_setg(errp, "Desc next is %u", next);
+        return -EINVAL;
     }
 
     return next;
@@ -392,7 +393,7 @@ void virtqueue_get_avail_bytes(VirtQueue *vq, unsigned int *in_bytes,
             num_bufs = i = 0;
         }
 
-        do {
+        while (true) {
             /* If we've got too many, that implies a descriptor loop. */
             if (++num_bufs > max) {
                 error_report("Looped descriptor");
@@ -407,7 +408,11 @@ void virtqueue_get_avail_bytes(VirtQueue *vq, unsigned int *in_bytes,
             if (in_total >= max_in_bytes && out_total >= max_out_bytes) {
                 goto done;
             }
-        } while ((i = virtqueue_next_desc(vdev, desc_pa, i, max)) != max);
+            i = virtqueue_next_desc(vdev, desc_pa, i, max, &error_abort);
+            if (i == max) {
+                break;
+            }
+        }
 
         if (!indirect)
             total_bufs = num_bufs;
@@ -493,7 +498,7 @@ int virtqueue_pop(VirtQueue *vq, VirtQueueElement *elem)
     }
 
     /* Collect all the descriptors */
-    do {
+    while (true) {
         struct iovec *sg;
 
         if (vring_desc_flags(vdev, desc_pa, i) & VRING_DESC_F_WRITE) {
@@ -519,7 +524,11 @@ int virtqueue_pop(VirtQueue *vq, VirtQueueElement *elem)
             error_report("Looped descriptor");
             exit(1);
         }
-    } while ((i = virtqueue_next_desc(vdev, desc_pa, i, max)) != max);
+        i = virtqueue_next_desc(vdev, desc_pa, i, max, &error_abort);
+        if (i == max) {
+            break;
+        }
+    }
 
     /* Now map what we have collected */
     virtqueue_map_sg(elem->in_sg, elem->in_addr, elem->in_num, 1,
