@@ -74,7 +74,7 @@ run-test-mmap: test-mmap
 #	-$(QEMU) -p 32768 ./test-mmap 32768
 
 run-runcom: runcom
-	-$(QEMU) ./runcom $(SRC_PATH)/tests/pi_10.com
+	-$(QEMU) ./runcom $(SRC_PATH)/tests/tcg/pi_10.com
 
 run-test_path: test_path
 	./test_path
