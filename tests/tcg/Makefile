@@ -15,9 +15,6 @@ LDFLAGS=
 
 # TODO: automatically detect ARM and MIPS compilers, and run those too
 
-# runcom maps page 0, so it requires root privileges
-# also, pi_10.com runs indefinitely
-
 I386_TESTS=hello-i386 \
 	   linux-test \
 	   testthread \
@@ -25,7 +22,7 @@ I386_TESTS=hello-i386 \
 	   test-i386 \
 	   test-i386-fprem \
 	   test-mmap \
-	   # runcom
+	   runcom
 
 # native i386 compilers sometimes are not biarch.  assume cross-compilers are
 ifneq ($(ARCH),i386)
