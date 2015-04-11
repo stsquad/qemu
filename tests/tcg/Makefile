@@ -29,7 +29,7 @@ I386_TESTS=hello-i386 \
 
 # native i386 compilers sometimes are not biarch.  assume cross-compilers are
 ifneq ($(ARCH),i386)
-I386_TESTS+=run-test-x86_64
+I386_TESTS+=test-x86_64
 endif
 
 TESTS = test_path
