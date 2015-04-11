@@ -69,9 +69,9 @@ run-test-x86_64: test-x86_64
 
 run-test-mmap: test-mmap
 	-$(QEMU) ./test-mmap
-	-$(QEMU) -p 8192 ./test-mmap 8192
-	-$(QEMU) -p 16384 ./test-mmap 16384
-	-$(QEMU) -p 32768 ./test-mmap 32768
+#	-$(QEMU) -p 8192 ./test-mmap 8192
+#	-$(QEMU) -p 16384 ./test-mmap 16384
+#	-$(QEMU) -p 32768 ./test-mmap 32768
 
 run-runcom: runcom
 	-$(QEMU) ./runcom $(SRC_PATH)/tests/pi_10.com
