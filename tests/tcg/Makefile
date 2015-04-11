@@ -75,6 +75,7 @@ run-test-mmap: test-mmap
 
 run-runcom: runcom
 	-$(QEMU) ./runcom $(SRC_PATH)/tests/tcg/pi_10.com
+	@echo
 
 run-test_path: test_path
 	./test_path
