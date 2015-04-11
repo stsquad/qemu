@@ -10,6 +10,7 @@ CC_X86_64=$(CC_I386) -m64
 QEMU_INCLUDES += -I../..
 CFLAGS=-Wall -O2 -g -fno-strict-aliasing
 #CFLAGS+=-msse2
+QEMU_CFLAGS += $(GLIB_CFLAGS)
 LDFLAGS=
 
 # TODO: automatically detect ARM and MIPS compilers, and run those too
