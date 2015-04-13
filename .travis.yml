@@ -65,6 +65,9 @@ matrix:
                   xtensaeb-softmmu
           TEST_CMD="make check"
       compiler: gcc
+    # Make test target (include tcg tests)
+    - env: TARGETS=i386-linux-user,x86_64-linux-user
+           TEST_CMD="make test"
     # Debug related options
     - env: TARGETS=i386-softmmu,x86_64-softmmu
            EXTRA_CONFIG="--enable-debug"
