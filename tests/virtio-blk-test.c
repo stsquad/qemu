@@ -734,6 +734,159 @@ static void pci_hotplug(void)
     test_end();
 }
 
+typedef void (*err_func)(QGuestAllocator *alloc, const QVirtioBus *bus,
+                         QVirtioDevice *vdev, QVirtQueue *vq);
+
+static void test_pci_needs_reset(err_func ef)
+{
+    QVirtioPCIDevice *dev;
+    QVirtioDevice *vdev;
+    QPCIBus *bus;
+    QVirtQueuePCI *vqpci;
+    QGuestAllocator *alloc;
+    void *addr;
+
+    bus = pci_test_start();
+    dev = virtio_blk_pci_init(bus, PCI_SLOT);
+    vdev = &dev->vdev;
+
+    alloc = pc_alloc_init();
+    vqpci = (QVirtQueuePCI *)qvirtqueue_setup(&qvirtio_pci, vdev, alloc, 0);
+    /* MSI-X is not enabled */
+    addr = dev->addr + QVIRTIO_PCI_DEVICE_SPECIFIC_NO_MSIX;
+
+    setup(&qvirtio_pci, vdev, (uint64_t)(uintptr_t)addr);
+    g_assert(!qvirtio_needs_reset(&qvirtio_pci, vdev));
+
+    ef(alloc, &qvirtio_pci, vdev, &vqpci->vq);
+    g_assert(qvirtio_needs_reset(&qvirtio_pci, vdev));
+
+    /* Kicking when needs_rest should be nop. */
+    qvirtqueue_kick(&qvirtio_pci, vdev, &vqpci->vq, 0);
+
+    qvirtio_reset(&qvirtio_pci, vdev);
+    g_free(vqpci);
+    vqpci = (QVirtQueuePCI *)qvirtqueue_setup(&qvirtio_pci, vdev, alloc, 0);
+    g_assert(!qvirtio_needs_reset(&qvirtio_pci, vdev));
+
+    qvirtio_set_acknowledge(&qvirtio_pci, vdev);
+    qvirtio_set_driver(&qvirtio_pci, vdev);
+
+    /* The device should be back to functional once reset */
+    test_basic(&qvirtio_pci, &dev->vdev, alloc, &vqpci->vq,
+                                                    (uint64_t)(uintptr_t)addr);
+
+    guest_free(alloc, vqpci->vq.desc);
+    pc_alloc_uninit(alloc);
+    qvirtio_pci_device_disable(dev);
+    g_free(dev);
+    qpci_free_pc(bus);
+    test_end();
+}
+
+static void kick_with_no_request(QGuestAllocator *alloc,
+                                 const QVirtioBus *bus,
+                                 QVirtioDevice *vdev,
+                                 QVirtQueue *vq)
+{
+    qvirtqueue_kick(bus, vdev, vq, 0);
+}
+
+static void short_outhdr(QGuestAllocator *alloc,
+                         const QVirtioBus *bus,
+                         QVirtioDevice *vdev,
+                         QVirtQueue *vq)
+{
+    QVirtioBlkReq req;
+    uint64_t req_addr;
+    uint32_t free_head;
+
+    req.type = QVIRTIO_BLK_T_OUT;
+    req.ioprio = 1;
+    req.sector = 0;
+    req.data = g_malloc0(512);
+    strcpy(req.data, "TEST");
+
+    req_addr = virtio_blk_request(alloc, &req, 512);
+
+    g_free(req.data);
+
+    free_head = qvirtqueue_add(vq, req_addr, 1, false, true);
+    qvirtqueue_add(vq, req_addr + 16, 1, false, true);
+    qvirtqueue_add(vq, req_addr + 528, 1, true, false);
+
+    qvirtqueue_kick(bus, vdev, vq, free_head);
+}
+
+static void invalid_avail_index(QGuestAllocator *alloc,
+                                const QVirtioBus *bus,
+                                QVirtioDevice *vdev,
+                                QVirtQueue *vq)
+{
+    uint16_t idx = vq->size + 1;
+
+    writel(vq->avail + 4 + (2 * (idx % vq->size)), 0);
+    writel(vq->avail + 2, idx + 1);
+    bus->virtqueue_kick(vdev, vq);
+}
+
+static uint32_t add_indirect_len(QVirtQueue *vq,
+                                 QVRingIndirectDesc *indirect,
+                                 size_t len)
+{
+    vq->num_free--;
+
+    /* vq->desc[vq->free_head].addr */
+    writeq(vq->desc + (16 * vq->free_head), indirect->desc);
+    /* vq->desc[vq->free_head].len */
+    writel(vq->desc + (16 * vq->free_head) + 8, len);
+    /* vq->desc[vq->free_head].flags */
+    writew(vq->desc + (16 * vq->free_head) + 12, QVRING_DESC_F_INDIRECT);
+
+    return vq->free_head++; /* Return and increase, in this order */
+}
+
+
+static void invalid_indirect(QGuestAllocator *alloc,
+                             const QVirtioBus *bus,
+                             QVirtioDevice *vdev,
+                             QVirtQueue *vq)
+{
+    QVirtioBlkReq req;
+    uint64_t req_addr;
+    uint32_t free_head;
+    uint32_t features;
+    QVRingIndirectDesc *indirect;
+
+    features = qvirtio_get_features(&qvirtio_pci, vdev);
+    g_assert_cmphex(features & QVIRTIO_F_RING_INDIRECT_DESC, !=, 0);
+
+    req.type = QVIRTIO_BLK_T_OUT;
+    req.ioprio = 1;
+    req.sector = 0;
+    req.data = g_malloc0(512);
+    strcpy(req.data, "TEST");
+
+    req_addr = virtio_blk_request(alloc, &req, 512);
+
+    g_free(req.data);
+
+    indirect = qvring_indirect_desc_setup(vdev, alloc, 2);
+    qvring_indirect_desc_add(indirect, req_addr, 528, false);
+    qvring_indirect_desc_add(indirect, req_addr + 528, 1, true);
+    free_head = add_indirect_len(vq, indirect, 511);
+    qvirtqueue_kick(&qvirtio_pci, vdev, vq, free_head);
+    g_free(indirect);
+}
+
+static void pci_needs_reset(void)
+{
+    test_pci_needs_reset(kick_with_no_request);
+    test_pci_needs_reset(short_outhdr);
+    test_pci_needs_reset(invalid_avail_index);
+    test_pci_needs_reset(invalid_indirect);
+}
+
 static void mmio_basic(void)
 {
     QVirtioMMIODevice *dev;
@@ -789,6 +942,7 @@ int main(int argc, char **argv)
         qtest_add_func("/virtio/blk/pci/msix", pci_msix);
         qtest_add_func("/virtio/blk/pci/idx", pci_idx);
         qtest_add_func("/virtio/blk/pci/hotplug", pci_hotplug);
+        qtest_add_func("/virtio/blk/pci/needs_reset", pci_needs_reset);
     } else if (strcmp(arch, "arm") == 0) {
         qtest_add_func("/virtio/blk/mmio/basic", mmio_basic);
     }
