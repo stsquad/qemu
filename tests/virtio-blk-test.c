@@ -76,7 +76,7 @@ static char *drive_create(void)
     return tmp_path;
 }
 
-static QPCIBus *pci_test_start(void)
+static QPCIBus *pci_test_start_common(const char *extra)
 {
     char *cmdline;
     char *tmp_path;
@@ -86,14 +86,24 @@ static QPCIBus *pci_test_start(void)
     cmdline = g_strdup_printf("-drive if=none,id=drive0,file=%s,format=raw "
                         "-drive if=none,id=drive1,file=/dev/null,format=raw "
                         "-device virtio-blk-pci,id=drv0,drive=drive0,"
-                        "addr=%x.%x",
-                        tmp_path, PCI_SLOT, PCI_FN);
+                        "addr=%x.%x %s",
+                        tmp_path, PCI_SLOT, PCI_FN, extra);
     qtest_start(cmdline);
     unlink(tmp_path);
     g_free(tmp_path);
     g_free(cmdline);
 
     return qpci_init_pc();
+}
+
+static QPCIBus *pci_test_start(void)
+{
+    return pci_test_start_common("");
+}
+
+static QPCIBus *pci_test_start_silient(void)
+{
+    return pci_test_start_common("&>/dev/null");
 }
 
 static void arm_test_start(void)
@@ -746,7 +756,7 @@ static void test_pci_needs_reset(err_func ef)
     QGuestAllocator *alloc;
     void *addr;
 
-    bus = pci_test_start();
+    bus = pci_test_start_silient();
     dev = virtio_blk_pci_init(bus, PCI_SLOT);
     vdev = &dev->vdev;
 
