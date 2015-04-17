@@ -18,6 +18,7 @@
 #define QVIRTIO_ACKNOWLEDGE     0x1
 #define QVIRTIO_DRIVER          0x2
 #define QVIRTIO_DRIVER_OK       0x4
+#define QVIRTIO_NEEDS_RESET     0x40
 
 #define QVIRTIO_NET_DEVICE_ID   0x1
 #define QVIRTIO_BLK_DEVICE_ID   0x2
@@ -154,6 +155,7 @@ uint64_t qvirtio_config_readq(const QVirtioBus *bus, QVirtioDevice *d,
 uint32_t qvirtio_get_features(const QVirtioBus *bus, QVirtioDevice *d);
 void qvirtio_set_features(const QVirtioBus *bus, QVirtioDevice *d,
                                                             uint32_t features);
+bool qvirtio_needs_reset(const QVirtioBus *bus, QVirtioDevice *d);
 
 void qvirtio_reset(const QVirtioBus *bus, QVirtioDevice *d);
 void qvirtio_set_acknowledge(const QVirtioBus *bus, QVirtioDevice *d);

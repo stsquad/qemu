@@ -46,6 +46,11 @@ void qvirtio_set_features(const QVirtioBus *bus, QVirtioDevice *d,
     bus->set_features(d, features);
 }
 
+bool qvirtio_needs_reset(const QVirtioBus *bus, QVirtioDevice *d)
+{
+    return bus->get_status(d) & QVIRTIO_NEEDS_RESET;
+}
+
 QVirtQueue *qvirtqueue_setup(const QVirtioBus *bus, QVirtioDevice *d,
                                         QGuestAllocator *alloc, uint16_t index)
 {
