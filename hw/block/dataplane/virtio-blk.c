@@ -93,6 +93,8 @@ static void handle_notify(EventNotifier *e)
     VirtIOBlockDataPlane *s = container_of(e, VirtIOBlockDataPlane,
                                            host_notifier);
     VirtIOBlock *vblk = VIRTIO_BLK(s->vdev);
+    VirtIODevice *vdev = VIRTIO_DEVICE(vblk);
+    Error *local_err = NULL;
 
     event_notifier_test_and_clear(&s->host_notifier);
     blk_io_plug(s->conf->conf.blk);
@@ -116,7 +118,12 @@ static void handle_notify(EventNotifier *e)
                                                         req->elem.in_num,
                                                         req->elem.index);
 
-            virtio_blk_handle_request(req, &mrb);
+            virtio_blk_handle_request(req, &mrb, &local_err);
+            if (local_err) {
+                error_report_err(local_err);
+                virtio_device_set_needs_reset(vdev);
+                break;
+            }
         }
 
         if (mrb.num_reqs) {

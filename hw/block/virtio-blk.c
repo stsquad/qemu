@@ -61,7 +61,12 @@ static void virtio_blk_complete_request(VirtIOBlockReq *req,
 
 static void virtio_blk_req_complete(VirtIOBlockReq *req, unsigned char status)
 {
-    req->dev->complete_request(req, status);
+    VirtIODevice *vdev = VIRTIO_DEVICE(req->dev);
+
+    /* No need to notify completion if we're in error state */
+    if (!virtio_device_needs_reset(vdev)) {
+        req->dev->complete_request(req, status);
+    }
 }
 
 static int virtio_blk_handle_rw_error(VirtIOBlockReq *req, int error,
@@ -189,9 +194,18 @@ out:
 
 static VirtIOBlockReq *virtio_blk_get_request(VirtIOBlock *s)
 {
-    VirtIOBlockReq *req = virtio_blk_alloc_request(s);
+    VirtIOBlockReq *req;
+    Error *local_err = NULL;
 
-    if (!virtqueue_pop(s->vq, &req->elem, &error_abort)) {
+    if (virtio_device_needs_reset(VIRTIO_DEVICE(s))) {
+        return NULL;
+    }
+    req = virtio_blk_alloc_request(s);
+    if (virtqueue_pop(s->vq, &req->elem, &local_err) <= 0) {
+        if (local_err) {
+            error_report("virtio-blk: %s", error_get_pretty(local_err));
+            virtio_device_set_needs_reset(VIRTIO_DEVICE(s));
+        }
         virtio_blk_free_request(req);
         return NULL;
     }
@@ -478,7 +492,10 @@ static bool virtio_blk_sect_range_ok(VirtIOBlock *dev,
     return true;
 }
 
-void virtio_blk_handle_request(VirtIOBlockReq *req, MultiReqBuffer *mrb)
+/* Handle a request.  If error happened, errp will be set and the request will
+ * be freed. */
+void virtio_blk_handle_request(VirtIOBlockReq *req, MultiReqBuffer *mrb,
+                               Error **errp)
 {
     uint32_t type;
     struct iovec *in_iov = req->elem.in_sg;
@@ -487,22 +504,25 @@ void virtio_blk_handle_request(VirtIOBlockReq *req, MultiReqBuffer *mrb)
     unsigned out_num = req->elem.out_num;
 
     if (req->elem.out_num < 1 || req->elem.in_num < 1) {
-        error_report("virtio-blk missing headers");
-        exit(1);
+        error_setg(errp, "virtio-blk missing headers");
+        virtio_blk_free_request(req);
+        return;
     }
 
     if (unlikely(iov_to_buf(iov, out_num, 0, &req->out,
                             sizeof(req->out)) != sizeof(req->out))) {
-        error_report("virtio-blk request outhdr too short");
-        exit(1);
+        error_setg(errp, "virtio-blk request outhdr too short");
+        virtio_blk_free_request(req);
+        return;
     }
 
     iov_discard_front(&iov, &out_num, sizeof(req->out));
 
     if (in_num < 1 ||
         in_iov[in_num - 1].iov_len < sizeof(struct virtio_blk_inhdr)) {
-        error_report("virtio-blk request inhdr too short");
-        exit(1);
+        error_setg(errp, "virtio-blk request inhdr too short");
+        virtio_blk_free_request(req);
+        return;
     }
 
     /* We always touch the last byte, so just see how big in_iov is.  */
@@ -592,6 +612,7 @@ static void virtio_blk_handle_output(VirtIODevice *vdev, VirtQueue *vq)
     VirtIOBlock *s = VIRTIO_BLK(vdev);
     VirtIOBlockReq *req;
     MultiReqBuffer mrb = {};
+    Error *local_err = NULL;
 
     /* Some guests kick before setting VIRTIO_CONFIG_S_DRIVER_OK so start
      * dataplane here instead of waiting for .set_status().
@@ -602,7 +623,12 @@ static void virtio_blk_handle_output(VirtIODevice *vdev, VirtQueue *vq)
     }
 
     while ((req = virtio_blk_get_request(s))) {
-        virtio_blk_handle_request(req, &mrb);
+        virtio_blk_handle_request(req, &mrb, &local_err);
+        if (local_err) {
+            virtio_device_set_needs_reset(vdev);
+            error_report_err(local_err);
+            break;
+        }
     }
 
     if (mrb.num_reqs) {
@@ -615,6 +641,8 @@ static void virtio_blk_dma_restart_bh(void *opaque)
     VirtIOBlock *s = opaque;
     VirtIOBlockReq *req = s->rq;
     MultiReqBuffer mrb = {};
+    VirtIODevice *vdev = VIRTIO_DEVICE(s);
+    Error *local_err = NULL;
 
     qemu_bh_delete(s->bh);
     s->bh = NULL;
@@ -623,8 +651,12 @@ static void virtio_blk_dma_restart_bh(void *opaque)
 
     while (req) {
         VirtIOBlockReq *next = req->next;
-        virtio_blk_handle_request(req, &mrb);
+        virtio_blk_handle_request(req, &mrb, &local_err);
         req = next;
+        if (local_err) {
+            virtio_device_set_needs_reset(vdev);
+            break;
+        }
     }
 
     if (mrb.num_reqs) {

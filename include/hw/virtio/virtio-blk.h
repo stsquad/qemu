@@ -85,7 +85,8 @@ VirtIOBlockReq *virtio_blk_alloc_request(VirtIOBlock *s);
 
 void virtio_blk_free_request(VirtIOBlockReq *req);
 
-void virtio_blk_handle_request(VirtIOBlockReq *req, MultiReqBuffer *mrb);
+void virtio_blk_handle_request(VirtIOBlockReq *req, MultiReqBuffer *mrb,
+                               Error **errp);
 
 void virtio_blk_submit_multireq(BlockBackend *blk, MultiReqBuffer *mrb);
 
