@@ -168,16 +168,11 @@ static uint64_t virtio_blk_request(QGuestAllocator *alloc, QVirtioBlkReq *req,
     return addr;
 }
 
-static void test_basic(const QVirtioBus *bus, QVirtioDevice *dev,
-            QGuestAllocator *alloc, QVirtQueue *vq, uint64_t device_specific)
+static uint32_t setup(const QVirtioBus *bus, QVirtioDevice *dev,
+                      uint64_t device_specific)
 {
-    QVirtioBlkReq req;
-    uint64_t req_addr;
     uint64_t capacity;
     uint32_t features;
-    uint32_t free_head;
-    uint8_t status;
-    char *data;
 
     capacity = qvirtio_config_readq(bus, dev, device_specific);
 
@@ -187,9 +182,24 @@ static void test_basic(const QVirtioBus *bus, QVirtioDevice *dev,
     features = features & ~(QVIRTIO_F_BAD_FEATURE |
                     QVIRTIO_F_RING_INDIRECT_DESC | QVIRTIO_F_RING_EVENT_IDX |
                             QVIRTIO_BLK_F_SCSI);
-    qvirtio_set_features(bus, dev, features);
 
+    qvirtio_set_features(bus, dev, features);
     qvirtio_set_driver_ok(bus, dev);
+
+    return features;
+}
+
+static void test_basic(const QVirtioBus *bus, QVirtioDevice *dev,
+            QGuestAllocator *alloc, QVirtQueue *vq, uint64_t device_specific)
+{
+    QVirtioBlkReq req;
+    uint64_t req_addr;
+    uint32_t features;
+    uint32_t free_head;
+    uint8_t status;
+    char *data;
+
+    features = setup(bus, dev, device_specific);
 
     /* Write and read with 3 descriptor layout */
     /* Write request */
