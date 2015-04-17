@@ -411,12 +411,16 @@ GCOV_OPTIONS = -n $(if $(V),-f,)
 
 # gtester tests, possibly with verbose output
 
+QTEST_FILTER ?= %
+
 .PHONY: $(patsubst %, check-qtest-%, $(QTEST_TARGETS))
 $(patsubst %, check-qtest-%, $(QTEST_TARGETS)): check-qtest-%: $(check-qtest-y)
 	$(if $(CONFIG_GCOV),@rm -f *.gcda */*.gcda */*/*.gcda */*/*/*.gcda,)
 	$(call quiet-command,QTEST_QEMU_BINARY=$*-softmmu/qemu-system-$* \
 		MALLOC_PERTURB_=$${MALLOC_PERTURB_:-$$((RANDOM % 255 + 1))} \
-		gtester $(GTESTER_OPTIONS) -m=$(SPEED) $(check-qtest-$*-y),"GTESTER $@")
+		gtester $(GTESTER_OPTIONS) -m=$(SPEED) \
+        $(filter $(QTEST_FILTER),$(check-qtest-$*-y)),\
+        "GTESTER $@")
 	$(if $(CONFIG_GCOV),@for f in $(gcov-files-$*-y); do \
 	  echo Gcov report for $$f:;\
 	  $(GCOV) $(GCOV_OPTIONS) $$f -o `dirname $$f`; \
