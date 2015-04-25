@@ -56,6 +56,8 @@ int main(int argc, char **argv)
 #endif
 #endif /* CONFIG_SDL */
 
+#define ARM64 1
+
 #ifdef CONFIG_COCOA
 #undef main
 #define main qemu_main
@@ -264,7 +266,7 @@ trans_cb_t  qsim_trans_cb  = NULL;
 uint64_t	qsim_host_addr;
 uint64_t	qsim_phys_addr;
 
-uint64_t    qsim_icount = 1000000;
+uint64_t    qsim_icount = 2040000000;
 
 qsim_ucontext_t main_context;
 qsim_ucontext_t qemu_context;
@@ -2830,10 +2832,12 @@ void qemu_init(qemu_ramdesc_t *ram,
     char arm_kernel_path[1024];
     char arm_initrd_path[1024];
     char arm_sd_path[1024];
+    char arm_img_options[1024];
 
     strcpy(arm_kernel_path, qsim_prefix);
     strcpy(arm_initrd_path, qsim_prefix);
     strcpy(arm_sd_path, qsim_prefix);
+#ifdef ARM32
     strcat(arm_kernel_path, "/../arm_images/vmlinuz-3.2.0-4-vexpress");
     strcat(arm_initrd_path, "/../arm_images/initrd.img-3.2.0-4-vexpress");
     strcat(arm_sd_path, "/../arm_images/armdisk.img");
@@ -2847,6 +2851,35 @@ void qemu_init(qemu_ramdesc_t *ram,
 		"-append", "root=/dev/mmcblk0p2",
 		NULL
 	};
+#elif defined(ARM64)
+    strcat(arm_kernel_path, "/../arm64_images/vmlinuz");
+    strcat(arm_initrd_path, "/../arm64_images/initrd.img");
+    strcat(arm_sd_path, "/../arm64_images/arm64disk.img");
+
+    strcpy(arm_img_options, "file=");
+    strcat(arm_img_options, arm_sd_path);
+    strcat(arm_img_options, ",id=coreimg,cache=unsafe,if=none");
+
+	const char *argv[] = {
+		"qemu", 
+		"-m", ram_size, "-M", "virt",
+        "-cpu", "cortex-a57",
+        "-global", "virtio-blk-device.scsi=off",
+        "-device", "virtio-scsi-device,id=scsi",
+        "-drive",  arm_img_options,
+        "-device", "scsi-hd,drive=coreimg",
+        "-netdev", "user,id=unet",
+        "-device", "virtio-net-device,netdev=unet",
+        "-kernel", arm_kernel_path,
+        "-initrd", arm_initrd_path,
+        "-append", "root=/dev/sda2",
+        "-nographic",
+		NULL
+	};
+
+#elif defined(X86_64)
+#endif
+
     int argc;
     for (argc = 0; argv[argc] != NULL; argc++);
 
