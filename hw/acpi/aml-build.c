@@ -1061,6 +1061,24 @@ Aml *aml_touuid(const char *uuid)
     return var;
 }
 
+/*
+ * ACPI 2.0b: 16.2.3.6.4.3  Unicode Macro (Convert Ascii String To Unicode)
+ */
+Aml *aml_unicode(const char *str)
+{
+    Aml *var = aml_bundle(0x11 /* BufferOp */, AML_BUFFER);
+
+    while (*str != '\0') {
+        build_append_byte(var->buf, 0);
+        build_append_byte(var->buf, *str);
+        str++;
+    }
+    build_append_byte(var->buf, 0);
+    build_append_byte(var->buf, *str);
+
+    return var;
+}
+
 void
 build_header(GArray *linker, GArray *table_data,
              AcpiTableHeader *h, const char *sig, int len, uint8_t rev)
