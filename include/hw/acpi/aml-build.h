@@ -105,6 +105,51 @@ typedef enum {
     aml_ReadWrite = 1,
 } AmlReadAndWrite;
 
+/*
+ * ACPI 1.0b: Table 6-28 Extended Interrupt Descriptor Definition
+ * Interrupt Vector Flags Bits[0] Consumer/Producer
+ */
+typedef enum {
+    aml_consumer_producer = 0,
+    aml_consumer = 1,
+} AmlConsumerAndProducer;
+
+/*
+ * ACPI 1.0b: Table 6-28 Extended Interrupt Descriptor Definition
+ * _HE field definition
+ */
+typedef enum {
+    aml_level = 0,
+    aml_edge = 1,
+} AmlLevelAndEdge;
+
+/*
+ * ACPI 1.0b: Table 6-28 Extended Interrupt Descriptor Definition
+ * _LL field definition
+ */
+typedef enum {
+    aml_active_high = 0,
+    aml_active_low = 1,
+} AmlActiveHighAndLow;
+
+/*
+ * ACPI 1.0b: Table 6-28 Extended Interrupt Descriptor Definition
+ * _SHR field definition
+ */
+typedef enum {
+    aml_exclusive = 0,
+    aml_shared = 1,
+} AmlExclusiveAndShared;
+
+/*
+ * ACPI 5.1: Table 6-203 Extended Interrupt Descriptor Definition
+ * _WKC field definition
+ */
+typedef enum {
+    aml_not_wake_capable = 0,
+    aml_wake_capable = 1,
+} AmlWakeCap;
+
 typedef
 struct AcpiBuildTables {
     GArray *table_data;
@@ -164,6 +209,11 @@ Aml *aml_call3(const char *method, Aml *arg1, Aml *arg2, Aml *arg3);
 Aml *aml_call4(const char *method, Aml *arg1, Aml *arg2, Aml *arg3, Aml *arg4);
 Aml *aml_memory32_fixed(uint32_t addr, uint32_t size,
                         AmlReadAndWrite read_and_write);
+Aml *aml_interrupt(AmlConsumerAndProducer con_and_pro,
+                   AmlLevelAndEdge level_and_edge,
+                   AmlActiveHighAndLow high_and_low,
+                   AmlExclusiveAndShared exclusive_and_shared,
+                   AmlWakeCap wake_capable, uint32_t irq);
 Aml *aml_io(AmlIODecode dec, uint16_t min_base, uint16_t max_base,
             uint8_t aln, uint8_t len);
 Aml *aml_operation_region(const char *name, AmlRegionSpace rs,
