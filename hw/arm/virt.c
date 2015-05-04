@@ -43,6 +43,7 @@
 #include "qemu/bitops.h"
 #include "qemu/error-report.h"
 #include "hw/pci-host/gpex.h"
+#include "hw/arm/virt-acpi-build.h"
 
 #define NUM_VIRTIO_TRANSPORTS 32
 
@@ -59,6 +60,11 @@
 
 #define GIC_FDT_IRQ_PPI_CPU_START 8
 #define GIC_FDT_IRQ_PPI_CPU_WIDTH 8
+
+#define ARCH_TIMER_VIRT_IRQ   11
+#define ARCH_TIMER_S_EL1_IRQ  13
+#define ARCH_TIMER_NS_EL1_IRQ 14
+#define ARCH_TIMER_NS_EL2_IRQ 10
 
 enum {
     VIRT_FLASH,
@@ -147,6 +153,29 @@ static const int a15irqmap[] = {
     [VIRT_RTC] = 2,
     [VIRT_PCIE] = 3, /* ... to 6 */
     [VIRT_MMIO] = 16, /* ...to 16 + NUM_VIRTIO_TRANSPORTS - 1 */
+};
+
+static AcpiMadtInfo madt_info = {
+    (MemMap *)&a15memmap[VIRT_GIC_CPU],
+    (MemMap *)&a15memmap[VIRT_GIC_DIST]
+};
+
+static AcpiDsdtInfo dsdt_info = {
+    (MemMap *)&a15memmap[VIRT_UART],
+    .uart_irq = &a15irqmap[VIRT_UART],
+    (MemMap *)&a15memmap[VIRT_MMIO],
+    .virtio_mmio_irq = &a15irqmap[VIRT_MMIO],
+    .virtio_mmio_num = NUM_VIRTIO_TRANSPORTS,
+    (MemMap *)&a15memmap[VIRT_RTC],
+    .rtc_irq = &a15irqmap[VIRT_RTC],
+    (MemMap *)&a15memmap[VIRT_FLASH],
+};
+
+static AcpiGtdtInfo gtdt_info = {
+    ARCH_TIMER_VIRT_IRQ + 16,
+    ARCH_TIMER_S_EL1_IRQ + 16,
+    ARCH_TIMER_NS_EL1_IRQ + 16,
+    ARCH_TIMER_NS_EL2_IRQ + 16
 };
 
 static VirtBoardInfo machines[] = {
@@ -289,10 +318,10 @@ static void fdt_add_timer_nodes(const VirtBoardInfo *vbi)
                                 "arm,armv7-timer");
     }
     qemu_fdt_setprop_cells(vbi->fdt, "/timer", "interrupts",
-                               GIC_FDT_IRQ_TYPE_PPI, 13, irqflags,
-                               GIC_FDT_IRQ_TYPE_PPI, 14, irqflags,
-                               GIC_FDT_IRQ_TYPE_PPI, 11, irqflags,
-                               GIC_FDT_IRQ_TYPE_PPI, 10, irqflags);
+                       GIC_FDT_IRQ_TYPE_PPI, ARCH_TIMER_S_EL1_IRQ, irqflags,
+                       GIC_FDT_IRQ_TYPE_PPI, ARCH_TIMER_NS_EL1_IRQ, irqflags,
+                       GIC_FDT_IRQ_TYPE_PPI, ARCH_TIMER_VIRT_IRQ, irqflags,
+                       GIC_FDT_IRQ_TYPE_PPI, ARCH_TIMER_NS_EL2_IRQ, irqflags);
 }
 
 static void fdt_add_cpu_nodes(const VirtBoardInfo *vbi)
@@ -639,8 +668,8 @@ static void create_pcie_irq_map(const VirtBoardInfo *vbi, uint32_t gic_phandle,
                            0x7           /* PCI irq */);
 }
 
-static void create_pcie(const VirtBoardInfo *vbi, qemu_irq *pic,
-                        uint32_t gic_phandle)
+static AcpiPcieInfo *create_pcie(const VirtBoardInfo *vbi, qemu_irq *pic,
+                                   uint32_t gic_phandle)
 {
     hwaddr base = vbi->memmap[VIRT_PCIE].base;
     hwaddr size = vbi->memmap[VIRT_PCIE].size;
@@ -660,6 +689,7 @@ static void create_pcie(const VirtBoardInfo *vbi, qemu_irq *pic,
     DeviceState *dev;
     char *nodename;
     int i;
+    AcpiPcieInfo *pcie_info;
 
     base_ecam = QEMU_ALIGN_DOWN(end - size_ecam, size_ecam);
     base_ioport = QEMU_ALIGN_DOWN(base_ecam - size_ioport, size_ioport);
@@ -715,6 +745,18 @@ static void create_pcie(const VirtBoardInfo *vbi, qemu_irq *pic,
     create_pcie_irq_map(vbi, gic_phandle, irq, nodename);
 
     g_free(nodename);
+
+    pcie_info = g_malloc0(sizeof *pcie_info);
+    pcie_info->pcie_mmio.addr = base_mmio;
+    pcie_info->pcie_mmio.size = size_mmio;
+    pcie_info->pcie_ioport.addr = base_ioport;
+    pcie_info->pcie_ioport.size = size_ioport;
+    pcie_info->pcie_ecam.addr = base_ecam;
+    pcie_info->pcie_ecam.size = size_ecam;
+    pcie_info->nr_pcie_buses = nr_pcie_buses;
+    pcie_info->pcie_irq = &a15irqmap[VIRT_PCIE];
+
+    return pcie_info;
 }
 
 static void *machvirt_dtb(const struct arm_boot_info *binfo, int *fdt_size)
@@ -723,6 +765,15 @@ static void *machvirt_dtb(const struct arm_boot_info *binfo, int *fdt_size)
 
     *fdt_size = board->fdt_size;
     return board->fdt;
+}
+
+static
+void virt_guest_info_machine_done(Notifier *notifier, void *data)
+{
+    VirtGuestInfoState *guest_info_state = container_of(notifier,
+                                                      VirtGuestInfoState,
+                                                      machine_done);
+    virt_acpi_setup(&guest_info_state->info);
 }
 
 static void machvirt_init(MachineState *machine)
@@ -734,6 +785,8 @@ static void machvirt_init(MachineState *machine)
     MemoryRegion *ram = g_new(MemoryRegion, 1);
     const char *cpu_model = machine->cpu_model;
     VirtBoardInfo *vbi;
+    VirtGuestInfoState *guest_info_state = g_malloc0(sizeof *guest_info_state);
+    VirtGuestInfo *guest_info = &guest_info_state->info;
     uint32_t gic_phandle;
     char **cpustr;
 
@@ -817,7 +870,7 @@ static void machvirt_init(MachineState *machine)
 
     create_rtc(vbi, pic);
 
-    create_pcie(vbi, pic, gic_phandle);
+    guest_info->pcie_info = create_pcie(vbi, pic, gic_phandle);
 
     /* Create mmio transports, so the user can create virtio backends
      * (which will be automatically plugged in to the transports). If
@@ -826,6 +879,7 @@ static void machvirt_init(MachineState *machine)
     create_virtio_devices(vbi, pic);
 
     create_fw_cfg(vbi);
+    rom_set_fw(fw_cfg_find());
 
     vbi->bootinfo.ram_size = machine->ram_size;
     vbi->bootinfo.kernel_filename = machine->kernel_filename;
@@ -836,6 +890,16 @@ static void machvirt_init(MachineState *machine)
     vbi->bootinfo.loader_start = vbi->memmap[VIRT_MEM].base;
     vbi->bootinfo.get_dtb = machvirt_dtb;
     vbi->bootinfo.firmware_loaded = bios_name || drive_get(IF_PFLASH, 0, 0);
+
+    guest_info->smp_cpus = smp_cpus;
+    guest_info->max_cpus = max_cpus;
+    guest_info->fw_cfg = fw_cfg_find();
+    guest_info->madt_info = &madt_info;
+    guest_info->dsdt_info = &dsdt_info;
+    guest_info->gtdt_info = &gtdt_info;
+    guest_info_state->machine_done.notify = virt_guest_info_machine_done;
+    qemu_add_machine_init_done_notifier(&guest_info_state->machine_done);
+
     arm_load_kernel(ARM_CPU(first_cpu), &vbi->bootinfo);
 }
 
