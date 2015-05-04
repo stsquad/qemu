@@ -53,6 +53,14 @@ typedef struct AcpiDsdtInfo {
     const MemMap *flash_memmap;
 } AcpiDsdtInfo;
 
+typedef struct AcpiPcieInfo {
+    const int *pcie_irq;
+    MemMap pcie_mmio;
+    MemMap pcie_ioport;
+    MemMap pcie_ecam;
+    int nr_pcie_buses;
+} AcpiPcieInfo;
+
 typedef struct VirtGuestInfo {
     int smp_cpus;
     int max_cpus;
@@ -60,6 +68,7 @@ typedef struct VirtGuestInfo {
     AcpiMadtInfo *madt_info;
     AcpiDsdtInfo *dsdt_info;
     AcpiGtdtInfo *gtdt_info;
+    AcpiPcieInfo *pcie_info;
 } VirtGuestInfo;
 
 

@@ -181,6 +181,24 @@ build_rsdp(GArray *rsdp_table, GArray *linker, unsigned rsdt)
     return rsdp_table;
 }
 
+static void
+build_mcfg(GArray *table_data, GArray *linker, VirtGuestInfo *guest_info)
+{
+    AcpiTableMcfg *mcfg;
+    AcpiPcieInfo *info = guest_info->pcie_info;
+    int len = sizeof(*mcfg) + sizeof(mcfg->allocation[0]);
+
+    mcfg = acpi_data_push(table_data, len);
+    mcfg->allocation[0].address = cpu_to_le64(info->pcie_ecam.addr);
+
+    /* Only a single allocation so no need to play with segments */
+    mcfg->allocation[0].pci_segment = cpu_to_le16(0);
+    mcfg->allocation[0].start_bus_number = 0;
+    mcfg->allocation[0].end_bus_number = info->nr_pcie_buses - 1;
+
+    build_header(linker, table_data, (void *)mcfg, "MCFG", len, 1);
+}
+
 /* GTDT */
 static void
 build_gtdt(GArray *table_data, GArray *linker, VirtGuestInfo *guest_info)
@@ -348,6 +366,9 @@ void virt_acpi_build(VirtGuestInfo *guest_info, AcpiBuildTables *tables)
 
     acpi_add_table(table_offsets, tables_blob);
     build_gtdt(tables_blob, tables->linker, guest_info);
+
+    acpi_add_table(table_offsets, tables_blob);
+    build_mcfg(tables_blob, tables->linker, guest_info);
 
     /* RSDT is pointed to by RSDP */
     rsdt = tables_blob->len;
