@@ -259,6 +259,7 @@ Aml *aml_buffer(int buffer_size, uint8_t *byte_list);
 Aml *aml_resource_template(void);
 Aml *aml_field(const char *name, AmlFieldFlags flags);
 Aml *aml_varpackage(uint32_t num_elements);
+Aml *aml_touuid(const char *uuid);
 
 void
 build_header(GArray *linker, GArray *table_data,
