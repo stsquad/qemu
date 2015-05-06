@@ -57,6 +57,10 @@ typedef struct MirrorBlockJob {
     int in_flight;
     int sectors_in_flight;
     int ret;
+    /* Source driver can_write_zeroes_with_unmap. */
+    bool source_may_unmap;
+    /* Target driver can_write_zeroes_with_unmap. */
+    bool target_may_unmap;
 } MirrorBlockJob;
 
 typedef struct MirrorOp {
@@ -163,6 +167,7 @@ static uint64_t coroutine_fn mirror_iteration(MirrorBlockJob *s)
     int64_t end, sector_num, next_chunk, next_sector, hbitmap_next_sector;
     uint64_t delay_ns = 0;
     MirrorOp *op;
+    int pnum;
 
     s->sector_num = hbitmap_iter_next(&s->hbi);
     if (s->sector_num < 0) {
@@ -289,8 +294,32 @@ static uint64_t coroutine_fn mirror_iteration(MirrorBlockJob *s)
     s->in_flight++;
     s->sectors_in_flight += nb_sectors;
     trace_mirror_one_iteration(s, sector_num, nb_sectors);
-    bdrv_aio_readv(source, sector_num, &op->qiov, nb_sectors,
-                   mirror_read_complete, op);
+
+    if (!bdrv_is_allocated_above(source, NULL, sector_num,
+                                 nb_sectors, &pnum)) {
+        op->nb_sectors = pnum;
+        if (s->source_may_unmap) {
+            /*
+             * Source unallocated sectors have zero data. We can't discard
+             * target even if s->target_may_unmap, because the discard
+             * granularity may be different.
+             */
+            bdrv_aio_write_zeroes(s->target, sector_num, op->nb_sectors,
+                                  s->target_may_unmap ? BDRV_REQ_MAY_UNMAP : 0,
+                                  mirror_write_complete,
+                                  op);
+        } else {
+            /*
+             * Source has irrelevant data in unmapped sectors, it's safe to
+             * discard target.
+             * */
+            bdrv_aio_discard(s->target, sector_num, op->nb_sectors,
+                             mirror_write_complete, op);
+        }
+    } else {
+        bdrv_aio_readv(source, sector_num, &op->qiov, nb_sectors,
+                       mirror_read_complete, op);
+    }
     return delay_ns;
 }
 
@@ -399,6 +428,22 @@ static void coroutine_fn mirror_run(void *opaque)
     length = DIV_ROUND_UP(s->bdev_length, s->granularity);
     s->in_flight_bitmap = bitmap_new(length);
 
+    ret = bdrv_get_info(bs, &bdi);
+    if (ret < 0) {
+        /* Safe side. */
+        s->source_may_unmap = true;
+    } else {
+        s->source_may_unmap = bdi.can_write_zeroes_with_unmap;
+    }
+
+    ret = bdrv_get_info(s->target, &bdi);
+    if (ret < 0) {
+        /* Safe side. */
+        s->target_may_unmap = false;
+    } else {
+        s->target_may_unmap = bdi.can_write_zeroes_with_unmap;
+    }
+
     /* If we have no backing file yet in the destination, we cannot let
      * the destination do COW.  Instead, we copy sectors around the
      * dirty data if needed.  We need a bitmap to do that.
@@ -406,10 +451,6 @@ static void coroutine_fn mirror_run(void *opaque)
     bdrv_get_backing_filename(s->target, backing_filename,
                               sizeof(backing_filename));
     if (backing_filename[0] && !s->target->backing_hd) {
-        ret = bdrv_get_info(s->target, &bdi);
-        if (ret < 0) {
-            goto immediate_exit;
-        }
         if (s->granularity < bdi.cluster_size) {
             s->buf_size = MAX(s->buf_size, bdi.cluster_size);
             s->cow_bitmap = bitmap_new(length);
