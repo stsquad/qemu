@@ -538,6 +538,7 @@ DEF_HELPER_3(load_callback_post, void, i64, i32, i32)
 DEF_HELPER_3(store_callback_pre, void, i64, i32, i32)
 DEF_HELPER_3(store_callback_post, void, i64, i32, i32)
 DEF_HELPER_0(atomic_callback, void)
+DEF_HELPER_0(qsim_callback, void)
 
 #ifdef TARGET_AARCH64
 #include "helper-a64.h"

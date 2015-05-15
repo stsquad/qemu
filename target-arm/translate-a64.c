@@ -50,6 +50,8 @@ static TCGv_i64 cpu_exclusive_test;
 static TCGv_i32 cpu_exclusive_info;
 #endif
 
+extern bool qsim_gen_callbacks;
+
 static const char *regnames[] = {
     "x0", "x1", "x2", "x3", "x4", "x5", "x6", "x7",
     "x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15",
@@ -721,13 +723,19 @@ static void do_gpr_ld_memidx(DisasContext *s, TCGv_i64 dest, TCGv_i64 tcg_addr,
         memop += MO_SIGN;
     }
 
-    tmp_size = tcg_const_i32(size);
-    tmp_type = tcg_const_i32(1);
-    gen_helper_load_callback_pre(tcg_addr, tmp_size, tmp_type);
+    if (qsim_gen_callbacks) {
+      tmp_size = tcg_const_i32(size);
+      tmp_type = tcg_const_i32(1);
+      gen_helper_load_callback_pre(tcg_addr, tmp_size, tmp_type);
+    }
+
     tcg_gen_qemu_ld_i64(dest, tcg_addr, memidx, memop);
-    gen_helper_load_callback_post(tcg_addr, tmp_size, tmp_type);
-    tcg_temp_free_i32(tmp_size);
-    tcg_temp_free_i32(tmp_type);
+
+    if (qsim_gen_callbacks) {
+      gen_helper_load_callback_post(tcg_addr, tmp_size, tmp_type);
+      tcg_temp_free_i32(tmp_size);
+      tcg_temp_free_i32(tmp_type);
+    }
 
     if (extend && is_signed) {
         g_assert(size < 3);
@@ -1797,7 +1805,8 @@ static void disas_ldst_excl(DisasContext *s, uint32_t insn)
      */
 
     if (is_excl) {
-        gen_helper_atomic_callback();
+        if (qsim_gen_callbacks)
+          gen_helper_atomic_callback();
         if (!is_store) {
             s->is_ldex = true;
             gen_load_exclusive(s, rt, rt2, tcg_addr, size, is_pair);
@@ -10865,13 +10874,17 @@ static void disas_a64_insn(CPUARMState *env, DisasContext *s)
     s->insn = insn;
     s->pc += 4;
 
-    tmp_insn = tcg_const_i32(insn);
-    tmp_size = tcg_const_i32(4);
-    tmp_type = tcg_const_i32(0);
-    gen_helper_inst_callback(tmp_insn, tmp_size, tmp_type);
-    tcg_temp_free_i32(tmp_insn);
-    tcg_temp_free_i32(tmp_size);
-    tcg_temp_free_i32(tmp_type);
+    if (qsim_gen_callbacks) {
+        tmp_insn = tcg_const_i32(insn);
+        tmp_size = tcg_const_i32(4);
+        tmp_type = tcg_const_i32(0);
+        gen_helper_inst_callback(tmp_insn, tmp_size, tmp_type);
+        tcg_temp_free_i32(tmp_insn);
+        tcg_temp_free_i32(tmp_size);
+        tcg_temp_free_i32(tmp_type);
+    } else {
+        gen_helper_qsim_callback();
+    }
 
     s->fp_access_checked = false;
 

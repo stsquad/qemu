@@ -47,12 +47,23 @@ extern mem_cb_t     qsim_mem_cb;
 extern atomic_cb_t  qsim_atomic_cb;
 extern int_cb_t     qsim_int_cb;
 
+extern bool qsim_gen_callbacks;
+
+void checkcontext(void);
+
+void checkcontext(void)
+{
+    static bool debug = false;
+    if (debug)
+        printf("swapped context");
+}
+
 static void raise_exception(CPUARMState *env, int tt)
 {
     ARMCPU *cpu = arm_env_get_cpu(env);
     CPUState *cs = CPU(cpu);
 
-    if (qsim_int_cb != NULL && qsim_int_cb(qsim_id, tt)) {
+    if (qsim_gen_callbacks && qsim_int_cb != NULL && qsim_int_cb(qsim_id, tt)) {
         swapcontext(&qemu_context, &main_context);
     }
 
@@ -870,22 +881,23 @@ uint32_t HELPER(ror_cc)(CPUARMState *env, uint32_t x, uint32_t i)
 
 void HELPER(inst_callback)(uint32_t vaddr, uint32_t length, uint32_t type)
 {
-	if (qsim_inst_cb != NULL) {
+    qsim_icount--;
+    if (qsim_icount == 0) {
+      swapcontext(&qemu_context, &main_context);
+      checkcontext();
+    }
 
-		// get physical addr
-		/*
+    if (qsim_inst_cb != NULL) {
+
+      // get physical addr
+      /*
 		qsim_inst_cb(qsim_id, vaddr, qsim_phys_addr, length,
 					(uint8_t *)qsim_host_addr, type);
 					*/
-		qsim_inst_cb(qsim_id, vaddr, 0, length, 0, type);
-	}
+		  qsim_inst_cb(qsim_id, vaddr, 0, length, 0, type);
+	  }
 
-	qsim_icount--;
-	if (qsim_icount == 0) {
-		swapcontext(&qemu_context, &main_context);
-	}
-
-	return;
+	  return;
 }
 
 static inline void memop_callback(uint64_t addr, uint32_t size, int type)
@@ -935,6 +947,17 @@ void HELPER(reg_write_callback)(CPUARMState *env, uint32_t vaddr, uint32_t lengt
 }
 
 static bool atomic_flag = false;
+
+void HELPER(qsim_callback)(void)
+{
+    qsim_icount--;
+    if (qsim_icount == 0) {
+        swapcontext(&qemu_context, &main_context);
+        checkcontext();
+    }
+
+    return;
+}
 
 void HELPER(atomic_callback)(void)
 {

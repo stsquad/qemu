@@ -2012,10 +2012,33 @@ static CPAccessResult aa64_zva_access(CPUARMState *env, const ARMCPRegInfo *ri)
     return CP_ACCESS_OK;
 }
 
+extern uint64_t qsim_icount;
+extern bool qsim_gen_callbacks;
+
 static uint64_t aa64_dczid_read(CPUARMState *env, const ARMCPRegInfo *ri)
 {
     ARMCPU *cpu = arm_env_get_cpu(env);
     int dzp_bit = 1 << 4;
+    static uint64_t last_qsim_icount;
+    static int num_consecutive_dczid_reads;
+    static bool cbgen_enabled = false;
+
+    if (last_qsim_icount - qsim_icount < 3) {
+      last_qsim_icount = qsim_icount;
+      num_consecutive_dczid_reads++;
+
+      // found the pattern of 5 consecutive dczid reads
+      if (num_consecutive_dczid_reads == 4) {
+        cbgen_enabled = !cbgen_enabled;
+        printf("%s callback generation...\n", (cbgen_enabled ? "Enabling" : "Disabling"));
+        qsim_gen_callbacks = cbgen_enabled;
+        tb_flush(env);
+        num_consecutive_dczid_reads = 0;
+      }
+    } else {
+      num_consecutive_dczid_reads = 0;
+    }
+    last_qsim_icount = qsim_icount;
 
     /* DZP indicates whether DC ZVA access is allowed */
     if (aa64_zva_access(env, NULL) == CP_ACCESS_OK) {
