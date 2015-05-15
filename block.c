@@ -2330,6 +2330,7 @@ int64_t bdrv_getlength(BlockDriverState *bs)
 {
     int64_t ret = bdrv_nb_sectors(bs);
 
+    ret = ret > INT64_MAX / BDRV_SECTOR_SIZE ? -EFBIG : ret;
     return ret < 0 ? ret : ret * BDRV_SECTOR_SIZE;
 }
 
