@@ -59,8 +59,38 @@ static void virtio_blk_complete_request(VirtIOBlockReq *req,
     virtio_notify(vdev, s->vq);
 }
 
+typedef struct {
+    QEMUBH *bh;
+    VirtIOBlock *s;
+} VirtIOBlockResumeData;
+
+static void virtio_blk_handle_output(VirtIODevice *vdev, VirtQueue *vq);
+static void virtio_blk_resume_bh_cb(void *opaque)
+{
+    VirtIOBlockResumeData *data = opaque;
+    qemu_bh_delete(data->bh);
+    virtio_blk_handle_output(VIRTIO_DEVICE(data->s), data->s->vq);
+}
+
+static void virtio_blk_pause(VirtIOBlock *vblk)
+{
+    /* TODO: stop ioeventfd */
+}
+
+static void virtio_blk_resume(VirtIOBlock *vblk)
+{
+    VirtIOBlockResumeData *data = g_new(VirtIOBlockResumeData, 1);
+    data->bh = aio_bh_new(blk_get_aio_context(vblk->blk),
+            virtio_blk_resume_bh_cb, data);
+    data->s = vblk;
+    data->s->paused = false;
+    qemu_bh_schedule(data->bh);
+}
+
 static const VirtIOBlockOps virtio_blk_ops = (VirtIOBlockOps) {
-    .complete_request = virtio_blk_complete_request,
+    .complete_request           = virtio_blk_complete_request,
+    .pause                      = virtio_blk_pause,
+    .resume                     = virtio_blk_resume,
 };
 
 static void virtio_blk_req_complete(VirtIOBlockReq *req, unsigned char status)
@@ -597,6 +627,9 @@ static void virtio_blk_handle_output(VirtIODevice *vdev, VirtQueue *vq)
     VirtIOBlockReq *req;
     MultiReqBuffer mrb = {};
 
+    if (s->paused) {
+        return;
+    }
     /* Some guests kick before setting VIRTIO_CONFIG_S_DRIVER_OK so start
      * dataplane here instead of waiting for .set_status().
      */
@@ -787,7 +820,7 @@ static void virtio_blk_save(QEMUFile *f, void *opaque)
 
     virtio_save(vdev, f);
 }
-    
+
 static void virtio_blk_save_device(VirtIODevice *vdev, QEMUFile *f)
 {
     VirtIOBlock *s = VIRTIO_BLK(vdev);
@@ -875,6 +908,25 @@ static void virtio_blk_migration_state_changed(Notifier *notifier, void *data)
     }
 }
 
+static void virtio_blk_op_blocker_changed(Notifier *notifier, void *opaque)
+{
+    BlockOpEvent *event = opaque;
+    VirtIOBlock *s = container_of(notifier, VirtIOBlock,
+                                  op_blocker_notifier);
+
+    if (event->type != BLOCK_OP_TYPE_DEVICE_IO) {
+        return;
+    }
+    if (event->blocking == s->paused) {
+        return;
+    }
+    if (event->blocking) {
+        s->ops->pause(s);
+    } else {
+        s->ops->resume(s);
+    }
+}
+
 static void virtio_blk_device_realize(DeviceState *dev, Error **errp)
 {
     VirtIODevice *vdev = VIRTIO_DEVICE(dev);
@@ -926,6 +978,9 @@ static void virtio_blk_device_realize(DeviceState *dev, Error **errp)
     blk_set_guest_block_size(s->blk, s->conf.conf.logical_block_size);
 
     blk_iostatus_enable(s->blk);
+
+    s->op_blocker_notifier.notify = virtio_blk_op_blocker_changed;
+    blk_op_blocker_add_notifier(s->blk, &s->op_blocker_notifier);
 }
 
 static void virtio_blk_device_unrealize(DeviceState *dev, Error **errp)

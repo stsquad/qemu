@@ -87,8 +87,28 @@ static void complete_request_vring(VirtIOBlockReq *req, unsigned char status)
     qemu_bh_schedule(s->bh);
 }
 
+static void virtio_blk_data_plane_pause(VirtIOBlock *vblk)
+{
+    VirtIOBlockDataPlane *s = vblk->dataplane;
+
+    event_notifier_test_and_clear(&s->host_notifier);
+    aio_set_event_notifier(s->ctx, &s->host_notifier, NULL);
+}
+
+static void handle_notify(EventNotifier *e);
+static void virtio_blk_data_plane_resume(VirtIOBlock *vblk)
+{
+    VirtIOBlockDataPlane *s = vblk->dataplane;
+
+    aio_set_event_notifier(s->ctx, &s->host_notifier, handle_notify);
+
+    event_notifier_set(&s->host_notifier);
+}
+
 static const VirtIOBlockOps virtio_blk_data_plane_ops = {
-    .complete_request = complete_request_vring,
+    .complete_request           = complete_request_vring,
+    .pause                      = virtio_blk_data_plane_pause,
+    .resume                     = virtio_blk_data_plane_resume,
 };
 
 static void handle_notify(EventNotifier *e)
@@ -98,6 +118,9 @@ static void handle_notify(EventNotifier *e)
     VirtIOBlock *vblk = VIRTIO_BLK(s->vdev);
 
     event_notifier_test_and_clear(&s->host_notifier);
+    if (vblk->paused) {
+        return;
+    }
     blk_io_plug(s->conf->conf.blk);
     for (;;) {
         MultiReqBuffer mrb = {};
