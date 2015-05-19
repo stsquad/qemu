@@ -3375,6 +3375,19 @@ struct BdrvOpBlocker {
     QLIST_ENTRY(BdrvOpBlocker) list;
 };
 
+/* Add a notifier which will be notified when the first blocker of some type is
+ * added to bs, or when the last blocker is removed. The notifier handler
+ * should receive a BlockOpEvent data.
+ *
+ * Caller must hold bs->aio_context; the notifier handler is also called with
+ * it held.
+ */
+void bdrv_op_blocker_add_notifier(BlockDriverState *bs,
+                                  Notifier *notifier)
+{
+    notifier_list_add(&bs->op_blocker_notifiers, notifier);
+}
+
 bool bdrv_op_is_blocked(BlockDriverState *bs, BlockOpType op, Error **errp)
 {
     BdrvOpBlocker *blocker;
@@ -3391,25 +3404,47 @@ bool bdrv_op_is_blocked(BlockDriverState *bs, BlockOpType op, Error **errp)
     return false;
 }
 
+static void bdrv_op_blocker_notify(BlockDriverState *bs, BlockOpType op,
+                                   Error *reason, bool blocking)
+{
+    BlockOpEvent event = (BlockOpEvent) {
+        op = op,
+        reason = reason,
+        blocking = blocking,
+    };
+
+    notifier_list_notify(&bs->op_blocker_notifiers, &event);
+}
+
 void bdrv_op_block(BlockDriverState *bs, BlockOpType op, Error *reason)
 {
+    bool blocked;
     BdrvOpBlocker *blocker;
     assert((int) op >= 0 && op < BLOCK_OP_TYPE_MAX);
 
     blocker = g_new0(BdrvOpBlocker, 1);
     blocker->reason = reason;
+    blocked = !QLIST_EMPTY(&bs->op_blockers[op]);
     QLIST_INSERT_HEAD(&bs->op_blockers[op], blocker, list);
+    if (!blocked) {
+        bdrv_op_blocker_notify(bs, op, reason, true);
+    }
 }
 
 void bdrv_op_unblock(BlockDriverState *bs, BlockOpType op, Error *reason)
 {
+    bool blocked;
     BdrvOpBlocker *blocker, *next;
     assert((int) op >= 0 && op < BLOCK_OP_TYPE_MAX);
+    blocked = !QLIST_EMPTY(&bs->op_blockers[op]);
     QLIST_FOREACH_SAFE(blocker, &bs->op_blockers[op], list, next) {
         if (blocker->reason == reason) {
             QLIST_REMOVE(blocker, list);
             g_free(blocker);
         }
+    }
+    if (blocked && QLIST_EMPTY(&bs->op_blockers[op])) {
+        bdrv_op_blocker_notify(bs, op, reason, false);
     }
 }
 

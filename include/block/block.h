@@ -163,6 +163,12 @@ typedef enum BlockOpType {
     BLOCK_OP_TYPE_MAX,
 } BlockOpType;
 
+typedef struct {
+    BlockOpType type;
+    Error *reason;
+    bool blocking;
+} BlockOpEvent;
+
 void bdrv_iostatus_enable(BlockDriverState *bs);
 void bdrv_iostatus_reset(BlockDriverState *bs);
 void bdrv_iostatus_disable(BlockDriverState *bs);
@@ -491,6 +497,8 @@ void bdrv_disable_copy_on_read(BlockDriverState *bs);
 void bdrv_ref(BlockDriverState *bs);
 void bdrv_unref(BlockDriverState *bs);
 
+void bdrv_op_blocker_add_notifier(BlockDriverState *bs,
+                                  Notifier *notifier);
 bool bdrv_op_is_blocked(BlockDriverState *bs, BlockOpType op, Error **errp);
 void bdrv_op_block(BlockDriverState *bs, BlockOpType op, Error *reason);
 void bdrv_op_unblock(BlockDriverState *bs, BlockOpType op, Error *reason);

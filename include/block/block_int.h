@@ -418,6 +418,9 @@ struct BlockDriverState {
     /* operation blockers */
     QLIST_HEAD(, BdrvOpBlocker) op_blockers[BLOCK_OP_TYPE_MAX];
 
+    /* Callback when one list in op_blockers has "empty" status change. */
+    NotifierList op_blocker_notifiers;
+
     /* long-running background operation */
     BlockJob *job;
 
