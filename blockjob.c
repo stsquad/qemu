@@ -51,6 +51,7 @@ void *block_job_create(const BlockJobDriver *driver, BlockDriverState *bs,
                BlockJobType_lookup[driver->job_type]);
     bdrv_op_block_all(bs, job->blocker);
     bdrv_op_unblock(bs, BLOCK_OP_TYPE_DATAPLANE, job->blocker);
+    bdrv_op_unblock(bs, BLOCK_OP_TYPE_DEVICE_IO, job->blocker);
 
     job->driver        = driver;
     job->bs            = bs;

@@ -772,6 +772,7 @@ static void virtio_scsi_hotplug(HotplugHandler *hotplug_dev, DeviceState *dev,
             return;
         }
         blk_op_block_all(sd->conf.blk, s->blocker);
+        blk_op_unblock(sd->conf.blk, BLOCK_OP_TYPE_DEVICE_IO, s->blocker);
         aio_context_acquire(s->ctx);
         blk_set_aio_context(sd->conf.blk, s->ctx);
         aio_context_release(s->ctx);

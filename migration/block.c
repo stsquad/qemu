@@ -379,6 +379,7 @@ static void init_blk_migration(QEMUFile *f)
         alloc_aio_bitmap(bmds);
         error_setg(&bmds->blocker, "block device is in use by migration");
         bdrv_op_block_all(bs, bmds->blocker);
+        bdrv_op_unblock(bs, BLOCK_OP_TYPE_DEVICE_IO, bmds->blocker);
         bdrv_ref(bs);
 
         block_mig_state.total_sector_sum += sectors;
