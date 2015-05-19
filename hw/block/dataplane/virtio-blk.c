@@ -51,8 +51,7 @@ struct VirtIOBlockDataPlane {
 
     /* Operation blocker on BDS */
     Error *blocker;
-    void (*saved_complete_request)(struct VirtIOBlockReq *req,
-                                   unsigned char status);
+    const VirtIOBlockOps *saved_ops;
 };
 
 /* Raise an interrupt to signal guest, if necessary */
@@ -87,6 +86,10 @@ static void complete_request_vring(VirtIOBlockReq *req, unsigned char status)
      */
     qemu_bh_schedule(s->bh);
 }
+
+static const VirtIOBlockOps virtio_blk_data_plane_ops = {
+    .complete_request = complete_request_vring,
+};
 
 static void handle_notify(EventNotifier *e)
 {
@@ -270,8 +273,8 @@ void virtio_blk_data_plane_start(VirtIOBlockDataPlane *s)
     }
     s->host_notifier = *virtio_queue_get_host_notifier(vq);
 
-    s->saved_complete_request = vblk->complete_request;
-    vblk->complete_request = complete_request_vring;
+    s->saved_ops = vblk->ops;
+    vblk->ops = &virtio_blk_data_plane_ops;
 
     s->starting = false;
     s->started = true;
@@ -314,7 +317,7 @@ void virtio_blk_data_plane_stop(VirtIOBlockDataPlane *s)
         return;
     }
     s->stopping = true;
-    vblk->complete_request = s->saved_complete_request;
+    vblk->ops = s->saved_ops;
     trace_virtio_blk_data_plane_stop(s);
 
     aio_context_acquire(s->ctx);

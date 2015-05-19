@@ -59,9 +59,13 @@ static void virtio_blk_complete_request(VirtIOBlockReq *req,
     virtio_notify(vdev, s->vq);
 }
 
+static const VirtIOBlockOps virtio_blk_ops = (VirtIOBlockOps) {
+    .complete_request = virtio_blk_complete_request,
+};
+
 static void virtio_blk_req_complete(VirtIOBlockReq *req, unsigned char status)
 {
-    req->dev->complete_request(req, status);
+    req->dev->ops->complete_request(req, status);
 }
 
 static int virtio_blk_handle_rw_error(VirtIOBlockReq *req, int error,
@@ -905,7 +909,7 @@ static void virtio_blk_device_realize(DeviceState *dev, Error **errp)
     s->sector_mask = (s->conf.conf.logical_block_size / BDRV_SECTOR_SIZE) - 1;
 
     s->vq = virtio_add_queue(vdev, 128, virtio_blk_handle_output);
-    s->complete_request = virtio_blk_complete_request;
+    s->ops = &virtio_blk_ops;
     virtio_blk_data_plane_create(vdev, conf, &s->dataplane, &err);
     if (err != NULL) {
         error_propagate(errp, err);
