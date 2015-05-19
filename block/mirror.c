@@ -320,6 +320,8 @@ static void mirror_drain(MirrorBlockJob *s)
 
 typedef struct {
     int ret;
+    /* Use to pause device IO during mirror exit */
+    Error *blocker;
 } MirrorExitData;
 
 static void mirror_exit(BlockJob *job, void *opaque)
@@ -358,6 +360,8 @@ static void mirror_exit(BlockJob *job, void *opaque)
     if (replace_aio_context) {
         aio_context_release(replace_aio_context);
     }
+    bdrv_op_unblock(s->common.bs, BLOCK_OP_TYPE_DEVICE_IO, data->blocker);
+    error_free(data->blocker);
     g_free(s->replaces);
     bdrv_unref(s->target);
     block_job_completed(&s->common, data->ret);
@@ -376,6 +380,8 @@ static void coroutine_fn mirror_run(void *opaque)
                                  checking for a NULL string */
     int ret = 0;
     int n;
+    data = g_malloc0(sizeof(*data));
+    error_setg(&data->blocker, "mirror job exiting");
 
     if (block_job_is_cancelled(&s->common)) {
         goto immediate_exit;
@@ -521,6 +527,7 @@ static void coroutine_fn mirror_run(void *opaque)
              * mirror_populate runs.
              */
             trace_mirror_before_drain(s, cnt);
+            bdrv_op_block(bs, BLOCK_OP_TYPE_DEVICE_IO, data->blocker);
             bdrv_drain(bs);
             cnt = bdrv_get_dirty_count(s->dirty_bitmap);
         }
@@ -543,6 +550,7 @@ static void coroutine_fn mirror_run(void *opaque)
             s->common.cancelled = false;
             break;
         }
+        bdrv_op_unblock(bs, BLOCK_OP_TYPE_DEVICE_IO, data->blocker);
         last_pause_ns = qemu_clock_get_ns(QEMU_CLOCK_REALTIME);
     }
 
@@ -563,7 +571,6 @@ immediate_exit:
     bdrv_release_dirty_bitmap(bs, s->dirty_bitmap);
     bdrv_iostatus_disable(s->target);
 
-    data = g_malloc(sizeof(*data));
     data->ret = ret;
     block_job_defer_to_main_loop(&s->common, mirror_exit, data);
 }
