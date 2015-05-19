@@ -1262,6 +1262,7 @@ typedef struct InternalSnapshotState {
     BlockDriverState *bs;
     AioContext *aio_context;
     QEMUSnapshotInfo sn;
+    Error *blocker;
 } InternalSnapshotState;
 
 static void internal_snapshot_prepare(BlkTransactionState *common,
@@ -1299,6 +1300,10 @@ static void internal_snapshot_prepare(BlkTransactionState *common,
     /* AioContext is released in .clean() */
     state->aio_context = bdrv_get_aio_context(bs);
     aio_context_acquire(state->aio_context);
+
+    state->bs = bs;
+    error_setg(&state->blocker, "internal snapshot in progress");
+    bdrv_op_block(bs, BLOCK_OP_TYPE_DEVICE_IO, state->blocker);
 
     if (!bdrv_is_inserted(bs)) {
         error_set(errp, QERR_DEVICE_HAS_NO_MEDIUM, device);
@@ -1354,9 +1359,6 @@ static void internal_snapshot_prepare(BlkTransactionState *common,
                          name, device);
         return;
     }
-
-    /* 4. succeed, mark a snapshot is created */
-    state->bs = bs;
 }
 
 static void internal_snapshot_abort(BlkTransactionState *common)
@@ -1387,6 +1389,10 @@ static void internal_snapshot_clean(BlkTransactionState *common)
     InternalSnapshotState *state = DO_UPCAST(InternalSnapshotState,
                                              common, common);
 
+    if (state->bs) {
+        bdrv_op_unblock(state->bs, BLOCK_OP_TYPE_DEVICE_IO, state->blocker);
+        error_free(state->blocker);
+    }
     if (state->aio_context) {
         aio_context_release(state->aio_context);
     }
