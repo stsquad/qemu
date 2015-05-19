@@ -1649,6 +1649,7 @@ typedef struct BlockdevBackupState {
     BlockDriverState *bs;
     BlockJob *job;
     AioContext *aio_context;
+    Error *blocker;
 } BlockdevBackupState;
 
 static void blockdev_backup_prepare(BlkTransactionState *common, Error **errp)
@@ -1685,6 +1686,10 @@ static void blockdev_backup_prepare(BlkTransactionState *common, Error **errp)
     }
     aio_context_acquire(state->aio_context);
 
+    state->bs = bs;
+    error_setg(&state->blocker, "blockdev-backup in progress");
+    bdrv_op_block(bs, BLOCK_OP_TYPE_DEVICE_IO, state->blocker);
+
     qmp_blockdev_backup(backup->device, backup->target,
                         backup->sync,
                         backup->has_speed, backup->speed,
@@ -1696,7 +1701,6 @@ static void blockdev_backup_prepare(BlkTransactionState *common, Error **errp)
         return;
     }
 
-    state->bs = bs;
     state->job = state->bs->job;
 }
 
@@ -1715,6 +1719,10 @@ static void blockdev_backup_clean(BlkTransactionState *common)
 {
     BlockdevBackupState *state = DO_UPCAST(BlockdevBackupState, common, common);
 
+    if (state->bs) {
+        bdrv_op_unblock(state->bs, BLOCK_OP_TYPE_DEVICE_IO, state->blocker);
+        error_free(state->blocker);
+    }
     if (state->aio_context) {
         aio_context_release(state->aio_context);
     }
