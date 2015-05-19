@@ -802,6 +802,12 @@ void blk_op_unblock_all(BlockBackend *blk, Error *reason)
     bdrv_op_unblock_all(blk->bs, reason);
 }
 
+void blk_op_blocker_add_notifier(BlockBackend *blk,
+                                 Notifier *notifier)
+{
+    bdrv_op_blocker_add_notifier(blk->bs, notifier);
+}
+
 AioContext *blk_get_aio_context(BlockBackend *blk)
 {
     return bdrv_get_aio_context(blk->bs);
