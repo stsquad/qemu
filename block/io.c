@@ -286,12 +286,21 @@ static bool bdrv_drain_one(BlockDriverState *bs)
  *
  * Note that unlike bdrv_drain_all(), the caller must hold the BlockDriverState
  * AioContext.
+ *
+ * Devices are paused to avoid looping forever because otherwise they could
+ * keep submitting more requests.
  */
 void bdrv_drain(BlockDriverState *bs)
 {
+    Error *blocker = NULL;
+
+    error_setg(&blocker, "bdrv_drain in progress");
+    bdrv_op_block(bs, BLOCK_OP_TYPE_DEVICE_IO, blocker);
     while (bdrv_drain_one(bs)) {
         /* Keep iterating */
     }
+    bdrv_op_unblock(bs, BLOCK_OP_TYPE_DEVICE_IO, blocker);
+    error_free(blocker);
 }
 
 /*
@@ -303,14 +312,20 @@ void bdrv_drain(BlockDriverState *bs)
  * Note that completion of an asynchronous I/O operation can trigger any
  * number of other I/O operations on other devices---for example a coroutine
  * can be arbitrarily complex and a constant flow of I/O can come until the
- * coroutine is complete.  Because of this, it is not possible to have a
- * function to drain a single device's I/O queue.
+ * coroutine is complete.  Because of this, we must call bdrv_drain_one in a
+ * loop.
+ *
+ * We explicitly pause block jobs and devices to prevent them from submitting
+ * more requests.
  */
 void bdrv_drain_all(void)
 {
     /* Always run first iteration so any pending completion BHs run */
     bool busy = true;
     BlockDriverState *bs = NULL;
+    Error *blocker = NULL;
+
+    error_setg(&blocker, "bdrv_drain_all in progress");
 
     while ((bs = bdrv_next(bs))) {
         AioContext *aio_context = bdrv_get_aio_context(bs);
@@ -319,6 +334,7 @@ void bdrv_drain_all(void)
         if (bs->job) {
             block_job_pause(bs->job);
         }
+        bdrv_op_block(bs, BLOCK_OP_TYPE_DEVICE_IO, blocker);
         aio_context_release(aio_context);
     }
 
@@ -343,8 +359,10 @@ void bdrv_drain_all(void)
         if (bs->job) {
             block_job_resume(bs->job);
         }
+        bdrv_op_unblock(bs, BLOCK_OP_TYPE_DEVICE_IO, blocker);
         aio_context_release(aio_context);
     }
+    error_free(blocker);
 }
 
 /**
