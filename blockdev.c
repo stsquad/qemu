@@ -1575,6 +1575,7 @@ typedef struct DriveBackupState {
     BlockDriverState *bs;
     AioContext *aio_context;
     BlockJob *job;
+    Error *blocker;
 } DriveBackupState;
 
 static void drive_backup_prepare(BlkTransactionState *common, Error **errp)
@@ -1599,6 +1600,9 @@ static void drive_backup_prepare(BlkTransactionState *common, Error **errp)
     state->aio_context = bdrv_get_aio_context(bs);
     aio_context_acquire(state->aio_context);
 
+    state->bs = bs;
+    error_setg(&state->blocker, "drive-backup in progress");
+    bdrv_op_block(bs, BLOCK_OP_TYPE_DEVICE_IO, state->blocker);
     qmp_drive_backup(backup->device, backup->target,
                      backup->has_format, backup->format,
                      backup->sync,
@@ -1613,7 +1617,6 @@ static void drive_backup_prepare(BlkTransactionState *common, Error **errp)
         return;
     }
 
-    state->bs = bs;
     state->job = state->bs->job;
 }
 
@@ -1632,6 +1635,10 @@ static void drive_backup_clean(BlkTransactionState *common)
 {
     DriveBackupState *state = DO_UPCAST(DriveBackupState, common, common);
 
+    if (state->bs) {
+        bdrv_op_unblock(state->bs, BLOCK_OP_TYPE_DEVICE_IO, state->blocker);
+        error_free(state->blocker);
+    }
     if (state->aio_context) {
         aio_context_release(state->aio_context);
     }
