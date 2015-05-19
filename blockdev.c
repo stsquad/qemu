@@ -1404,6 +1404,7 @@ typedef struct ExternalSnapshotState {
     BlockDriverState *old_bs;
     BlockDriverState *new_bs;
     AioContext *aio_context;
+    Error *blocker;
 } ExternalSnapshotState;
 
 static void external_snapshot_prepare(BlkTransactionState *common,
@@ -1525,6 +1526,9 @@ static void external_snapshot_prepare(BlkTransactionState *common,
     if (ret != 0) {
         error_propagate(errp, local_err);
     }
+
+    error_setg(&state->blocker, "snapshot in progress");
+    bdrv_op_block(state->old_bs, BLOCK_OP_TYPE_DEVICE_IO, state->blocker);
 }
 
 static void external_snapshot_commit(BlkTransactionState *common)
@@ -1541,8 +1545,6 @@ static void external_snapshot_commit(BlkTransactionState *common)
      * don't want to abort all of them if one of them fails the reopen */
     bdrv_reopen(state->new_bs, state->new_bs->open_flags & ~BDRV_O_RDWR,
                 NULL);
-
-    aio_context_release(state->aio_context);
 }
 
 static void external_snapshot_abort(BlkTransactionState *common)
@@ -1551,6 +1553,17 @@ static void external_snapshot_abort(BlkTransactionState *common)
                              DO_UPCAST(ExternalSnapshotState, common, common);
     if (state->new_bs) {
         bdrv_unref(state->new_bs);
+    }
+}
+
+static void external_snapshot_clean(BlkTransactionState *common)
+{
+    ExternalSnapshotState *state =
+                             DO_UPCAST(ExternalSnapshotState, common, common);
+
+    if (state->old_bs) {
+        bdrv_op_unblock(state->old_bs, BLOCK_OP_TYPE_DEVICE_IO, state->blocker);
+        error_free(state->blocker);
     }
     if (state->aio_context) {
         aio_context_release(state->aio_context);
@@ -1716,6 +1729,7 @@ static const BdrvActionOps actions[] = {
         .prepare  = external_snapshot_prepare,
         .commit   = external_snapshot_commit,
         .abort = external_snapshot_abort,
+        .clean = external_snapshot_clean,
     },
     [TRANSACTION_ACTION_KIND_DRIVE_BACKUP] = {
         .instance_size = sizeof(DriveBackupState),
