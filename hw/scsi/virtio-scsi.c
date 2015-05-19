@@ -775,6 +775,8 @@ static void virtio_scsi_hotplug(HotplugHandler *hotplug_dev, DeviceState *dev,
         blk_op_unblock(sd->conf.blk, BLOCK_OP_TYPE_DEVICE_IO, s->blocker);
         aio_context_acquire(s->ctx);
         blk_set_aio_context(sd->conf.blk, s->ctx);
+        s->blocker_notifier.notify = virtio_scsi_dataplane_blocker_notify;
+        blk_op_blocker_add_notifier(sd->conf.blk, &s->blocker_notifier);
         aio_context_release(s->ctx);
     }
 
@@ -799,6 +801,7 @@ static void virtio_scsi_hotunplug(HotplugHandler *hotplug_dev, DeviceState *dev,
     }
 
     if (s->ctx) {
+        notifier_remove(&s->blocker_notifier);
         blk_op_unblock_all(sd->conf.blk, s->blocker);
     }
     qdev_simple_device_unplug_cb(hotplug_dev, dev, errp);
