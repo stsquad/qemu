@@ -41,11 +41,13 @@ extern uint64_t qsim_host_addr;
 extern int qsim_id;
 
 extern uint64_t qsim_icount;
+extern bool     call_magic_cb;
 uint64_t qsim_eip;
 extern inst_cb_t    qsim_inst_cb;
 extern mem_cb_t     qsim_mem_cb;
 extern atomic_cb_t  qsim_atomic_cb;
 extern int_cb_t     qsim_int_cb;
+extern magic_cb_t   qsim_magic_cb;
 
 extern bool qsim_gen_callbacks;
 
@@ -896,6 +898,15 @@ void HELPER(inst_callback)(uint32_t vaddr, uint32_t length, uint32_t type)
 					*/
 		  qsim_inst_cb(qsim_id, vaddr, 0, length, 0, type);
 	  }
+
+    if (call_magic_cb) {
+        if (qsim_gen_callbacks)  // start
+            qsim_magic_cb(0, 0xaaaaaaaa);
+        else                // end
+            qsim_magic_cb(0, 0xfa11dead);
+
+        call_magic_cb = false;
+    }
 
 	  return;
 }

@@ -9,6 +9,7 @@
 #include "qemu/crc32c.h"
 #include "exec/cpu_ldst.h"
 #include "arm_ldst.h"
+#include "qsim-vm.h"
 #include <zlib.h> /* For crc32 */
 
 #ifndef CONFIG_USER_ONLY
@@ -2014,6 +2015,8 @@ static CPAccessResult aa64_zva_access(CPUARMState *env, const ARMCPRegInfo *ri)
 
 extern uint64_t qsim_icount;
 extern bool qsim_gen_callbacks;
+extern magic_cb_t qsim_magic_cb;
+extern bool call_magic_cb;
 
 static uint64_t aa64_dczid_read(CPUARMState *env, const ARMCPRegInfo *ri)
 {
@@ -2023,16 +2026,31 @@ static uint64_t aa64_dczid_read(CPUARMState *env, const ARMCPRegInfo *ri)
     static int num_consecutive_dczid_reads;
     static bool cbgen_enabled = false;
 
-    if (last_qsim_icount - qsim_icount < 3) {
+    int diff = last_qsim_icount - qsim_icount;
+
+    if (diff > 0 && diff < 3) {
       last_qsim_icount = qsim_icount;
       num_consecutive_dczid_reads++;
 
       // found the pattern of 5 consecutive dczid reads
       if (num_consecutive_dczid_reads == 4) {
         cbgen_enabled = !cbgen_enabled;
-        printf("%s callback generation...\n", (cbgen_enabled ? "Enabling" : "Disabling"));
         qsim_gen_callbacks = cbgen_enabled;
         tb_flush(env);
+        printf("%s callback generation...\n", (cbgen_enabled ? "Enabling" : "Disabling"));
+
+        // enable magic callback at next instruction callback
+        call_magic_cb = true;
+#if 0
+        // app start/end callback
+        if (qsim_magic_cb) {
+            if (cbgen_enabled)  // start
+                qsim_magic_cb(0, 0xaaaaaaaa);
+            else                // end
+                qsim_magic_cb(0, 0xfa11dead);
+        }
+#endif
+
         num_consecutive_dczid_reads = 0;
       }
     } else {

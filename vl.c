@@ -268,7 +268,8 @@ bool qsim_gen_callbacks = false;
 uint64_t	qsim_host_addr;
 uint64_t	qsim_phys_addr;
 
-uint64_t    qsim_icount = 2040000000;
+uint64_t    qsim_icount = 10000000;
+bool        call_magic_cb = false;
 
 qsim_ucontext_t main_context;
 qsim_ucontext_t qemu_context;
@@ -1947,7 +1948,18 @@ static void qsim_loop_main(void)
         dev_time += profile_getclock() - ti;
 #endif
     } while (!main_loop_should_exit());
+    bdrv_close_all();
 	pause_all_vcpus();
+    res_free();
+#ifdef CONFIG_TPM
+    tpm_cleanup();
+#endif
+
+    // send shutdown signal
+    if (qsim_magic_cb)
+        qsim_magic_cb(0, 0xfa11dead);
+
+    return;
 }
 
 static void version(void)
@@ -4578,6 +4590,5 @@ int qsim_qemu_main(int argc, const char **argv, char **envp)
         }
     }
 
-    res_free();
     return 0;
 }
