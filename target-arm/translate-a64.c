@@ -714,7 +714,7 @@ static void do_gpr_st(DisasContext *s, TCGv_i64 source,
 static void do_gpr_ld_memidx(DisasContext *s, TCGv_i64 dest, TCGv_i64 tcg_addr,
                              int size, bool is_signed, bool extend, int memidx)
 {
-    TCGv_i32 tmp_size, tmp_type;
+    TCGv_i32 tmp_size = 0, tmp_type = 0;
     TCGMemOp memop = MO_TE + size;
 
     g_assert(size <= 3);
