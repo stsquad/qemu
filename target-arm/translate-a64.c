@@ -37,6 +37,8 @@
 
 #include "trace-tcg.h"
 
+#include "qsim-vm.h"
+
 static TCGv_i64 cpu_X[32];
 static TCGv_i64 cpu_pc;
 static TCGv_i32 cpu_NF, cpu_ZF, cpu_CF, cpu_VF;
@@ -51,6 +53,7 @@ static TCGv_i32 cpu_exclusive_info;
 #endif
 
 extern bool qsim_gen_callbacks;
+TCGArg *itype_arg = NULL;
 
 static const char *regnames[] = {
     "x0", "x1", "x2", "x3", "x4", "x5", "x6", "x7",
@@ -91,6 +94,14 @@ typedef void NeonGenTwoDoubleOPFn(TCGv_i64, TCGv_i64, TCGv_i64, TCGv_ptr);
 typedef void NeonGenOneOpFn(TCGv_i64, TCGv_i64);
 typedef void CryptoTwoOpEnvFn(TCGv_ptr, TCGv_i32, TCGv_i32);
 typedef void CryptoThreeOpEnvFn(TCGv_ptr, TCGv_i32, TCGv_i32, TCGv_i32);
+
+static void qsim_set_inst_type(enum inst_type type)
+{
+    if (qsim_gen_callbacks)
+        *itype_arg = type;
+
+    return;
+}
 
 /* initialize TCG globals.  */
 void a64_translate_init(void)
@@ -1455,9 +1466,11 @@ static void disas_system(DisasContext *s, uint32_t insn)
         }
         switch (crn) {
         case 2: /* C5.6.68 HINT */
+            qsim_set_inst_type(QSIM_INST_NOP);
             handle_hint(s, insn, op1, op2, crm);
             break;
         case 3: /* CLREX, DSB, DMB, ISB */
+            qsim_set_inst_type(QSIM_INST_FENCE);
             handle_sync(s, insn, op1, op2, crm);
             break;
         case 4: /* C5.6.130 MSR (immediate) */
@@ -1809,15 +1822,23 @@ static void disas_ldst_excl(DisasContext *s, uint32_t insn)
           gen_helper_atomic_callback();
         if (!is_store) {
             s->is_ldex = true;
+            qsim_set_inst_type(QSIM_INST_LD);
+            if (is_lasr)
+                qsim_set_inst_type(QSIM_INST_ACQ_FENCE);
             gen_load_exclusive(s, rt, rt2, tcg_addr, size, is_pair);
         } else {
+            qsim_set_inst_type(QSIM_INST_ST);
+            if (is_lasr)
+                qsim_set_inst_type(QSIM_INST_REL_FENCE);
             gen_store_exclusive(s, rs, rt, rt2, tcg_addr, size, is_pair);
         }
     } else {
         TCGv_i64 tcg_rt = cpu_reg(s, rt);
         if (is_store) {
+            qsim_set_inst_type(QSIM_INST_ST);
             do_gpr_st(s, tcg_rt, tcg_addr, size);
         } else {
+            qsim_set_inst_type(QSIM_INST_LD);
             do_gpr_ld(s, tcg_rt, tcg_addr, size, false, false);
         }
         if (is_pair) {
@@ -1990,6 +2011,7 @@ static void disas_ldst_pair(DisasContext *s, uint32_t insn)
     }
 
     if (is_vector) {
+        qsim_set_inst_type(QSIM_INST_FMEM);
         if (is_load) {
             do_fp_ld(s, rt, tcg_addr, size);
         } else {
@@ -1998,13 +2020,16 @@ static void disas_ldst_pair(DisasContext *s, uint32_t insn)
     } else {
         TCGv_i64 tcg_rt = cpu_reg(s, rt);
         if (is_load) {
+            qsim_set_inst_type(QSIM_INST_LD);
             do_gpr_ld(s, tcg_rt, tcg_addr, size, is_signed, false);
         } else {
+            qsim_set_inst_type(QSIM_INST_ST);
             do_gpr_st(s, tcg_rt, tcg_addr, size);
         }
     }
     tcg_gen_addi_i64(tcg_addr, tcg_addr, 1 << size);
     if (is_vector) {
+        qsim_set_inst_type(QSIM_INST_FMEM);
         if (is_load) {
             do_fp_ld(s, rt2, tcg_addr, size);
         } else {
@@ -2013,8 +2038,10 @@ static void disas_ldst_pair(DisasContext *s, uint32_t insn)
     } else {
         TCGv_i64 tcg_rt2 = cpu_reg(s, rt2);
         if (is_load) {
+            qsim_set_inst_type(QSIM_INST_LD);
             do_gpr_ld(s, tcg_rt2, tcg_addr, size, is_signed, false);
         } else {
+            qsim_set_inst_type(QSIM_INST_ST);
             do_gpr_st(s, tcg_rt2, tcg_addr, size);
         }
     }
@@ -2117,6 +2144,7 @@ static void disas_ldst_reg_imm9(DisasContext *s, uint32_t insn)
     }
 
     if (is_vector) {
+        qsim_set_inst_type(QSIM_INST_FMEM);
         if (is_store) {
             do_fp_st(s, rt, tcg_addr, size);
         } else {
@@ -2127,8 +2155,10 @@ static void disas_ldst_reg_imm9(DisasContext *s, uint32_t insn)
         int memidx = is_unpriv ? 1 : get_mem_index(s);
 
         if (is_store) {
+            qsim_set_inst_type(QSIM_INST_ST);
             do_gpr_st_memidx(s, tcg_rt, tcg_addr, size, memidx);
         } else {
+            qsim_set_inst_type(QSIM_INST_LD);
             do_gpr_ld_memidx(s, tcg_rt, tcg_addr, size,
                              is_signed, is_extended, memidx);
         }
@@ -2221,6 +2251,7 @@ static void disas_ldst_reg_roffset(DisasContext *s, uint32_t insn)
     tcg_gen_add_i64(tcg_addr, tcg_addr, tcg_rm);
 
     if (is_vector) {
+        qsim_set_inst_type(QSIM_INST_FMEM);
         if (is_store) {
             do_fp_st(s, rt, tcg_addr, size);
         } else {
@@ -2229,8 +2260,10 @@ static void disas_ldst_reg_roffset(DisasContext *s, uint32_t insn)
     } else {
         TCGv_i64 tcg_rt = cpu_reg(s, rt);
         if (is_store) {
+            qsim_set_inst_type(QSIM_INST_ST);
             do_gpr_st(s, tcg_rt, tcg_addr, size);
         } else {
+            qsim_set_inst_type(QSIM_INST_LD);
             do_gpr_ld(s, tcg_rt, tcg_addr, size, is_signed, is_extended);
         }
     }
@@ -2301,6 +2334,7 @@ static void disas_ldst_reg_unsigned_imm(DisasContext *s, uint32_t insn)
     tcg_gen_addi_i64(tcg_addr, tcg_addr, offset);
 
     if (is_vector) {
+        qsim_set_inst_type(QSIM_INST_FMEM);
         if (is_store) {
             do_fp_st(s, rt, tcg_addr, size);
         } else {
@@ -2309,8 +2343,10 @@ static void disas_ldst_reg_unsigned_imm(DisasContext *s, uint32_t insn)
     } else {
         TCGv_i64 tcg_rt = cpu_reg(s, rt);
         if (is_store) {
+            qsim_set_inst_type(QSIM_INST_ST);
             do_gpr_st(s, tcg_rt, tcg_addr, size);
         } else {
+            qsim_set_inst_type(QSIM_INST_LD);
             do_gpr_ld(s, tcg_rt, tcg_addr, size, is_signed, is_extended);
         }
     }
@@ -2630,6 +2666,7 @@ static void disas_ldst(DisasContext *s, uint32_t insn)
         disas_ldst_excl(s, insn);
         break;
     case 0x18: case 0x1c: /* Load register (literal) */
+        qsim_set_inst_type(QSIM_INST_LD);
         disas_ld_lit(s, insn);
         break;
     case 0x28: case 0x29:
@@ -2641,9 +2678,11 @@ static void disas_ldst(DisasContext *s, uint32_t insn)
         disas_ldst_reg(s, insn);
         break;
     case 0x0c: /* AdvSIMD load/store multiple structures */
+        qsim_set_inst_type(QSIM_INST_SSE);
         disas_ldst_multiple_struct(s, insn);
         break;
     case 0x0d: /* AdvSIMD load/store single structure */
+        qsim_set_inst_type(QSIM_INST_SSE);
         disas_ldst_single_struct(s, insn);
         break;
     default:
@@ -3066,21 +3105,27 @@ static void disas_data_proc_imm(DisasContext *s, uint32_t insn)
 {
     switch (extract32(insn, 23, 6)) {
     case 0x20: case 0x21: /* PC-rel. addressing */
+        qsim_set_inst_type(QSIM_INST_LDA);
         disas_pc_rel_adr(s, insn);
         break;
     case 0x22: case 0x23: /* Add/subtract (immediate) */
+        qsim_set_inst_type(QSIM_INST_IADD);
         disas_add_sub_imm(s, insn);
         break;
     case 0x24: /* Logical (immediate) */
+        qsim_set_inst_type(QSIM_INST_LOGIC);
         disas_logic_imm(s, insn);
         break;
     case 0x25: /* Move wide (immediate) */
+        qsim_set_inst_type(QSIM_INST_LOGIC);
         disas_movw_imm(s, insn);
         break;
     case 0x26: /* Bitfield */
+        qsim_set_inst_type(QSIM_INST_BYTE);
         disas_bitfield(s, insn);
         break;
     case 0x27: /* Extract */
+        qsim_set_inst_type(QSIM_INST_LOGIC);
         disas_extract(s, insn);
         break;
     default:
@@ -3929,21 +3974,27 @@ static void disas_data_proc_2src(DisasContext *s, uint32_t insn)
 
     switch (opcode) {
     case 2: /* UDIV */
+        qsim_set_inst_type(QSIM_INST_IMUL);
         handle_div(s, false, sf, rm, rn, rd);
         break;
     case 3: /* SDIV */
+        qsim_set_inst_type(QSIM_INST_IMUL);
         handle_div(s, true, sf, rm, rn, rd);
         break;
     case 8: /* LSLV */
+        qsim_set_inst_type(QSIM_INST_SHIFT);
         handle_shift_reg(s, A64_SHIFT_TYPE_LSL, sf, rm, rn, rd);
         break;
     case 9: /* LSRV */
+        qsim_set_inst_type(QSIM_INST_SHIFT);
         handle_shift_reg(s, A64_SHIFT_TYPE_LSR, sf, rm, rn, rd);
         break;
     case 10: /* ASRV */
+        qsim_set_inst_type(QSIM_INST_SHIFT);
         handle_shift_reg(s, A64_SHIFT_TYPE_ASR, sf, rm, rn, rd);
         break;
     case 11: /* RORV */
+        qsim_set_inst_type(QSIM_INST_SHIFT);
         handle_shift_reg(s, A64_SHIFT_TYPE_ROR, sf, rm, rn, rd);
         break;
     case 16:
@@ -3955,6 +4006,7 @@ static void disas_data_proc_2src(DisasContext *s, uint32_t insn)
     case 22:
     case 23: /* CRC32 */
     {
+        qsim_set_inst_type(QSIM_INST_IMUL);
         int sz = extract32(opcode, 0, 2);
         bool crc32c = extract32(opcode, 2, 1);
         handle_crc32(s, sf, sz, crc32c, rm, rn, rd);
@@ -3971,9 +4023,11 @@ static void disas_data_proc_reg(DisasContext *s, uint32_t insn)
 {
     switch (extract32(insn, 24, 5)) {
     case 0x0a: /* Logical (shifted register) */
+        qsim_set_inst_type(QSIM_INST_SHIFT);
         disas_logic_reg(s, insn);
         break;
     case 0x0b: /* Add/subtract */
+        qsim_set_inst_type(QSIM_INST_IADD);
         if (insn & (1 << 21)) { /* (extended register) */
             disas_add_sub_ext_reg(s, insn);
         } else {
@@ -3981,21 +4035,26 @@ static void disas_data_proc_reg(DisasContext *s, uint32_t insn)
         }
         break;
     case 0x1b: /* Data-processing (3 source) */
+        qsim_set_inst_type(QSIM_INST_IMUL);
         disas_data_proc_3src(s, insn);
         break;
     case 0x1a:
         switch (extract32(insn, 21, 3)) {
         case 0x0: /* Add/subtract (with carry) */
+            qsim_set_inst_type(QSIM_INST_IADD);
             disas_adc_sbc(s, insn);
             break;
         case 0x2: /* Conditional compare */
+            qsim_set_inst_type(QSIM_INST_ICMP);
             disas_cc(s, insn); /* both imm and reg forms */
             break;
         case 0x4: /* Conditional select */
+            qsim_set_inst_type(QSIM_INST_ICMP);
             disas_cond_select(s, insn);
             break;
         case 0x6: /* Data-processing */
             if (insn & (1 << 30)) { /* (1 source) */
+                qsim_set_inst_type(QSIM_INST_BYTE);
                 disas_data_proc_1src(s, insn);
             } else {            /* (2 source) */
                 disas_data_proc_2src(s, insn);
@@ -5034,28 +5093,34 @@ static void disas_data_proc_fp(DisasContext *s, uint32_t insn)
     } else {
         switch (extract32(insn, 10, 2)) {
         case 1:
+            qsim_set_inst_type(QSIM_INST_FCMP);
             /* Floating point conditional compare */
             disas_fp_ccomp(s, insn);
             break;
         case 2:
+            qsim_set_inst_type(QSIM_INST_FMUL);
             /* Floating point data-processing (2 source) */
             disas_fp_2src(s, insn);
             break;
         case 3:
+            qsim_set_inst_type(QSIM_INST_FCMP);
             /* Floating point conditional select */
             disas_fp_csel(s, insn);
             break;
         case 0:
             switch (ctz32(extract32(insn, 12, 4))) {
             case 0: /* [15:12] == xxx1 */
+                qsim_set_inst_type(QSIM_INST_FBIT);
                 /* Floating point immediate */
                 disas_fp_imm(s, insn);
                 break;
             case 1: /* [15:12] == xx10 */
+                qsim_set_inst_type(QSIM_INST_FCMP);
                 /* Floating point compare */
                 disas_fp_compare(s, insn);
                 break;
             case 2: /* [15:12] == x100 */
+                qsim_set_inst_type(QSIM_INST_FBIT);
                 /* Floating point data-processing (1 source) */
                 disas_fp_1src(s, insn);
                 break;
@@ -5063,6 +5128,7 @@ static void disas_data_proc_fp(DisasContext *s, uint32_t insn)
                 unallocated_encoding(s);
                 break;
             default: /* [15:12] == 0000 */
+                qsim_set_inst_type(QSIM_INST_FCVT);
                 /* Floating point <-> integer conversions */
                 disas_fp_int_conv(s, insn);
                 break;
@@ -10859,6 +10925,7 @@ static void disas_data_proc_simd_fp(DisasContext *s, uint32_t insn)
     if (extract32(insn, 28, 1) == 1 && extract32(insn, 30, 1) == 0) {
         disas_data_proc_fp(s, insn);
     } else {
+        qsim_set_inst_type(QSIM_INST_SSE);
         /* SIMD, including crypto */
         disas_data_proc_simd(s, insn);
     }
@@ -10872,19 +10939,25 @@ static void disas_a64_insn(CPUARMState *env, DisasContext *s)
 
     insn = arm_ldl_code(env, s->pc, s->bswap_code);
     s->insn = insn;
-    s->pc += 4;
 
+    // hack to encode the instruction type and arg length
+    // ilen_arg  = tcg_ctx.gen_opparam_ptr + 3;
     if (qsim_gen_callbacks) {
-        tmp_insn = tcg_const_i32(insn);
+        itype_arg = tcg_ctx.gen_opparam_ptr + 5;
+        tmp_insn = tcg_const_i32(s->pc);
         tmp_size = tcg_const_i32(4);
-        tmp_type = tcg_const_i32(0);
-        gen_helper_inst_callback(tmp_insn, tmp_size, tmp_type);
+        tmp_type = tcg_const_i32(0xdeadbeef);
+        gen_a64_set_pc_im(s->pc);
+        gen_helper_inst_callback(cpu_env, tmp_insn, tmp_size, tmp_type);
         tcg_temp_free_i32(tmp_insn);
         tcg_temp_free_i32(tmp_size);
         tcg_temp_free_i32(tmp_type);
     } else {
         gen_helper_qsim_callback();
     }
+    s->pc += 4;
+
+    qsim_set_inst_type(QSIM_INST_INV);
 
     s->fp_access_checked = false;
 
@@ -10896,6 +10969,7 @@ static void disas_a64_insn(CPUARMState *env, DisasContext *s)
         disas_data_proc_imm(s, insn);
         break;
     case 0xa: case 0xb: /* Branch, exception generation and system insns */
+        qsim_set_inst_type(QSIM_INST_CF);
         disas_b_exc_sys(s, insn);
         break;
     case 0x4:

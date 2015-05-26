@@ -2041,15 +2041,17 @@ static uint64_t aa64_dczid_read(CPUARMState *env, const ARMCPRegInfo *ri)
 
         // enable magic callback at next instruction callback
         call_magic_cb = true;
-#if 0
-        // app start/end callback
+
+        /*
+         * App start callback needs to be called here, since qsim_inst_callback
+         * might already be set and will be invoked for the next instruction.
+         * But, app end callback should be called after processing the next
+         * instruction since a TB will end only after the branch cbz.
+         */
         if (qsim_magic_cb) {
             if (cbgen_enabled)  // start
                 qsim_magic_cb(0, 0xaaaaaaaa);
-            else                // end
-                qsim_magic_cb(0, 0xfa11dead);
         }
-#endif
 
         num_consecutive_dczid_reads = 0;
       }

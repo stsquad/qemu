@@ -36,7 +36,6 @@ extern qsim_ucontext_t main_context;
 
 extern int qsim_memop_flag;
 extern uint64_t qsim_phys_addr;
-extern uint64_t qsim_host_addr;
 
 extern int qsim_id;
 
@@ -881,28 +880,22 @@ uint32_t HELPER(ror_cc)(CPUARMState *env, uint32_t x, uint32_t i)
     }
 }
 
-void HELPER(inst_callback)(uint32_t vaddr, uint32_t length, uint32_t type)
+void HELPER(inst_callback)(CPUARMState *env, uint32_t vaddr, uint32_t length, uint32_t type)
 {
     qsim_icount--;
+    //printf("%x:%x:%x\n", vaddr, length, type);
     if (qsim_icount == 0) {
-      swapcontext(&qemu_context, &main_context);
-      checkcontext();
+        swapcontext(&qemu_context, &main_context);
+        checkcontext();
     }
 
     if (qsim_inst_cb != NULL) {
-
-      // get physical addr
-      /*
-		qsim_inst_cb(qsim_id, vaddr, qsim_phys_addr, length,
-					(uint8_t *)qsim_host_addr, type);
-					*/
-		  qsim_inst_cb(qsim_id, vaddr, 0, length, 0, type);
-	  }
+        qsim_phys_addr = 0;//get_page_addr_code(env, vaddr);
+        qsim_inst_cb(qsim_id, vaddr, qsim_phys_addr, length, 0, type);
+    }
 
     if (call_magic_cb) {
-        if (qsim_gen_callbacks)  // start
-            qsim_magic_cb(0, 0xaaaaaaaa);
-        else                // end
+        if (!qsim_gen_callbacks)  // end
             qsim_magic_cb(0, 0xfa11dead);
 
         call_magic_cb = false;
