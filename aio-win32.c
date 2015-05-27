@@ -27,15 +27,17 @@ struct AioHandler {
     EventNotifierHandler *io_notify;
     GPollFD pfd;
     int deleted;
+    bool outmost;
     void *opaque;
     QLIST_ENTRY(AioHandler) node;
 };
 
-void aio_set_fd_handler(AioContext *ctx,
-                        int fd,
-                        IOHandler *io_read,
-                        IOHandler *io_write,
-                        void *opaque)
+void aio_set_fd_handler_do(AioContext *ctx,
+                           int fd,
+                           IOHandler *io_read,
+                           IOHandler *io_write,
+                           void *opaque,
+                           bool outmost)
 {
     /* fd is a SOCKET in our case */
     AioHandler *node;
@@ -86,6 +88,7 @@ void aio_set_fd_handler(AioContext *ctx,
         node->opaque = opaque;
         node->io_read = io_read;
         node->io_write = io_write;
+        node->outmost = outmost;
 
         event = event_notifier_get_handle(&ctx->notifier);
         WSAEventSelect(node->pfd.fd, event,
@@ -96,9 +99,29 @@ void aio_set_fd_handler(AioContext *ctx,
     aio_notify(ctx);
 }
 
-void aio_set_event_notifier(AioContext *ctx,
-                            EventNotifier *e,
-                            EventNotifierHandler *io_notify)
+void aio_set_fd_handler(AioContext *ctx,
+                        int fd,
+                        IOHandler *io_read,
+                        IOHandler *io_write,
+                        void *opaque)
+{
+    aio_set_fd_handler_do(ctx, fd, io_read, io_write, opaque, false);
+}
+
+void aio_set_iohandler(AioContext *ctx,
+                       int fd,
+                       IOHandler *io_read,
+                       IOHandler *io_write,
+                       void *opaque)
+{
+    aio_set_fd_handler_do(ctx, fd, io_read, io_write, opaque, true);
+}
+
+
+static void aio_set_event_notifier_do(AioContext *ctx,
+                                      EventNotifier *e,
+                                      EventNotifierHandler *io_notify,
+                                      bool outmost)
 {
     AioHandler *node;
 
@@ -142,6 +165,20 @@ void aio_set_event_notifier(AioContext *ctx,
     }
 
     aio_notify(ctx);
+}
+
+void aio_set_event_notifier(AioContext *ctx,
+                            EventNotifier *e,
+                            EventNotifierHandler *io_notify)
+{
+    return aio_set_event_notifier_do(ctx, e, io_notify, false);
+}
+
+void aio_set_io_event_notifier(AioContext *ctx,
+                               EventNotifier *e,
+                               EventNotifierHandler *io_notify)
+{
+    return aio_set_event_notifier_do(ctx, e, io_notify, true);
 }
 
 bool aio_prepare(AioContext *ctx)
@@ -309,7 +346,8 @@ bool aio_poll(AioContext *ctx, bool blocking)
     /* fill fd sets */
     count = 0;
     QLIST_FOREACH(node, &ctx->aio_handlers, node) {
-        if (!node->deleted && node->io_notify) {
+        if (!node->deleted && node->io_notify &&
+                !(was_dispatching && node->outmost)) {
             events[count++] = event_notifier_get_handle(node->e);
         }
     }
