@@ -240,9 +240,7 @@ bool aio_dispatch(AioContext *ctx);
  */
 bool aio_poll(AioContext *ctx, bool blocking);
 
-/* Register a file descriptor and associated callbacks.  Behaves very similarly
- * to qemu_set_fd_handler2.  Unlike qemu_set_fd_handler2, these callbacks will
- * be invoked when using aio_poll().
+/* Register a file descriptor and associated callbacks.
  *
  * Code that invokes AIO completion functions should rely on this function
  * instead of qemu_set_fd_handler[2].
@@ -253,6 +251,15 @@ void aio_set_fd_handler(AioContext *ctx,
                         IOHandler *io_write,
                         void *opaque);
 
+/* Register a file descriptor and associated callbacks.  Behaves very similarly
+ * to qemu_set_fd_handler: these callbacks will be invoked only by outmost
+ * aio_poll() directly, but not in nested polls (such as bdrv_drain() or
+ * bdrv_aio_cancel()).
+ */
+void aio_set_iohandler(AioContext *ctx, int fd,
+                       IOHandler *io_read,
+                       IOHandler *io_write,
+                       void *opaque);
 /* Register an event notifier and associated callbacks.  Behaves very similarly
  * to event_notifier_set_handler.  Unlike event_notifier_set_handler, these callbacks
  * will be invoked when using aio_poll().
@@ -263,6 +270,16 @@ void aio_set_fd_handler(AioContext *ctx,
 void aio_set_event_notifier(AioContext *ctx,
                             EventNotifier *notifier,
                             EventNotifierHandler *io_read);
+
+/* Similar to aio_set_event_notifier except the notifier will only be checked
+ * in top level poll.
+ *
+ * Notifiers for external requests like guest I/O or monitor command should use
+ * this function.
+ */
+void aio_set_io_event_notifier(AioContext *ctx,
+                               EventNotifier *notifier,
+                               EventNotifierHandler *io_read);
 
 /* Return a GSource that lets the main loop poll the file descriptors attached
  * to this AioContext.
