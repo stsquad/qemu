@@ -1356,6 +1356,7 @@ static void internal_snapshot_prepare(BlkTransactionState *common,
     }
 
     /* 4. succeed, mark a snapshot is created */
+    bdrv_lock(bs);
     state->bs = bs;
 }
 
@@ -1387,6 +1388,9 @@ static void internal_snapshot_clean(BlkTransactionState *common)
     InternalSnapshotState *state = DO_UPCAST(InternalSnapshotState,
                                              common, common);
 
+    if (state->bs) {
+        bdrv_unlock(state->bs);
+    }
     if (state->aio_context) {
         aio_context_release(state->aio_context);
     }
