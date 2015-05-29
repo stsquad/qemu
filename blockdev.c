@@ -1262,6 +1262,7 @@ typedef struct InternalSnapshotState {
     BlockDriverState *bs;
     AioContext *aio_context;
     QEMUSnapshotInfo sn;
+    bool needs_unlock;
 } InternalSnapshotState;
 
 static void internal_snapshot_prepare(BlkTransactionState *common,
@@ -1356,6 +1357,8 @@ static void internal_snapshot_prepare(BlkTransactionState *common,
     }
 
     /* 4. succeed, mark a snapshot is created */
+    bdrv_lock(bs);
+    state->needs_unlock = true;
     state->bs = bs;
 }
 
@@ -1387,6 +1390,9 @@ static void internal_snapshot_clean(BlkTransactionState *common)
     InternalSnapshotState *state = DO_UPCAST(InternalSnapshotState,
                                              common, common);
 
+    if (state->needs_unlock) {
+        bdrv_unlock(state->bs);
+    }
     if (state->aio_context) {
         aio_context_release(state->aio_context);
     }
