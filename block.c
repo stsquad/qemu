@@ -252,8 +252,10 @@ BlockDriverState *bdrv_new(void)
     bdrv_iostatus_disable(bs);
     notifier_list_init(&bs->close_notifiers);
     notifier_with_return_list_init(&bs->before_write_notifiers);
+    notifier_list_init(&bs->lock_notifiers);
     qemu_co_queue_init(&bs->throttled_reqs[0]);
     qemu_co_queue_init(&bs->throttled_reqs[1]);
+    qemu_co_queue_init(&bs->lock_queue);
     bs->refcnt = 1;
     bs->aio_context = qemu_get_aio_context();
 
@@ -1716,6 +1718,7 @@ void bdrv_close(BlockDriverState *bs)
 {
     BdrvAioNotifier *ban, *ban_next;
 
+    assert(!bdrv_is_locked(bs));
     if (bs->job) {
         block_job_cancel_sync(bs->job);
     }
@@ -1846,12 +1849,19 @@ static void bdrv_move_feature_fields(BlockDriverState *bs_dest,
     /* job */
     bs_dest->job                = bs_src->job;
 
+    /* lock */
+    bs_dest->lock_owner         = bs_src->lock_owner;
+    bs_dest->lock_level         = bs_src->lock_level;
+    bs_dest->lock_queue         = bs_src->lock_queue;
+    bs_dest->lock_notifiers     = bs_src->lock_notifiers;
+
     /* keep the same entry in bdrv_states */
     bs_dest->device_list = bs_src->device_list;
     bs_dest->blk = bs_src->blk;
 
     memcpy(bs_dest->op_blockers, bs_src->op_blockers,
            sizeof(bs_dest->op_blockers));
+
 }
 
 /*

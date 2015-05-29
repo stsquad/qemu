@@ -433,6 +433,11 @@ struct BlockDriverState {
     /* threshold limit for writes, in bytes. "High water mark". */
     uint64_t write_threshold_offset;
     NotifierWithReturn write_threshold_notifier;
+
+    Coroutine    *lock_owner;
+    int          lock_level;
+    CoQueue      lock_queue;
+    NotifierList lock_notifiers;
 };
 
 

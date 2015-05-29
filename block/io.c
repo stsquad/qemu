@@ -2601,3 +2601,72 @@ void bdrv_flush_io_queue(BlockDriverState *bs)
         bdrv_flush_io_queue(bs->file);
     }
 }
+
+static void bdrv_lock_notify(BlockDriverState *bs, bool locking)
+{
+    BdrvLockEvent event = (BdrvLockEvent) {
+        .bs = bs,
+        .locking = locking,
+    };
+    notifier_list_notify(&bs->lock_notifiers, &event);
+}
+
+void bdrv_lock(BlockDriverState *bs)
+{
+    Coroutine *self = qemu_coroutine_self();
+    bool notify = true;
+
+    /*
+     * XXX: eventually we only allow coroutine callers. For now, let's allow
+     * the exceptional non-coroutine callers to serialize by themselves, e.g.
+     * with BQL.
+     */
+    assert(qemu_in_coroutine()
+           || self == bs->lock_owner || bs->lock_level == 0);
+
+    if (bs->lock_level) {
+        if (self == bs->lock_owner) {
+            bs->lock_level++;
+            return;
+        } else {
+            qemu_co_queue_wait(&bs->lock_queue);
+            notify = false;
+        }
+    }
+    assert(bs->lock_level == 0);
+
+    if (notify) {
+        bdrv_lock_notify(bs, true);
+    }
+    bs->lock_level++;
+    bs->lock_owner = self;
+
+    bdrv_drain(bs);
+}
+
+void bdrv_unlock(BlockDriverState *bs)
+{
+    assert(bs->lock_level > 0);
+    if (!--bs->lock_level) {
+        if (!qemu_co_queue_empty(&bs->lock_queue)) {
+            /*
+             * XXX: do we need a BH to run lock_queue?
+             * If so, be careful of bdrv_set_aio_context().
+             **/
+            qemu_co_queue_next(&bs->lock_queue);
+        } else {
+            bdrv_lock_notify(bs, false);
+        }
+    }
+}
+
+bool bdrv_is_locked(BlockDriverState *bs)
+{
+    assert((bs->lock_level == 0) == qemu_co_queue_empty(&bs->lock_queue));
+    return !!bs->lock_level;
+}
+
+void bdrv_add_lock_unlock_notifier(BlockDriverState *bs, Notifier *notifier)
+{
+    notifier_list_add(&bs->lock_notifiers, notifier);
+}

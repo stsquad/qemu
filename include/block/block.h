@@ -592,6 +592,45 @@ void bdrv_io_plug(BlockDriverState *bs);
 void bdrv_io_unplug(BlockDriverState *bs);
 void bdrv_flush_io_queue(BlockDriverState *bs);
 
+/**
+ * bdrv_lock:
+ *
+ * Begin a temporary exclusive accessing by locking the BDS.
+ *
+ * This lock is recursive: if bs is unlocked, the caller context will acquire
+ * the lock; otherwise if the caller is in the same coroutine context that
+ * already holds the lock, it will only add a recurse level; otherwise, this
+ * function will block until the lock is released by the other owner.
+ */
+void bdrv_lock(BlockDriverState *bs);
+
+/**
+ * bdrv_lock:
+ *
+ * Reduce the recurse level, or if it's the outermost unlock, release the lock.
+ */
+void bdrv_unlock(BlockDriverState *bs);
+
+/**
+ * bdrv_is_locked:
+ *
+ * Return if the bs is locked.
+ */
+bool bdrv_is_locked(BlockDriverState *bs);
+
+typedef struct {
+    BlockDriverState *bs;
+    bool locking;
+} BdrvLockEvent;
+
+/**
+ * bdrv_add_lock_unlock_notifier:
+ *
+ * Add a notifier that will get notified when bs is locked or unlocked, with a
+ * BdrvLockEvent data.
+ */
+void bdrv_add_lock_unlock_notifier(BlockDriverState *bs, Notifier *notifier);
+
 BlockAcctStats *bdrv_get_stats(BlockDriverState *bs);
 
 #endif
