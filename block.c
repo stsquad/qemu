@@ -1716,6 +1716,7 @@ void bdrv_close(BlockDriverState *bs)
 {
     BdrvAioNotifier *ban, *ban_next;
 
+    assert(bs->lock_level == 0);
     if (bs->job) {
         block_job_cancel_sync(bs->job);
     }
@@ -1849,6 +1850,9 @@ static void bdrv_move_feature_fields(BlockDriverState *bs_dest,
     /* keep the same entry in bdrv_states */
     bs_dest->device_list = bs_src->device_list;
     bs_dest->blk = bs_src->blk;
+
+    /* lock */
+    bs_dest->lock_level = bs_src->lock_level;
 
     memcpy(bs_dest->op_blockers, bs_src->op_blockers,
            sizeof(bs_dest->op_blockers));

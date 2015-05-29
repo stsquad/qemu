@@ -592,6 +592,20 @@ void bdrv_io_plug(BlockDriverState *bs);
 void bdrv_io_unplug(BlockDriverState *bs);
 void bdrv_flush_io_queue(BlockDriverState *bs);
 
+/**
+ * bdrv_lock:
+ *
+ * Begin a temporary exclusive accessing by locking the BDS.
+ */
+void bdrv_lock(BlockDriverState *bs);
+
+/**
+ * bdrv_unlock:
+ *
+ * End a exclusive accessing.
+ */
+void bdrv_unlock(BlockDriverState *bs);
+
 BlockAcctStats *bdrv_get_stats(BlockDriverState *bs);
 
 #endif
