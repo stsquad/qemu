@@ -44,6 +44,12 @@ struct VirtIOBlkConf
 struct VirtIOBlockDataPlane;
 
 struct VirtIOBlockReq;
+
+typedef struct {
+    /* Function to push to vq and notify guest */
+    void (*complete_request)(struct VirtIOBlockReq *req, unsigned char status);
+} VirtIOBlockOps;
+
 typedef struct VirtIOBlock {
     VirtIODevice parent_obj;
     BlockBackend *blk;
@@ -54,8 +60,7 @@ typedef struct VirtIOBlock {
     unsigned short sector_mask;
     bool original_wce;
     VMChangeStateEntry *change;
-    /* Function to push to vq and notify guest */
-    void (*complete_request)(struct VirtIOBlockReq *req, unsigned char status);
+    const VirtIOBlockOps *ops;
     Notifier migration_state_notifier;
     struct VirtIOBlockDataPlane *dataplane;
 } VirtIOBlock;
