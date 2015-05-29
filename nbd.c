@@ -160,6 +160,8 @@ struct NBDExport {
     uint32_t nbdflags;
     QTAILQ_HEAD(, NBDClient) clients;
     QTAILQ_ENTRY(NBDExport) next;
+    Notifier lock_notify;
+    bool io_blocked;
 
     AioContext *ctx;
 };
@@ -1053,6 +1055,19 @@ static void blk_aio_detach(void *opaque)
     exp->ctx = NULL;
 }
 
+static void nbd_pause_handler(Notifier *notifier, void *data)
+{
+    BdrvLockEvent *event = data;
+    NBDClient *client;
+    NBDExport *exp = container_of(notifier, NBDExport, lock_notify);
+
+    exp->io_blocked = event->locking;
+
+    QTAILQ_FOREACH(client, &exp->clients, next) {
+        nbd_update_can_read(client);
+    }
+}
+
 NBDExport *nbd_export_new(BlockBackend *blk, off_t dev_offset, off_t size,
                           uint32_t nbdflags, void (*close)(NBDExport *),
                           Error **errp)
@@ -1081,6 +1096,8 @@ NBDExport *nbd_export_new(BlockBackend *blk, off_t dev_offset, off_t size,
      * access since the export could be available before migration handover.
      */
     blk_invalidate_cache(blk, NULL);
+    exp->lock_notify.notify = nbd_pause_handler;
+    blk_add_lock_unlock_notifier(blk, &exp->lock_notify);
     return exp;
 
 fail:
@@ -1132,6 +1149,7 @@ void nbd_export_close(NBDExport *exp)
     nbd_export_set_name(exp, NULL);
     nbd_export_put(exp);
     if (exp->blk) {
+        notifier_remove(&exp->lock_notify);
         blk_remove_aio_context_notifier(exp->blk, blk_aio_attached,
                                         blk_aio_detach, exp);
         blk_unref(exp->blk);
@@ -1455,6 +1473,9 @@ static void nbd_update_can_read(NBDClient *client)
     bool can_read = client->recv_coroutine ||
                     client->nb_requests < MAX_NBD_REQUESTS;
 
+    if (client->exp && client->exp->io_blocked) {
+        can_read = false;
+    }
     if (can_read != client->can_read) {
         client->can_read = can_read;
         nbd_set_handlers(client);
