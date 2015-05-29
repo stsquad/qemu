@@ -2601,3 +2601,15 @@ void bdrv_flush_io_queue(BlockDriverState *bs)
         bdrv_flush_io_queue(bs->file);
     }
 }
+
+void bdrv_lock(BlockDriverState *bs)
+{
+    bs->lock_level++;
+    bdrv_drain(bs);
+}
+
+void bdrv_unlock(BlockDriverState *bs)
+{
+    bs->lock_level--;
+    assert(bs->lock_level >= 0);
+}
