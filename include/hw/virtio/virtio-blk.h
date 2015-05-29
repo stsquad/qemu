@@ -42,12 +42,16 @@ struct VirtIOBlkConf
 };
 
 struct VirtIOBlockDataPlane;
-
+struct VirtIOBlock;
 struct VirtIOBlockReq;
 
 typedef struct {
     /* Function to push to vq and notify guest */
     void (*complete_request)(struct VirtIOBlockReq *req, unsigned char status);
+
+    /* Functions to pause/resume request handling */
+    void (*pause)(struct VirtIOBlock *vblk);
+    void (*resume)(struct VirtIOBlock *vblk);
 } VirtIOBlockOps;
 
 typedef struct VirtIOBlock {
@@ -62,6 +66,8 @@ typedef struct VirtIOBlock {
     VMChangeStateEntry *change;
     const VirtIOBlockOps *ops;
     Notifier migration_state_notifier;
+    Notifier pause_notifier;
+    bool paused;
     struct VirtIOBlockDataPlane *dataplane;
 } VirtIOBlock;
 
