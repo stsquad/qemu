@@ -57,6 +57,8 @@ typedef struct MirrorBlockJob {
     int in_flight;
     int sectors_in_flight;
     int ret;
+    /* True if the source is locked by us */
+    bool need_unlock;
 } MirrorBlockJob;
 
 typedef struct MirrorOp {
@@ -358,6 +360,9 @@ static void mirror_exit(BlockJob *job, void *opaque)
     if (replace_aio_context) {
         aio_context_release(replace_aio_context);
     }
+    if (s->need_unlock) {
+        bdrv_unlock(s->common.bs);
+    }
     g_free(s->replaces);
     bdrv_unref(s->target);
     block_job_completed(&s->common, data->ret);
@@ -521,7 +526,8 @@ static void coroutine_fn mirror_run(void *opaque)
              * mirror_populate runs.
              */
             trace_mirror_before_drain(s, cnt);
-            bdrv_drain(bs);
+            bdrv_lock(bs);
+            s->need_unlock = true;
             cnt = bdrv_get_dirty_count(s->dirty_bitmap);
         }
 
@@ -542,6 +548,10 @@ static void coroutine_fn mirror_run(void *opaque)
             assert(QLIST_EMPTY(&bs->tracked_requests));
             s->common.cancelled = false;
             break;
+        }
+        if (s->need_unlock) {
+            bdrv_unlock(bs);
+            s->need_unlock = false;
         }
         last_pause_ns = qemu_clock_get_ns(QEMU_CLOCK_REALTIME);
     }
@@ -565,7 +575,11 @@ immediate_exit:
 
     data = g_malloc(sizeof(*data));
     data->ret = ret;
-    block_job_defer_to_main_loop(&s->common, mirror_exit, data);
+    if (bs->aio_context == qemu_get_aio_context()) {
+        mirror_exit(&s->common, data);
+    } else {
+        block_job_defer_to_main_loop(&s->common, mirror_exit, data);
+    }
 }
 
 static void mirror_set_speed(BlockJob *job, int64_t speed, Error **errp)
