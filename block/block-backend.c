@@ -913,3 +913,9 @@ int blk_probe_geometry(BlockBackend *blk, HDGeometry *geo)
 {
     return bdrv_probe_geometry(blk->bs, geo);
 }
+
+void blk_add_lock_unlock_notifier(BlockBackend *blk, Notifier *notifier)
+{
+    return bdrv_add_lock_unlock_notifier(blk->bs, notifier);
+}
+

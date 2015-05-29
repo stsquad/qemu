@@ -168,5 +168,6 @@ int blk_save_vmstate(BlockBackend *blk, const uint8_t *buf,
 int blk_load_vmstate(BlockBackend *blk, uint8_t *buf, int64_t pos, int size);
 int blk_probe_blocksizes(BlockBackend *blk, BlockSizes *bsz);
 int blk_probe_geometry(BlockBackend *blk, HDGeometry *geo);
+void blk_add_lock_unlock_notifier(BlockBackend *blk, Notifier *notifier);
 
 #endif
