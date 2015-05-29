@@ -1586,6 +1586,8 @@ static void drive_backup_prepare(BlkTransactionState *common, Error **errp)
     /* AioContext is released in .clean() */
     state->aio_context = bdrv_get_aio_context(bs);
     aio_context_acquire(state->aio_context);
+    bdrv_lock(bs);
+    state->bs = bs;
 
     qmp_drive_backup(backup->device, backup->target,
                      backup->has_format, backup->format,
@@ -1601,7 +1603,6 @@ static void drive_backup_prepare(BlkTransactionState *common, Error **errp)
         return;
     }
 
-    state->bs = bs;
     state->job = state->bs->job;
 }
 
@@ -1621,6 +1622,7 @@ static void drive_backup_clean(BlkTransactionState *common)
     DriveBackupState *state = DO_UPCAST(DriveBackupState, common, common);
 
     if (state->aio_context) {
+        bdrv_unlock(state->bs);
         aio_context_release(state->aio_context);
     }
 }
