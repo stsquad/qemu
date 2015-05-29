@@ -40,7 +40,6 @@ void virtio_scsi_set_iothread(VirtIOSCSI *s, IOThread *iothread)
 
 static VirtIOSCSIVring *virtio_scsi_vring_init(VirtIOSCSI *s,
                                                VirtQueue *vq,
-                                               EventNotifierHandler *handler,
                                                int n)
 {
     BusState *qbus = BUS(qdev_get_parent_bus(DEVICE(s)));
@@ -60,7 +59,6 @@ static VirtIOSCSIVring *virtio_scsi_vring_init(VirtIOSCSI *s,
     r = g_slice_new(VirtIOSCSIVring);
     r->host_notifier = *virtio_queue_get_host_notifier(vq);
     r->guest_notifier = *virtio_queue_get_guest_notifier(vq);
-    aio_set_event_notifier(s->ctx, &r->host_notifier, handler);
 
     r->parent = s;
 
@@ -71,7 +69,6 @@ static VirtIOSCSIVring *virtio_scsi_vring_init(VirtIOSCSI *s,
     return r;
 
 fail_vring:
-    aio_set_event_notifier(s->ctx, &r->host_notifier, NULL);
     k->set_host_notifier(qbus->parent, n, false);
     g_slice_free(VirtIOSCSIVring, r);
     return NULL;
@@ -104,6 +101,9 @@ void virtio_scsi_vring_push_notify(VirtIOSCSIReq *req)
     }
 }
 
+static void virtio_scsi_start_ioeventfd(VirtIOSCSI *s);
+static void virtio_scsi_stop_ioeventfd(VirtIOSCSI *s);
+
 static void virtio_scsi_iothread_handle_ctrl(EventNotifier *notifier)
 {
     VirtIOSCSIVring *vring = container_of(notifier,
@@ -111,6 +111,7 @@ static void virtio_scsi_iothread_handle_ctrl(EventNotifier *notifier)
     VirtIOSCSI *s = VIRTIO_SCSI(vring->parent);
     VirtIOSCSIReq *req;
 
+    assert(!s->pause_counter);
     event_notifier_test_and_clear(notifier);
     while ((req = virtio_scsi_pop_req_vring(s, vring))) {
         virtio_scsi_handle_ctrl_req(s, req);
@@ -124,6 +125,7 @@ static void virtio_scsi_iothread_handle_event(EventNotifier *notifier)
     VirtIOSCSI *s = vring->parent;
     VirtIODevice *vdev = VIRTIO_DEVICE(s);
 
+    assert(!s->pause_counter);
     event_notifier_test_and_clear(notifier);
 
     if (!(vdev->status & VIRTIO_CONFIG_S_DRIVER_OK)) {
@@ -143,6 +145,7 @@ static void virtio_scsi_iothread_handle_cmd(EventNotifier *notifier)
     VirtIOSCSIReq *req, *next;
     QTAILQ_HEAD(, VirtIOSCSIReq) reqs = QTAILQ_HEAD_INITIALIZER(reqs);
 
+    assert(!s->pause_counter);
     event_notifier_test_and_clear(notifier);
     while ((req = virtio_scsi_pop_req_vring(s, vring))) {
         if (virtio_scsi_handle_cmd_req_prepare(s, req)) {
@@ -155,8 +158,52 @@ static void virtio_scsi_iothread_handle_cmd(EventNotifier *notifier)
     }
 }
 
+void virtio_scsi_dataplane_pause_handler(Notifier *notifier, void *data)
+{
+    VirtIOSCSI *s = container_of(notifier, VirtIOSCSI, pause_notifier);
+    BdrvLockEvent *event = data;
+
+    if (event->locking) {
+        s->pause_counter++;
+        if (s->pause_counter == 1) {
+            virtio_scsi_stop_ioeventfd(s);
+        }
+    } else {
+        s->pause_counter--;
+        if (s->pause_counter == 0) {
+            virtio_scsi_start_ioeventfd(s);
+        }
+    }
+    assert(s->pause_counter >= 0);
+}
+
 /* assumes s->ctx held */
-static void virtio_scsi_clear_aio(VirtIOSCSI *s)
+static void virtio_scsi_start_ioeventfd(VirtIOSCSI *s)
+{
+    VirtIOSCSICommon *vs = VIRTIO_SCSI_COMMON(s);
+    int i;
+
+    if (!s->dataplane_started || s->dataplane_stopping) {
+        return;
+    }
+    if (s->ctrl_vring) {
+        aio_set_event_notifier(s->ctx, &s->ctrl_vring->host_notifier,
+                               virtio_scsi_iothread_handle_ctrl);
+    }
+    if (s->event_vring) {
+        aio_set_event_notifier(s->ctx, &s->event_vring->host_notifier,
+                               virtio_scsi_iothread_handle_event);
+    }
+    if (s->cmd_vrings) {
+        for (i = 0; i < vs->conf.num_queues && s->cmd_vrings[i]; i++) {
+            aio_set_event_notifier(s->ctx, &s->cmd_vrings[i]->host_notifier,
+                                   virtio_scsi_iothread_handle_cmd);
+        }
+    }
+}
+
+/* assumes s->ctx held */
+static void virtio_scsi_stop_ioeventfd(VirtIOSCSI *s)
 {
     VirtIOSCSICommon *vs = VIRTIO_SCSI_COMMON(s);
     int i;
@@ -169,7 +216,8 @@ static void virtio_scsi_clear_aio(VirtIOSCSI *s)
     }
     if (s->cmd_vrings) {
         for (i = 0; i < vs->conf.num_queues && s->cmd_vrings[i]; i++) {
-            aio_set_event_notifier(s->ctx, &s->cmd_vrings[i]->host_notifier, NULL);
+            aio_set_event_notifier(s->ctx, &s->cmd_vrings[i]->host_notifier,
+                                   NULL);
         }
     }
 }
@@ -229,24 +277,18 @@ void virtio_scsi_dataplane_start(VirtIOSCSI *s)
     }
 
     aio_context_acquire(s->ctx);
-    s->ctrl_vring = virtio_scsi_vring_init(s, vs->ctrl_vq,
-                                           virtio_scsi_iothread_handle_ctrl,
-                                           0);
+    s->ctrl_vring = virtio_scsi_vring_init(s, vs->ctrl_vq, 0);
     if (!s->ctrl_vring) {
         goto fail_vrings;
     }
-    s->event_vring = virtio_scsi_vring_init(s, vs->event_vq,
-                                            virtio_scsi_iothread_handle_event,
-                                            1);
+    s->event_vring = virtio_scsi_vring_init(s, vs->event_vq, 1);
     if (!s->event_vring) {
         goto fail_vrings;
     }
     s->cmd_vrings = g_new(VirtIOSCSIVring *, vs->conf.num_queues);
     for (i = 0; i < vs->conf.num_queues; i++) {
         s->cmd_vrings[i] =
-            virtio_scsi_vring_init(s, vs->cmd_vqs[i],
-                                   virtio_scsi_iothread_handle_cmd,
-                                   i + 2);
+            virtio_scsi_vring_init(s, vs->cmd_vqs[i], i + 2);
         if (!s->cmd_vrings[i]) {
             goto fail_vrings;
         }
@@ -254,11 +296,11 @@ void virtio_scsi_dataplane_start(VirtIOSCSI *s)
 
     s->dataplane_starting = false;
     s->dataplane_started = true;
+    virtio_scsi_start_ioeventfd(s);
     aio_context_release(s->ctx);
     return;
 
 fail_vrings:
-    virtio_scsi_clear_aio(s);
     aio_context_release(s->ctx);
     virtio_scsi_vring_teardown(s);
     for (i = 0; i < vs->conf.num_queues + 2; i++) {
@@ -290,11 +332,7 @@ void virtio_scsi_dataplane_stop(VirtIOSCSI *s)
 
     aio_context_acquire(s->ctx);
 
-    aio_set_event_notifier(s->ctx, &s->ctrl_vring->host_notifier, NULL);
-    aio_set_event_notifier(s->ctx, &s->event_vring->host_notifier, NULL);
-    for (i = 0; i < vs->conf.num_queues; i++) {
-        aio_set_event_notifier(s->ctx, &s->cmd_vrings[i]->host_notifier, NULL);
-    }
+    virtio_scsi_stop_ioeventfd(s);
 
     blk_drain_all(); /* ensure there are no in-flight requests */
 
