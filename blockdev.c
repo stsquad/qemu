@@ -1669,6 +1669,8 @@ static void blockdev_backup_prepare(BlkTransactionState *common, Error **errp)
         return;
     }
     aio_context_acquire(state->aio_context);
+    state->bs = bs;
+    bdrv_lock(bs);
 
     qmp_blockdev_backup(backup->device, backup->target,
                         backup->sync,
@@ -1681,7 +1683,6 @@ static void blockdev_backup_prepare(BlkTransactionState *common, Error **errp)
         return;
     }
 
-    state->bs = bs;
     state->job = state->bs->job;
 }
 
@@ -1701,6 +1702,7 @@ static void blockdev_backup_clean(BlkTransactionState *common)
     BlockdevBackupState *state = DO_UPCAST(BlockdevBackupState, common, common);
 
     if (state->aio_context) {
+        bdrv_unlock(state->bs);
         aio_context_release(state->aio_context);
     }
 }
