@@ -97,6 +97,8 @@ typedef struct VirtIOSCSI {
     bool dataplane_disabled;
     bool dataplane_fenced;
     Error *blocker;
+    Notifier pause_notifier;
+    int pause_counter;
     Notifier migration_state_notifier;
     uint32_t host_features;
 } VirtIOSCSI;
@@ -170,6 +172,7 @@ void virtio_scsi_push_event(VirtIOSCSI *s, SCSIDevice *dev,
                             uint32_t event, uint32_t reason);
 
 void virtio_scsi_set_iothread(VirtIOSCSI *s, IOThread *iothread);
+void virtio_scsi_dataplane_pause_handler(Notifier *notifier, void *data);
 void virtio_scsi_dataplane_start(VirtIOSCSI *s);
 void virtio_scsi_dataplane_stop(VirtIOSCSI *s);
 void virtio_scsi_vring_push_notify(VirtIOSCSIReq *req);
