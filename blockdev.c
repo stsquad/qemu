@@ -1471,6 +1471,7 @@ static void external_snapshot_prepare(BlkTransactionState *common,
     /* Acquire AioContext now so any threads operating on old_bs stop */
     state->aio_context = bdrv_get_aio_context(state->old_bs);
     aio_context_acquire(state->aio_context);
+    bdrv_lock(state->old_bs);
 
     if (!bdrv_is_inserted(state->old_bs)) {
         error_set(errp, QERR_DEVICE_HAS_NO_MEDIUM, device);
@@ -1540,6 +1541,7 @@ static void external_snapshot_commit(BlkTransactionState *common)
     bdrv_reopen(state->new_bs, state->new_bs->open_flags & ~BDRV_O_RDWR,
                 NULL);
 
+    bdrv_unlock(state->old_bs);
     aio_context_release(state->aio_context);
 }
 
@@ -1551,6 +1553,7 @@ static void external_snapshot_abort(BlkTransactionState *common)
         bdrv_unref(state->new_bs);
     }
     if (state->aio_context) {
+        bdrv_unlock(state->old_bs);
         aio_context_release(state->aio_context);
     }
 }
