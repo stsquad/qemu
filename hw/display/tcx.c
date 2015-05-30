@@ -1014,10 +1014,13 @@ static void tcx_realizefn(DeviceState *dev, Error **errp)
     if (fcode_filename) {
         ret = load_image_targphys(fcode_filename, s->prom_addr,
                                   FCODE_MAX_ROM_SIZE);
-        if (ret < 0 || ret > FCODE_MAX_ROM_SIZE) {
-            error_report("tcx: could not load prom '%s'", TCX_ROM_FILE);
-        }
     }
+    if (!fcode_filename || ret < 0 || ret > FCODE_MAX_ROM_SIZE) {
+        error_report("tcx: could not load prom '%s'",
+                     fcode_filename ? fcode_filename : TCX_ROM_FILE);
+        exit(1);
+    }
+    g_free(fcode_filename);
 
     /* 0/DFB8 : 8-bit plane */
     s->vram = vram_base;
