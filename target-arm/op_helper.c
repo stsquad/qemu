@@ -20,6 +20,7 @@
 #include "exec/helper-proto.h"
 #include "internals.h"
 #include "exec/cpu_ldst.h"
+#include "exec/ram_addr.h"
 
 #define SIGNBIT (uint32_t)0x80000000
 #define SIGNBIT64 ((uint64_t)1 << 63)
@@ -880,7 +881,7 @@ uint32_t HELPER(ror_cc)(CPUARMState *env, uint32_t x, uint32_t i)
     }
 }
 
-void HELPER(inst_callback)(CPUARMState *env, uint32_t vaddr, uint32_t length, uint32_t type)
+void HELPER(inst_callback)(CPUARMState *env, uint64_t vaddr, uint32_t length, uint32_t type)
 {
     qsim_icount--;
     //printf("%x:%x:%x\n", vaddr, length, type);
@@ -890,8 +891,12 @@ void HELPER(inst_callback)(CPUARMState *env, uint32_t vaddr, uint32_t length, ui
     }
 
     if (qsim_inst_cb != NULL) {
-        qsim_phys_addr = 0;//get_page_addr_code(env, vaddr);
-        qsim_inst_cb(qsim_id, vaddr, qsim_phys_addr, length, 0, type);
+        uint8_t buf[length];
+        ARMCPU *cpu = arm_env_get_cpu(env);
+        CPUState *cs = CPU(cpu);
+        cpu_memory_rw_debug(cs, vaddr, buf, length, false);
+        //printf("v: 0x%lx, p: 0x%lx\n", vaddr, *(uint64_t *)buf);
+        qsim_inst_cb(qsim_id, vaddr, 0, length, buf, type);
     }
 
     if (call_magic_cb) {

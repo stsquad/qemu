@@ -2036,7 +2036,11 @@ static uint64_t aa64_dczid_read(CPUARMState *env, const ARMCPRegInfo *ri)
       if (num_consecutive_dczid_reads == 4) {
         cbgen_enabled = !cbgen_enabled;
         qsim_gen_callbacks = cbgen_enabled;
+
+        // flush and invalidate generated TBs
         tb_flush(env);
+        tcg_ctx.tb_ctx.tb_invalidated_flag = 1;
+
         printf("%s callback generation...\n", (cbgen_enabled ? "Enabling" : "Disabling"));
 
         // enable magic callback at next instruction callback

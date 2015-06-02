@@ -9243,7 +9243,8 @@ static int disas_thumb2_insn(CPUARMState *env, DisasContext *s, uint16_t insn_hw
     int shiftop;
     int conds;
     int logic_cc;
-    TCGv_i32 tmp_insn = 0, tmp_size = 0, tmp_type = 0;
+    TCGv_i32 tmp_size = 0, tmp_type = 0;
+    TCGv_i64 tmp_insn = 0;
 
     if (!(arm_dc_feature(s, ARM_FEATURE_THUMB2)
           || arm_dc_feature(s, ARM_FEATURE_M))) {
@@ -9291,11 +9292,11 @@ static int disas_thumb2_insn(CPUARMState *env, DisasContext *s, uint16_t insn_hw
     insn |= (uint32_t)insn_hw1 << 16;
 
     if (qsim_gen_callbacks) {
-      tmp_insn = tcg_const_i32(insn);
+      tmp_insn = tcg_const_i64(insn);
       tmp_size = tcg_const_i32(2);
       tmp_type = tcg_const_i32(0);
       gen_helper_inst_callback(cpu_env, tmp_insn, tmp_size, tmp_type);
-      tcg_temp_free_i32(tmp_insn);
+      tcg_temp_free_i64(tmp_insn);
       tcg_temp_free_i32(tmp_size);
       tcg_temp_free_i32(tmp_type);
     } else {
@@ -10432,7 +10433,8 @@ static void disas_thumb_insn(CPUARMState *env, DisasContext *s)
     TCGv_i32 tmp;
     TCGv_i32 tmp2;
     TCGv_i32 addr;
-    TCGv_i32 tmp_insn = 0, tmp_size = 0, tmp_type = 0;
+    TCGv_i32 tmp_size = 0, tmp_type = 0;
+    TCGv_i64 tmp_insn = 0;
 
     if (s->condexec_mask) {
         cond = s->condexec_cond;
@@ -10446,11 +10448,11 @@ static void disas_thumb_insn(CPUARMState *env, DisasContext *s)
     insn = arm_lduw_code(env, s->pc, s->bswap_code);
 
     if (qsim_gen_callbacks) {
-      tmp_insn = tcg_const_i32(s->pc);
+      tmp_insn = tcg_const_i64(s->pc);
       tmp_size = tcg_const_i32(2);
       tmp_type = tcg_const_i32(0);
       gen_helper_inst_callback(cpu_env, tmp_insn, tmp_size, tmp_type);
-      tcg_temp_free_i32(tmp_insn);
+      tcg_temp_free_i64(tmp_insn);
       tcg_temp_free_i32(tmp_size);
       tcg_temp_free_i32(tmp_type);
     } else {
@@ -11377,13 +11379,14 @@ static inline void gen_intermediate_code_internal(ARMCPU *cpu,
             }
         } else {
             unsigned int insn = arm_ldl_code(env, dc->pc, dc->bswap_code);
-            TCGv_i32 tmp_insn = 0, tmp_size = 0, tmp_type = 0;
+            TCGv_i32 tmp_size = 0, tmp_type = 0;
+            TCGv_i64 tmp_insn = 0;
             if (qsim_gen_callbacks) {
-                tmp_insn = tcg_const_i32(insn);
+                tmp_insn = tcg_const_i64(insn);
                 tmp_size = tcg_const_i32(4);
                 tmp_type = tcg_const_i32(0);
                 gen_helper_inst_callback(cpu_env, tmp_insn, tmp_size, tmp_type);
-                tcg_temp_free_i32(tmp_insn);
+                tcg_temp_free_i64(tmp_insn);
                 tcg_temp_free_i32(tmp_size);
                 tcg_temp_free_i32(tmp_type);
             } else {
