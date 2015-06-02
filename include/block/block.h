@@ -606,6 +606,18 @@ void bdrv_lock(BlockDriverState *bs);
  */
 void bdrv_unlock(BlockDriverState *bs);
 
+typedef struct {
+    BlockDriverState *bs;
+    bool locking;
+} BdrvLockEvent;
+
+/**
+ * bdrv_add_lock_unlock_notifier:
+ *
+ * Add a notifier that will get notified when bs is locked or unlocked, with a
+ * BdrvLockEvent data.
+ */
+void bdrv_add_lock_unlock_notifier(BlockDriverState *bs, Notifier *notifier);
 BlockAcctStats *bdrv_get_stats(BlockDriverState *bs);
 
 #endif

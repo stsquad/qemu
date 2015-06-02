@@ -435,6 +435,7 @@ struct BlockDriverState {
     NotifierWithReturn write_threshold_notifier;
 
     int lock_level;
+    NotifierList lock_notifiers;
 };
 
 

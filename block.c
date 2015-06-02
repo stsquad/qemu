@@ -1853,6 +1853,7 @@ static void bdrv_move_feature_fields(BlockDriverState *bs_dest,
 
     /* lock */
     bs_dest->lock_level = bs_src->lock_level;
+    bs_dest->lock_notifiers = bs_src->lock_notifiers;
 
     memcpy(bs_dest->op_blockers, bs_src->op_blockers,
            sizeof(bs_dest->op_blockers));
