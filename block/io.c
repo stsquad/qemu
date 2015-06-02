@@ -2602,8 +2602,20 @@ void bdrv_flush_io_queue(BlockDriverState *bs)
     }
 }
 
+static void bdrv_lock_notify(BlockDriverState *bs, bool locking)
+{
+    BdrvLockEvent event = (BdrvLockEvent) {
+        .bs = bs,
+        .locking = locking,
+    };
+    notifier_list_notify(&bs->lock_notifiers, &event);
+}
+
 void bdrv_lock(BlockDriverState *bs)
 {
+    if (bs->lock_level == 0) {
+        bdrv_lock_notify(bs, true);
+    }
     bs->lock_level++;
     bdrv_drain(bs);
 }
@@ -2612,4 +2624,11 @@ void bdrv_unlock(BlockDriverState *bs)
 {
     bs->lock_level--;
     assert(bs->lock_level >= 0);
+    if (bs->lock_level == 0) {
+        bdrv_lock_notify(bs, false);
+    }
+}
+void bdrv_add_lock_unlock_notifier(BlockDriverState *bs, Notifier *notifier)
+{
+    notifier_list_add(&bs->lock_notifiers, notifier);
 }
