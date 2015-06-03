@@ -3851,6 +3851,11 @@ int main(int argc, char **argv, char **envp)
      */
     if (log_mask) {
         int mask;
+        char fmt_time[512];
+        time_t start_time = time(NULL);
+        struct tm *local_start = localtime(&start_time);
+
+
         if (log_file) {
             qemu_set_log_filename(log_file);
         }
@@ -3861,6 +3866,15 @@ int main(int argc, char **argv, char **envp)
             exit(1);
         }
         qemu_set_log(mask);
+
+        if (strftime(fmt_time, sizeof(fmt_time), "%c", local_start) > 0) {
+            qemu_log("System Emulation started at %s\n", fmt_time);
+            qemu_log("Invocation:");
+            for (i = 0; i < argc; i++) {
+                qemu_log("%s ", argv[i]);
+            }
+            qemu_log("\n");
+        }
     }
 
     if (!is_daemonized()) {
