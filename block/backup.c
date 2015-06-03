@@ -20,6 +20,7 @@
 #include "block/block_int.h"
 #include "block/blockjob.h"
 #include "qemu/ratelimit.h"
+#include "sysemu/block-backend.h"
 
 #define BACKUP_CLUSTER_BITS 16
 #define BACKUP_CLUSTER_SIZE (1 << BACKUP_CLUSTER_BITS)
@@ -207,7 +208,9 @@ static void backup_iostatus_reset(BlockJob *job)
 {
     BackupBlockJob *s = container_of(job, BackupBlockJob, common);
 
-    bdrv_iostatus_reset(s->target);
+    if (s->target->blk) {
+        blk_iostatus_reset(s->target->blk);
+    }
 }
 
 static const BlockJobDriver backup_job_driver = {
@@ -351,8 +354,10 @@ static void coroutine_fn backup_run(void *opaque)
     job->bitmap = hbitmap_alloc(end, 0);
 
     bdrv_set_enable_write_cache(target, true);
-    bdrv_set_on_error(target, on_target_error, on_target_error);
-    bdrv_iostatus_enable(target);
+    if (target->blk) {
+        blk_set_on_error(target->blk, on_target_error, on_target_error);
+        blk_iostatus_enable(target->blk);
+    }
 
     bdrv_add_before_write_notifier(bs, &before_write);
 
@@ -442,7 +447,9 @@ static void coroutine_fn backup_run(void *opaque)
     }
     hbitmap_free(job->bitmap);
 
-    bdrv_iostatus_disable(target);
+    if (target->blk) {
+        blk_iostatus_disable(target->blk);
+    }
     bdrv_op_unblock_all(target, job->common.blocker);
 
     data = g_malloc(sizeof(*data));
@@ -471,7 +478,7 @@ void backup_start(BlockDriverState *bs, BlockDriverState *target,
 
     if ((on_source_error == BLOCKDEV_ON_ERROR_STOP ||
          on_source_error == BLOCKDEV_ON_ERROR_ENOSPC) &&
-        !bdrv_iostatus_is_enabled(bs)) {
+        (!bs->blk || !blk_iostatus_is_enabled(bs->blk))) {
         error_set(errp, QERR_INVALID_PARAMETER, "on-source-error");
         return;
     }
