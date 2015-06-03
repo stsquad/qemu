@@ -53,6 +53,7 @@ typedef struct DisasContext {
      * ie A64 LDX*, LDAX*, A32/T32 LDREX*, LDAEX*.
      */
     bool is_ldex;
+    bool is_stex;
     /* True if a single-step exception will be taken to the current EL */
     bool ss_same_el;
     /* Bottom two bits of XScale c15_cpar coprocessor access control reg */
