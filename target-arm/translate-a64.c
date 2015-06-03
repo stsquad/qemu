@@ -589,6 +589,7 @@ static void gen_add_CC(int sf, TCGv_i64 dest, TCGv_i64 t0, TCGv_i64 t1)
 /* dest = T0 - T1; compute C, N, V and Z flags */
 static void gen_sub_CC(int sf, TCGv_i64 dest, TCGv_i64 t0, TCGv_i64 t1)
 {
+    qsim_set_inst_type(QSIM_INST_ICMP);
     if (sf) {
         /* 64 bit arithmetic */
         TCGv_i64 result, flag, tmp;
@@ -1642,6 +1643,7 @@ static void disas_b_exc_sys(DisasContext *s, uint32_t insn)
         disas_cond_b_imm(s, insn);
         break;
     case 0x6a: /* Exception generation / System */
+        qsim_set_inst_type(QSIM_INST_IMEM);
         if (insn & (1 << 24)) {
             disas_system(s, insn);
         } else {
@@ -3231,6 +3233,7 @@ static void disas_logic_reg(DisasContext *s, uint32_t insn)
         /* Unshifted ORR and ORN with WZR/XZR is the standard encoding for
          * register-register MOV and MVN, so it is worth special casing.
          */
+        qsim_set_inst_type(QSIM_INST_LOGIC);
         tcg_rm = cpu_reg(s, rm);
         if (invert) {
             tcg_gen_not_i64(tcg_rd, tcg_rm);
@@ -10948,7 +10951,6 @@ static void disas_a64_insn(CPUARMState *env, DisasContext *s)
         tmp_insn = tcg_const_i64(s->pc);
         tmp_size = tcg_const_i32(4);
         tmp_type = tcg_const_i32(0xdeadbeef);
-        gen_a64_set_pc_im(s->pc);
         gen_helper_inst_callback(cpu_env, tmp_insn, tmp_size, tmp_type);
         tcg_temp_free_i64(tmp_insn);
         tcg_temp_free_i32(tmp_size);

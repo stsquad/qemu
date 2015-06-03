@@ -26,12 +26,6 @@
 #include "exec/ram_addr.h"
 #include "sysemu/sysemu.h"
 
-#include "qsim-vm.h"
-
-extern int 	qsim_qemu_is_slave;
-extern qemu_ramdesc_t	*qsim_ram;
-extern qsim_lockstruct  *qsim_ram_l;
-
 //#define DEBUG_UNASSIGNED
 
 static unsigned memory_region_transaction_depth;
@@ -1156,16 +1150,6 @@ void memory_region_init_ram(MemoryRegion *mr,
     mr->terminates = true;
     mr->destructor = memory_region_destructor_ram;
     mr->ram_addr = qemu_ram_alloc(size, mr, errp);
-
-    if (qsim_ram == NULL) {
-        qsim_ram = g_malloc0(sizeof(qemu_ramdesc_t));
-        qsim_ram->l = g_malloc0(sizeof(qsim_lockstruct));
-
-        qsim_lock_init(qsim_ram->l);
-
-        qsim_ram->sz = size;
-        qsim_ram->mem_ptr = memory_region_get_ram_ptr(mr);
-    }
 }
 
 #ifdef __linux__
