@@ -2997,10 +2997,9 @@ bool bdrv_is_inserted(BlockDriverState *bs)
     if (!drv) {
         return false;
     }
-    if (!drv->bdrv_is_inserted) {
-        return true;
-    }
-    return drv->bdrv_is_inserted(bs);
+    return (!drv->bdrv_is_inserted || drv->bdrv_is_inserted(bs)) &&
+           (!bs->file              || bdrv_is_inserted(bs->file)) &&
+           (!bs->backing_hd        || bdrv_is_inserted(bs->backing_hd));
 }
 
 /**
