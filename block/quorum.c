@@ -1061,6 +1061,20 @@ static void quorum_refresh_filename(BlockDriverState *bs)
     bs->full_open_options = opts;
 }
 
+static bool quorum_is_inserted(BlockDriverState *bs)
+{
+    BDRVQuorumState *s = bs->opaque;
+    int i;
+
+    for (i = 0; i < s->num_children; i++) {
+        if (!bdrv_is_inserted(s->bs[i])) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 static BlockDriver bdrv_quorum = {
     .format_name                        = "quorum",
     .protocol_name                      = "quorum",
@@ -1084,6 +1098,8 @@ static BlockDriver bdrv_quorum = {
 
     .is_filter                          = true,
     .bdrv_recurse_is_first_non_filter   = quorum_recurse_is_first_non_filter,
+
+    .bdrv_is_inserted                   = quorum_is_inserted,
 };
 
 static void bdrv_quorum_init(void)
