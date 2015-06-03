@@ -155,17 +155,6 @@ Testing: -drive file=TEST_DIR/t.qcow2,format=qcow2,if=none,id=disk -device virti
     },
     "event": "SHUTDOWN"
 }
-{
-    "timestamp": {
-        "seconds":  TIMESTAMP,
-        "microseconds":  TIMESTAMP
-    },
-    "event": "DEVICE_TRAY_MOVED",
-    "data": {
-        "device": "ide1-cd0",
-        "tray-open": true
-    }
-}
 
 
 === -drive/device_add and device_del ===
@@ -325,17 +314,6 @@ Testing: -drive file=TEST_DIR/t.qcow2,format=qcow2,if=none,id=disk
         "microseconds":  TIMESTAMP
     },
     "event": "SHUTDOWN"
-}
-{
-    "timestamp": {
-        "seconds":  TIMESTAMP,
-        "microseconds":  TIMESTAMP
-    },
-    "event": "DEVICE_TRAY_MOVED",
-    "data": {
-        "device": "ide1-cd0",
-        "tray-open": true
-    }
 }
 
 
@@ -499,17 +477,6 @@ Testing:
         "microseconds":  TIMESTAMP
     },
     "event": "SHUTDOWN"
-}
-{
-    "timestamp": {
-        "seconds":  TIMESTAMP,
-        "microseconds":  TIMESTAMP
-    },
-    "event": "DEVICE_TRAY_MOVED",
-    "data": {
-        "device": "ide1-cd0",
-        "tray-open": true
-    }
 }
 
 
@@ -720,17 +687,6 @@ Testing:
         "microseconds":  TIMESTAMP
     },
     "event": "SHUTDOWN"
-}
-{
-    "timestamp": {
-        "seconds":  TIMESTAMP,
-        "microseconds":  TIMESTAMP
-    },
-    "event": "DEVICE_TRAY_MOVED",
-    "data": {
-        "device": "ide1-cd0",
-        "tray-open": true
-    }
 }
 
 *** done
