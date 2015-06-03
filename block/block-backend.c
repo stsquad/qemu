@@ -37,6 +37,10 @@ struct BlockBackend {
     /* the block size for which the guest device expects atomicity */
     int guest_block_size;
 
+    /* If the BDS tree is removed, some of its options are stored here (which
+     * can be used to restore those options in the new BDS on insert) */
+    BlockBackendRootState root_state;
+
     /* I/O stats (display with "info blockstats"). */
     BlockAcctStats stats;
 
@@ -1044,4 +1048,26 @@ int blk_probe_blocksizes(BlockBackend *blk, BlockSizes *bsz)
 int blk_probe_geometry(BlockBackend *blk, HDGeometry *geo)
 {
     return bdrv_probe_geometry(blk->bs, geo);
+}
+
+/*
+ * Updates the BlockBackendRootState object with data from the currently
+ * attached BlockDriverState.
+ */
+void blk_update_root_state(BlockBackend *blk)
+{
+    assert(blk->bs);
+
+    blk->root_state.open_flags    = blk->bs->open_flags;
+    blk->root_state.read_only     = blk->bs->read_only;
+    blk->root_state.detect_zeroes = blk->bs->detect_zeroes;
+
+    blk->root_state.io_limits_enabled = blk->bs->io_limits_enabled;
+    throttle_get_config(&blk->bs->throttle_state,
+                        &blk->root_state.throttle_config);
+}
+
+BlockBackendRootState *blk_get_root_state(BlockBackend *blk)
+{
+    return &blk->root_state;
 }
