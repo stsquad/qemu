@@ -2106,6 +2106,31 @@ void qmp_blockdev_close_tray(const char *device, Error **errp)
     blk_dev_change_media_cb(blk, true);
 }
 
+void qmp_blockdev_remove_medium(const char *device, Error **errp)
+{
+    BlockBackend *blk;
+
+    blk = blk_by_name(device);
+    if (!blk) {
+        error_set(errp, QERR_DEVICE_NOT_FOUND, device);
+        return;
+    }
+
+    if (!blk_dev_has_removable_media(blk)) {
+        error_setg(errp, "Device '%s' is not removable", device);
+        return;
+    }
+
+    if (!blk_dev_is_tray_open(blk)) {
+        error_setg(errp, "Tray of device '%s' is not open", device);
+        return;
+    }
+
+    if (blk_bs(blk)) {
+        blk_remove_bs(blk);
+    }
+}
+
 /* throttling disk I/O limits */
 void qmp_block_set_io_throttle(const char *device, int64_t bps, int64_t bps_rd,
                                int64_t bps_wr,
