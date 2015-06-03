@@ -312,6 +312,22 @@ void blk_hide_on_behalf_of_hmp_drive_del(BlockBackend *blk)
 }
 
 /*
+ * Associates a new BlockDriverState with @blk.
+ */
+void blk_insert_bs(BlockBackend *blk, BlockDriverState *bs)
+{
+    if (bs->blk == blk) {
+        return;
+    }
+
+    assert(!blk->bs);
+    assert(!bs->blk);
+    bdrv_ref(bs);
+    blk->bs = bs;
+    bs->blk = blk;
+}
+
+/*
  * Attach device model @dev to @blk.
  * Return 0 on success, -EBUSY when a device model is attached already.
  */
