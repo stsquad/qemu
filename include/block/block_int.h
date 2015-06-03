@@ -383,9 +383,6 @@ struct BlockDriverState {
     CoQueue      throttled_reqs[2];
     bool         io_limits_enabled;
 
-    /* I/O stats (display with "info blockstats"). */
-    BlockAcctStats stats;
-
     /* Offset after the highest byte written to */
     uint64_t wr_highest_offset;
 
