@@ -312,6 +312,22 @@ void blk_hide_on_behalf_of_hmp_drive_del(BlockBackend *blk)
 }
 
 /*
+ * Disassociates the currently associated BlockDriverState from @blk.
+ */
+void blk_remove_bs(BlockBackend *blk)
+{
+    if (!blk->bs) {
+        return;
+    }
+
+    blk_update_root_state(blk);
+
+    bdrv_unref(blk->bs);
+    blk->bs->blk = NULL;
+    blk->bs = NULL;
+}
+
+/*
  * Associates a new BlockDriverState with @blk.
  */
 void blk_insert_bs(BlockBackend *blk, BlockDriverState *bs)
@@ -321,9 +337,13 @@ void blk_insert_bs(BlockBackend *blk, BlockDriverState *bs)
     }
 
     assert(!blk->bs);
-    assert(!bs->blk);
     bdrv_ref(bs);
     blk->bs = bs;
+
+    if (bs->blk) {
+        blk_remove_bs(bs->blk);
+    }
+
     bs->blk = blk;
 }
 
