@@ -1724,6 +1724,10 @@ void bdrv_close(BlockDriverState *bs)
     bdrv_drain_all(); /* in case flush left pending I/O */
     notifier_list_notify(&bs->close_notifiers, bs);
 
+    if (bs->blk) {
+        blk_dev_change_media_cb(bs->blk, false);
+    }
+
     if (bs->drv) {
         if (bs->backing_hd) {
             BlockDriverState *backing_hd = bs->backing_hd;
@@ -1751,10 +1755,6 @@ void bdrv_close(BlockDriverState *bs)
             bdrv_unref(bs->file);
             bs->file = NULL;
         }
-    }
-
-    if (bs->blk) {
-        blk_dev_change_media_cb(bs->blk, false);
     }
 
     /*throttling disk I/O limits*/
