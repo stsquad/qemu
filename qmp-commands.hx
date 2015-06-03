@@ -4086,7 +4086,7 @@ EQMP
 
     {
         .name       = "blockdev-change-medium",
-        .args_type  = "device:B,filename:F,format:s?",
+        .args_type  = "device:B,filename:F,format:s?,read-only-mode:s?",
         .mhandler.cmd_new = qmp_marshal_input_blockdev_change_medium,
     },
 
@@ -4102,6 +4102,8 @@ Arguments:
 - "device": device name (json-string)
 - "filename": filename of the new image (json-string)
 - "format": format of the new image (json-string, optional)
+- "read-only-mode": new read-only mode (json-string, optional)
+          - Possible values: "retain" (default), "read-only", "read-write"
 
 Examples:
 
@@ -4111,6 +4113,26 @@ Examples:
              "arguments": { "device": "ide1-cd0",
                             "filename": "/srv/images/Fedora-12-x86_64-DVD.iso",
                             "format": "raw" } }
+<- { "return": {} }
+
+2. Load a read-only medium into a writable drive
+
+-> { "execute": "blockdev-change-medium",
+             "arguments": { "device": "isa-fd0",
+                            "filename": "/srv/images/ro.img",
+                            "format": "raw",
+                            "read-only-mode": "retain" } }
+
+<- { "error":
+     { "class": "GenericError",
+       "desc": "Could not open '/srv/images/ro.img': Permission denied" } }
+
+-> { "execute": "blockdev-change-medium",
+             "arguments": { "device": "isa-fd0",
+                            "filename": "/srv/images/ro.img",
+                            "format": "raw",
+                            "read-only-mode": "read-only" } }
+
 <- { "return": {} }
 
 EQMP
