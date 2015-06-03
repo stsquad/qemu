@@ -1891,41 +1891,6 @@ exit:
     }
 }
 
-
-static void eject_device(BlockBackend *blk, int force, Error **errp)
-{
-    BlockDriverState *bs = blk_bs(blk);
-    AioContext *aio_context;
-
-    aio_context = blk_get_aio_context(blk);
-    aio_context_acquire(aio_context);
-
-    if (bs && bdrv_op_is_blocked(bs, BLOCK_OP_TYPE_EJECT, errp)) {
-        goto out;
-    }
-    if (!blk_dev_has_removable_media(blk)) {
-        error_setg(errp, "Device '%s' is not removable",
-                   bdrv_get_device_name(bs));
-        goto out;
-    }
-
-    if (blk_dev_is_medium_locked(blk) && !blk_dev_is_tray_open(blk)) {
-        blk_dev_eject_request(blk, force);
-        if (!force) {
-            error_setg(errp, "Device '%s' is locked",
-                       bdrv_get_device_name(bs));
-            goto out;
-        }
-    }
-
-    if (bs) {
-        bdrv_close(bs);
-    }
-
-out:
-    aio_context_release(aio_context);
-}
-
 void qmp_eject(const char *device, bool has_force, bool force, Error **errp)
 {
     Error *local_err = NULL;
@@ -1960,79 +1925,6 @@ void qmp_block_passwd(bool has_device, const char *device,
 
     bdrv_add_key(bs, password, errp);
 
-    aio_context_release(aio_context);
-}
-
-/* Assumes AioContext is held */
-static void qmp_bdrv_open_encrypted(BlockDriverState **pbs,
-                                    const char *filename,
-                                    int bdrv_flags, BlockDriver *drv,
-                                    const char *password, Error **errp)
-{
-    BlockDriverState *bs;
-    Error *local_err = NULL;
-    int ret;
-
-    ret = bdrv_open(pbs, filename, NULL, NULL, bdrv_flags, drv, &local_err);
-    if (ret < 0) {
-        error_propagate(errp, local_err);
-        return;
-    }
-    bs = *pbs;
-
-    bdrv_add_key(bs, password, errp);
-}
-
-void qmp_change_blockdev(const char *device, const char *filename,
-                         const char *format, Error **errp)
-{
-    BlockBackend *blk;
-    BlockDriverState *bs;
-    AioContext *aio_context;
-    BlockDriver *drv = NULL;
-    int bdrv_flags;
-    bool new_bs;
-    Error *err = NULL;
-
-    blk = blk_by_name(device);
-    if (!blk) {
-        error_set(errp, QERR_DEVICE_NOT_FOUND, device);
-        return;
-    }
-    bs = blk_bs(blk);
-    new_bs = !bs;
-
-    aio_context = blk_get_aio_context(blk);
-    aio_context_acquire(aio_context);
-
-    if (format) {
-        drv = bdrv_find_whitelisted_format(format, blk_is_read_only(blk));
-        if (!drv) {
-            error_set(errp, QERR_INVALID_BLOCK_FORMAT, format);
-            goto out;
-        }
-    }
-
-    eject_device(blk, 0, &err);
-    if (err) {
-        error_propagate(errp, err);
-        goto out;
-    }
-
-    bdrv_flags = blk_is_read_only(blk) ? 0 : BDRV_O_RDWR;
-    bdrv_flags |= blk_get_root_state(blk)->open_flags & ~BDRV_O_RDWR;
-
-    qmp_bdrv_open_encrypted(&bs, filename, bdrv_flags, drv, NULL, &err);
-    if (err) {
-        error_propagate(errp, err);
-    } else if (new_bs) {
-        blk_insert_bs(blk, bs);
-        /* Has been sent automatically by bdrv_open() if blk_bs(blk) was not
-         * NULL */
-        blk_dev_change_media_cb(blk, true);
-    }
-
-out:
     aio_context_release(aio_context);
 }
 
@@ -2172,6 +2064,83 @@ void qmp_blockdev_insert_medium(const char *device, const char *node_name,
     }
 
     qmp_blockdev_insert_anon_medium(device, bs, errp);
+}
+
+void qmp_change_blockdev(const char *device, const char *filename,
+                         const char *format, Error **errp)
+{
+    BlockBackend *blk;
+    BlockBackendRootState *blk_rs;
+    BlockDriverState *medium_bs = NULL;
+    BlockDriver *drv = NULL;
+    int bdrv_flags, ret;
+    Error *err = NULL;
+
+    blk = blk_by_name(device);
+    if (!blk) {
+        error_set(errp, QERR_DEVICE_NOT_FOUND, device);
+        goto fail;
+    }
+
+    if (blk_bs(blk)) {
+        blk_update_root_state(blk);
+    }
+
+    blk_rs = blk_get_root_state(blk);
+    bdrv_flags = blk_rs->read_only ? 0 : BDRV_O_RDWR;
+    bdrv_flags |= blk_rs->open_flags & ~BDRV_O_RDWR;
+
+    if (format) {
+        drv = bdrv_find_whitelisted_format(format, bdrv_flags & BDRV_O_RDWR);
+        if (!drv) {
+            error_setg(errp, "Invalid block format '%s'", format);
+            goto fail;
+        }
+    }
+
+    assert(!medium_bs);
+    ret = bdrv_open(&medium_bs, filename, NULL, NULL, bdrv_flags, drv, errp);
+    if (ret < 0) {
+        goto fail;
+    }
+
+    medium_bs->detect_zeroes = blk_rs->detect_zeroes;
+    if (blk_rs->io_limits_enabled) {
+        bdrv_io_limits_enable(medium_bs);
+        bdrv_set_io_limits(medium_bs, &blk_rs->throttle_config);
+    }
+
+    bdrv_add_key(medium_bs, NULL, &err);
+    if (err) {
+        error_propagate(errp, err);
+        goto fail;
+    }
+
+    qmp_blockdev_open_tray(device, false, false, &err);
+    if (err) {
+        error_propagate(errp, err);
+        goto fail;
+    }
+
+    qmp_blockdev_remove_medium(device, &err);
+    if (err) {
+        error_propagate(errp, err);
+        goto fail;
+    }
+
+    qmp_blockdev_insert_anon_medium(device, medium_bs, &err);
+    if (err) {
+        error_propagate(errp, err);
+        goto fail;
+    }
+
+    qmp_blockdev_close_tray(device, errp);
+
+fail:
+    /* If the medium has been inserted, the device has its own reference, so
+     * ours must be relinquished; and if it has not been inserted successfully,
+     * the reference must be relinquished anyway */
+    bdrv_unref(medium_bs);
 }
 
 /* throttling disk I/O limits */
