@@ -1836,6 +1836,29 @@
 ##
 { 'command': 'blockdev-add', 'data': { 'options': 'BlockdevOptions' } }
 
+##
+# @blockdev-open-tray:
+#
+# Opens a block device's tray. If there is a block driver state tree inserted as
+# a medium, it will become inaccessible to the guest (but it will remain
+# associated to the block device, so closing the tray will make it accessible
+# again).
+#
+# If the tray was already open before, this will be a no-op.
+#
+# @device: block device name
+#
+# @force:  #optional if false (the default), an eject request will be sent to
+#          the guest if it has locked the tray (and the tray will not be opened
+#          immediately); if true, the tray will be opened regardless of whether
+#          it is locked
+#
+# Since: 2.3
+##
+{ 'command': 'blockdev-open-tray',
+  'data': { 'device': 'str',
+            '*force': 'bool' } }
+
 
 ##
 # @BlockErrorAction

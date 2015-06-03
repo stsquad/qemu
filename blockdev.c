@@ -2036,6 +2036,54 @@ out:
     aio_context_release(aio_context);
 }
 
+void qmp_blockdev_open_tray(const char *device, bool has_force, bool force,
+                            Error **errp)
+{
+    BlockBackend *blk;
+    BlockDriverState *bs;
+    AioContext *aio_context = NULL;
+
+    if (!has_force) {
+        force = false;
+    }
+
+    blk = blk_by_name(device);
+    if (!blk) {
+        error_set(errp, QERR_DEVICE_NOT_FOUND, device);
+        return;
+    }
+
+    if (!blk_dev_has_removable_media(blk)) {
+        error_setg(errp, "Device '%s' is not removable", device);
+        return;
+    }
+
+    if (blk_dev_is_tray_open(blk)) {
+        return;
+    }
+
+    bs = blk_bs(blk);
+    if (bs) {
+        aio_context = bdrv_get_aio_context(bs);
+        aio_context_acquire(aio_context);
+
+        if (bdrv_op_is_blocked(bs, BLOCK_OP_TYPE_EJECT, errp)) {
+            goto out;
+        }
+    }
+
+    if (blk_dev_is_medium_locked(blk)) {
+        blk_dev_eject_request(blk, force);
+    } else {
+        blk_dev_change_media_cb(blk, false);
+    }
+
+out:
+    if (aio_context) {
+        aio_context_release(aio_context);
+    }
+}
+
 /* throttling disk I/O limits */
 void qmp_block_set_io_throttle(const char *device, int64_t bps, int64_t bps_rd,
                                int64_t bps_wr,
