@@ -1228,12 +1228,15 @@ static void handle_sync(DisasContext *s, uint32_t insn,
 
     switch (op2) {
     case 2: /* CLREX */
+/*         fprintf(stderr,"%s: clrex @ 0x%08lx\n", __func__, s->pc - 4); */
         gen_clrex(s, insn);
         return;
     case 4: /* DSB */
     case 5: /* DMB */
     case 6: /* ISB */
         /* We don't emulate caches so barriers are no-ops */
+/*         fprintf(stderr,"%s: type %d @ 0x%08lx (seen exl ld(%d) st(%d))\n", */
+/*                 __func__, op2, s->pc - 4, s->is_ldex, s->is_stex); */
         return;
     default:
         unallocated_encoding(s);
@@ -1770,7 +1773,7 @@ static void gen_store_exclusive(DisasContext *s, int rd, int rt, int rt2,
 }
 #endif
 
-/* C3.3.6 Load/store exclusive
+/* C4.3.6 Load/store exclusive
  *
  *  31 30 29         24  23  22   21  20  16  15  14   10 9    5 4    0
  * +-----+-------------+----+---+----+------+----+-------+------+------+
@@ -1812,13 +1815,20 @@ static void disas_ldst_excl(DisasContext *s, uint32_t insn)
 
     /* Note that since TCG is single threaded load-acquire/store-release
      * semantics require no extra if (is_lasr) { ... } handling.
+     *
+     * TODO: we would need an explicit dmb after the load or before
+     * the store to ensure the ordering constraints are met.
      */
+/*     if (is_lasr && !is_excl) */
+/*         fprintf(stderr,"%s: is_lasr %s at 0x%08lx\n", */
+/*                 __func__, is_store?"write":"read", s->pc - 4); */
 
     if (is_excl) {
         if (!is_store) {
             s->is_ldex = true;
             gen_load_exclusive(s, rt, rt2, tcg_addr, size, is_pair);
         } else {
+            s->is_stex = true;
             gen_store_exclusive(s, rs, rt, rt2, tcg_addr, size, is_pair);
         }
     } else {
@@ -10978,6 +10988,7 @@ void gen_intermediate_code_internal_a64(ARMCPU *cpu,
     dc->ss_active = ARM_TBFLAG_SS_ACTIVE(tb->flags);
     dc->pstate_ss = ARM_TBFLAG_PSTATE_SS(tb->flags);
     dc->is_ldex = false;
+    dc->is_stex = false;
     dc->ss_same_el = (arm_debug_target_el(env) == dc->current_el);
 
     init_tmp_a64_array(dc);
