@@ -31,6 +31,26 @@
 #include "sysemu/kvm.h"
 #include "kvm_arm.h"
 
+/* Protect cpu_exclusive_* variable .*/
+__thread bool cpu_have_exclusive_lock;
+QemuMutex cpu_exclusive_lock;
+
+inline void arm_exclusive_lock(void)
+{
+    if (!cpu_have_exclusive_lock) {
+        qemu_mutex_lock(&cpu_exclusive_lock);
+        cpu_have_exclusive_lock = true;
+    }
+}
+
+inline void arm_exclusive_unlock(void)
+{
+    if (cpu_have_exclusive_lock) {
+        cpu_have_exclusive_lock = false;
+        qemu_mutex_unlock(&cpu_exclusive_lock);
+    }
+}
+
 static void arm_cpu_set_pc(CPUState *cs, vaddr value)
 {
     ARMCPU *cpu = ARM_CPU(cs);
@@ -425,6 +445,7 @@ static void arm_cpu_initfn(Object *obj)
         cpu->psci_version = 2; /* TCG implements PSCI 0.2 */
         if (!inited) {
             inited = true;
+            qemu_mutex_init(&cpu_exclusive_lock);
             arm_translate_init();
         }
     }
