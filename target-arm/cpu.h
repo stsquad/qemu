@@ -515,6 +515,9 @@ static inline bool is_a64(CPUARMState *env)
 int cpu_arm_signal_handler(int host_signum, void *pinfo,
                            void *puc);
 
+bool arm_get_phys_addr(CPUARMState *env, target_ulong address, int access_type,
+                       hwaddr *phys_ptr, int *prot, target_ulong *page_size);
+
 /**
  * pmccntr_sync
  * @env: CPUARMState
@@ -1932,5 +1935,8 @@ enum {
     QEMU_PSCI_CONDUIT_SMC = 1,
     QEMU_PSCI_CONDUIT_HVC = 2,
 };
+
+void arm_exclusive_lock(void);
+void arm_exclusive_unlock(void);
 
 #endif
