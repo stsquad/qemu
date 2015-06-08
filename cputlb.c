@@ -70,11 +70,11 @@ int tlb_flush_count;
  * entries from the TLB at any time, so flushing more entries than
  * required is only an efficiency issue, not a correctness issue.
  */
-void tlb_flush(CPUState *cpu, int flush_global)
+void __tlb_flush(CPUState *cpu, int flush_global, const char *from_func)
 {
     CPUArchState *env = cpu->env_ptr;
 
-    tlb_debug("(%d)\n", flush_global);
+    tlb_debug("%d from %s\n", flush_global, from_func);
 
     /* must reset current TB so that interrupts cannot modify the
        links while we are modifying them */
