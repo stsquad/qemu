@@ -99,7 +99,8 @@ void tcg_cpu_address_space_init(CPUState *cpu, AddressSpace *as);
 void tlb_flush_page_all(target_ulong addr);
 void tlb_flush_page(CPUState *cpu, target_ulong addr);
 void tlb_flush_all(int flush_global);
-void tlb_flush(CPUState *cpu, int flush_global);
+void __tlb_flush(CPUState *cpu, int flush_global, const char *from);
+#define tlb_flush(cpu, global) __tlb_flush(cpu, global, __func__)
 void tlb_set_page(CPUState *cpu, target_ulong vaddr,
                   hwaddr paddr, int prot,
                   int mmu_idx, target_ulong size);
