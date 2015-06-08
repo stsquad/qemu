@@ -180,7 +180,7 @@ normal use.
 
 @itemize
 
-@item Full ARM 7 user emulation.
+@item Full ARM v7 and v8 user emulation.
 
 @item NWFPE FPU support included in user Linux emulation.
 
