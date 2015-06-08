@@ -74,7 +74,8 @@ void __tlb_flush(CPUState *cpu, int flush_global, const char *from_func)
 {
     CPUArchState *env = cpu->env_ptr;
 
-    tlb_debug("%d from %s\n", flush_global, from_func);
+    tlb_debug("n:%d, global:%d from %s (vltb_index was "TARGET_FMT_ld")\n",
+              tlb_flush_count, flush_global, from_func, env->vtlb_index);
 
     /* must reset current TB so that interrupts cannot modify the
        links while we are modifying them */
@@ -244,6 +245,8 @@ static void tlb_add_large_page(CPUArchState *env, target_ulong vaddr,
                                target_ulong size)
 {
     target_ulong mask = ~(size - 1);
+
+    tlb_debug(TARGET_FMT_lx":"TARGET_FMT_lx"\n", vaddr, size);
 
     if (env->tlb_flush_addr == (target_ulong)-1) {
         env->tlb_flush_addr = vaddr & mask;
