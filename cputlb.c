@@ -134,11 +134,12 @@ void tlb_global_flush_page(target_ulong addr)
  * entries from the TLB at any time, so flushing more entries than
  * required is only an efficiency issue, not a correctness issue.
  */
-void tlb_flush(CPUState *cpu, int flush_global)
+void __tlb_flush(CPUState *cpu, int flush_global, const char *from_func)
 {
     CPUArchState *env = cpu->env_ptr;
 
-    tlb_debug("(%d)\n", flush_global);
+    tlb_debug("n:%d, global:%d from %s (vltb_index was "TARGET_FMT_ld")\n",
+              tlb_flush_count, flush_global, from_func, env->vtlb_index);
 
     /* must reset current TB so that interrupts cannot modify the
        links while we are modifying them */
@@ -156,6 +157,8 @@ void tlb_flush(CPUState *cpu, int flush_global)
 
 static inline void tlb_flush_entry(CPUTLBEntry *tlb_entry, target_ulong addr)
 {
+    tlb_debug(TARGET_FMT_lx"\n", addr);
+
     if (addr == (tlb_entry->addr_read &
                  (TARGET_PAGE_MASK | TLB_INVALID_MASK)) ||
         addr == (tlb_entry->addr_write &
@@ -315,6 +318,8 @@ static void tlb_add_large_page(CPUArchState *env, target_ulong vaddr,
                                target_ulong size)
 {
     target_ulong mask = ~(size - 1);
+
+    tlb_debug(TARGET_FMT_lx":"TARGET_FMT_lx"\n", vaddr, size);
 
     if (env->tlb_flush_addr == (target_ulong)-1) {
         env->tlb_flush_addr = vaddr & mask;
