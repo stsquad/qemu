@@ -2024,7 +2024,6 @@ static uint64_t aa64_dczid_read(CPUARMState *env, const ARMCPRegInfo *ri)
     int dzp_bit = 1 << 4;
     static uint64_t last_qsim_icount;
     static int num_consecutive_dczid_reads;
-    static bool cbgen_enabled = false;
 
     int diff = last_qsim_icount - qsim_icount;
 
@@ -2034,14 +2033,9 @@ static uint64_t aa64_dczid_read(CPUARMState *env, const ARMCPRegInfo *ri)
 
       // found the pattern of 5 consecutive dczid reads
       if (num_consecutive_dczid_reads == 4) {
-        cbgen_enabled = !cbgen_enabled;
-        qsim_gen_callbacks = cbgen_enabled;
+        qsim_gen_callbacks = !qsim_gen_callbacks;
 
-        // flush and invalidate generated TBs
-        tb_flush(env);
-        tcg_ctx.tb_ctx.tb_invalidated_flag = 1;
-
-        printf("%s callback generation...\n", (cbgen_enabled ? "Enabling" : "Disabling"));
+        printf("%s callback generation...\n", (qsim_gen_callbacks ? "Enabling" : "Disabling"));
 
         // enable magic callback at next instruction callback
         call_magic_cb = true;
@@ -2053,8 +2047,10 @@ static uint64_t aa64_dczid_read(CPUARMState *env, const ARMCPRegInfo *ri)
          * instruction since a TB will end only after the branch cbz.
          */
         if (qsim_magic_cb) {
-            if (cbgen_enabled)  // start
+            if (qsim_gen_callbacks)  { // start
+                tb_flush(env);
                 qsim_magic_cb(0, 0xaaaaaaaa);
+            }
         }
 
         num_consecutive_dczid_reads = 0;
