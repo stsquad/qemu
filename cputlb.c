@@ -56,7 +56,6 @@ static bool tlb_all_other_cpu_have_flushed(void)
 
 void tlb_global_flush(int flush_global)
 {
-    printf("tlb_global_flush!\n");
     CPUState *cpu;
 
     tcg_thread_cpu->flushing = true;
@@ -82,7 +81,6 @@ void tlb_global_flush(int flush_global)
 
 void tlb_global_flush_page(target_ulong addr)
 {
-    printf("tlb_global_flush_page!\n");
     CPUState *cpu;
 
     tcg_thread_cpu->flushing = true;
@@ -119,7 +117,6 @@ void tlb_flush(CPUState *cpu, int flush_global)
     CPUArchState *env = cpu->env_ptr;
 
 
-    printf("tlb_flush: CPU %d\n", cpu->cpu_index);
     /* must reset current TB so that interrupts cannot modify the
        links while we are modifying them */
     cpu->current_tb = NULL;
@@ -151,8 +148,6 @@ void tlb_flush_page(CPUState *cpu, target_ulong addr)
     CPUArchState *env = cpu->env_ptr;
     int i;
     int mmu_idx;
-
-    printf("tlb_flush_page CPU %d: " TARGET_FMT_lx "\n", cpu->cpu_index, addr);
 
     /* XXX: this is a dirty hack to be sure we flush something when we have two
             cpu wanting a tlb_flush and tlb_flush_page. */
