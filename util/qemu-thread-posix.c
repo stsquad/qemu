@@ -66,13 +66,17 @@ void qemu_mutex_destroy(QemuMutex *mutex)
         error_exit(err, __func__);
 }
 
-void qemu_mutex_lock(QemuMutex *mutex)
+void __qemu_mutex_lock(QemuMutex *mutex, const char *func, int line)
 {
     int err;
 
     err = pthread_mutex_lock(&mutex->lock);
-    if (err)
+    if (err) {
         error_exit(err, __func__);
+    } else {
+        mutex->func = func;
+        mutex->line = line;
+    }
 }
 
 int qemu_mutex_trylock(QemuMutex *mutex)

@@ -30,9 +30,7 @@
 #include "exec/ram_addr.h"
 #include "tcg/tcg.h"
 #include "sysemu/cpus.h"
-
-void qemu_mutex_lock_iothread(void);
-void qemu_mutex_unlock_iothread(void);
+#include "qemu/main-loop.h"
 
 /* DEBUG defines, enable DEBUG_TLB_LOG to log to the CPU_LOG_MMU target */
 /* #define DEBUG_TLB */

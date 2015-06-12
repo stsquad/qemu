@@ -1113,9 +1113,11 @@ bool qemu_in_vcpu_thread(void)
     return current_cpu && qemu_cpu_is_self(current_cpu);
 }
 
-void qemu_mutex_lock_iothread(void)
+void __qemu_mutex_lock_iothread(const char *func, int line)
 {
     qemu_mutex_lock(&qemu_global_mutex);
+    qemu_global_mutex.func = func;
+    qemu_global_mutex.line = line;
 }
 
 void qemu_mutex_unlock_iothread(void)

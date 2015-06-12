@@ -5,6 +5,11 @@
 
 struct QemuMutex {
     pthread_mutex_t lock;
+
+#ifdef DEBUG_QEMU_MUTEX
+    const char *func;
+    int line;
+#endif
 };
 
 struct QemuCond {

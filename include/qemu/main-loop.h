@@ -282,7 +282,8 @@ int qemu_add_child_watch(pid_t pid);
  * NOTE: tools currently are single-threaded and qemu_mutex_lock_iothread
  * is a no-op there.
  */
-void qemu_mutex_lock_iothread(void);
+void __qemu_mutex_lock_iothread(const char *func, int line);
+#define qemu_mutex_lock_iothread() __qemu_mutex_lock_iothread(__func__, __LINE__)
 
 /**
  * qemu_mutex_unlock_iothread: Unlock the main loop mutex.
