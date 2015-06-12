@@ -69,6 +69,8 @@
 int64_t max_delay;
 int64_t max_advance;
 
+static __thread int iothread_lock_count;
+
 bool cpu_is_stopped(CPUState *cpu)
 {
     return cpu->stopped || !runstate_is_running();
@@ -928,7 +930,7 @@ static void *qemu_kvm_cpu_thread_fn(void *arg)
     CPUState *cpu = arg;
     int r;
 
-    qemu_mutex_lock(&qemu_global_mutex);
+    qemu_mutex_lock_iothread();
     qemu_thread_get_self(cpu->thread);
     cpu->thread_id = qemu_get_thread_id();
     cpu->can_do_io = 1;
@@ -1115,14 +1117,24 @@ bool qemu_in_vcpu_thread(void)
 
 void __qemu_mutex_lock_iothread(const char *func, int line)
 {
-    qemu_mutex_lock(&qemu_global_mutex);
+    if (iothread_lock_count == 0) {
+        qemu_mutex_lock(&qemu_global_mutex);
+    }
+    iothread_lock_count++;
     qemu_global_mutex.func = func;
     qemu_global_mutex.line = line;
 }
 
 void qemu_mutex_unlock_iothread(void)
 {
-    qemu_mutex_unlock(&qemu_global_mutex);
+    iothread_lock_count--;
+    if (iothread_lock_count==0) {
+        qemu_mutex_unlock(&qemu_global_mutex);
+    }
+    if (iothread_lock_count < 0) {
+        fprintf(stderr,"%s: error, too many unlocks %d\n", __func__,
+                iothread_lock_count);
+    }
 }
 
 static int all_vcpus_paused(void)
