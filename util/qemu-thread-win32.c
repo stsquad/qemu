@@ -44,6 +44,11 @@ void qemu_mutex_init(QemuMutex *mutex)
     InitializeCriticalSection(&mutex->lock);
 }
 
+void qemu_mutex_init_recursive(QemuMutex *mutex)
+{
+    error_exit(0, "%s: not implemented for win32\n", __func__);
+}
+
 void qemu_mutex_destroy(QemuMutex *mutex)
 {
     assert(mutex->owner == 0);

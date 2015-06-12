@@ -57,6 +57,18 @@ void qemu_mutex_init(QemuMutex *mutex)
         error_exit(err, __func__);
 }
 
+void qemu_mutex_init_recursive(QemuMutex *mutex)
+{
+    int err;
+    pthread_mutexattr_t attr;
+
+    pthread_mutexattr_init(&attr);
+    pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE_NP);
+    err = pthread_mutex_init(&mutex->lock, &attr);
+    if (err)
+        error_exit(err, __func__);
+}
+
 void qemu_mutex_destroy(QemuMutex *mutex)
 {
     int err;
