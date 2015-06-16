@@ -62,6 +62,7 @@
 #include "translate-all.h"
 #include "qemu/bitmap.h"
 #include "qemu/timer.h"
+#include "sysemu/cpus.h"
 
 //#define DEBUG_TB_INVALIDATE
 //#define DEBUG_FLUSH
@@ -958,14 +959,58 @@ static inline void tb_reset_jump(TranslationBlock *tb, int n)
     tb_set_jmp_target(tb, n, (uintptr_t)(tb->tc_ptr + tb->tb_next_offset[n]));
 }
 
+struct CPUDiscardTBParams {
+    CPUState *cpu;
+    TranslationBlock *tb;
+};
+
+static void cpu_discard_tb_from_jmp_cache(void *opaque)
+{
+    unsigned int h;
+    struct CPUDiscardTBParams *params = opaque;
+
+    h = tb_jmp_cache_hash_func(params->tb->pc);
+    if (params->cpu->tb_jmp_cache[h] == params->tb) {
+        params->cpu->tb_jmp_cache[h] = NULL;
+    }
+
+    g_free(opaque);
+}
+
+static void tb_invalidate_jmp_remove(void *opaque)
+{
+    TranslationBlock *tb = opaque;
+    TranslationBlock *tb1, *tb2;
+    unsigned int n1;
+
+    /* suppress this TB from the two jump lists */
+    tb_jmp_remove(tb, 0);
+    tb_jmp_remove(tb, 1);
+
+    /* suppress any remaining jumps to this TB */
+    tb1 = tb->jmp_first;
+    for (;;) {
+        n1 = (uintptr_t)tb1 & 3;
+        if (n1 == 2) {
+            break;
+        }
+        tb1 = (TranslationBlock *)((uintptr_t)tb1 & ~3);
+        tb2 = tb1->jmp_next[n1];
+        tb_reset_jump(tb1, n1);
+        tb1->jmp_next[n1] = NULL;
+        tb1 = tb2;
+    }
+    tb->jmp_first = (TranslationBlock *)((uintptr_t)tb | 2); /* fail safe */
+}
+
 /* invalidate one TB */
 void tb_phys_invalidate(TranslationBlock *tb, tb_page_addr_t page_addr)
 {
     CPUState *cpu;
     PageDesc *p;
-    unsigned int h, n1;
+    unsigned int h;
     tb_page_addr_t phys_pc;
-    TranslationBlock *tb1, *tb2;
+    struct CPUDiscardTBParams *params;
 
     /* remove the TB from the hash list */
     phys_pc = tb->page_addr[0] + (tb->pc & ~TARGET_PAGE_MASK);
@@ -986,6 +1031,9 @@ void tb_phys_invalidate(TranslationBlock *tb, tb_page_addr_t page_addr)
 
     tcg_ctx.tb_ctx.tb_invalidated_flag = 1;
 
+#if 0 /*MTTCG*/
+    TranslationBlock *tb1, *tb2;
+    unsigned int n1;
     /* remove the TB from the hash list */
     h = tb_jmp_cache_hash_func(tb->pc);
     CPU_FOREACH(cpu) {
@@ -1012,6 +1060,15 @@ void tb_phys_invalidate(TranslationBlock *tb, tb_page_addr_t page_addr)
         tb1 = tb2;
     }
     tb->jmp_first = (TranslationBlock *)((uintptr_t)tb | 2); /* fail safe */
+#else
+    CPU_FOREACH(cpu) {
+        params = g_malloc(sizeof(struct CPUDiscardTBParams));
+        params->cpu = cpu;
+        params->tb = tb;
+        async_run_on_cpu(cpu, cpu_discard_tb_from_jmp_cache, params);
+    }
+    async_run_safe_work_on_cpu(first_cpu, tb_invalidate_jmp_remove, tb);
+#endif /* MTTCG */
 
     tcg_ctx.tb_ctx.tb_phys_invalidate_count++;
 }
