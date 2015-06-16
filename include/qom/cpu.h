@@ -514,6 +514,17 @@ void qemu_cpu_kick(CPUState *cpu);
 bool cpu_is_stopped(CPUState *cpu);
 
 /**
+ * cpu_thread_is_idle:
+ * @cpu: The CPU to check.
+ *
+ * Checks whether the CPU thread is idle.
+ *
+ * Returns: %true if the thread is idle;
+ * %false otherwise.
+ */
+bool cpu_thread_is_idle(CPUState *cpu);
+
+/**
  * run_on_cpu:
  * @cpu: The vCPU to run on.
  * @func: The function to be executed.
