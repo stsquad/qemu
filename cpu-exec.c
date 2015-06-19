@@ -351,7 +351,7 @@ int cpu_exec(CPUState *cpu)
      * This happen when somebody doesn't want this CPU to start
      * In case of MTTCG.
      */
-    if (!tcg_cpu_try_start_execution(cpu)) {
+    if (async_safe_work_pending() || !tcg_cpu_try_start_execution(cpu)) {
         cpu->exit_request = 1;
         return 0;
     }
