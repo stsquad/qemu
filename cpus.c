@@ -85,7 +85,7 @@ bool cpu_is_stopped(CPUState *cpu)
 
 static bool cpu_thread_is_idle(CPUState *cpu)
 {
-    if (cpu->stop || cpu->queued_work_first) {
+    if (cpu->stop || cpu->queued_work_first || cpu->queued_safe_work_first) {
         return false;
     }
     if (cpu_is_stopped(cpu)) {
@@ -893,6 +893,19 @@ void qemu_init_cpu_loop(void)
     qemu_thread_get_self(&io_thread);
 }
 
+static void qemu_cpu_kick_no_halt(void)
+{
+    CPUState *cpu;
+    /* Ensure whatever caused the exit has reached the CPU threads before
+     * writing exit_request.
+     */
+    atomic_mb_set(&exit_request, 1);
+    cpu = atomic_mb_read(&tcg_current_cpu);
+    if (cpu) {
+        cpu_exit(cpu);
+    }
+}
+
 void run_on_cpu(CPUState *cpu, void (*func)(void *data), void *data)
 {
     struct qemu_work_item wi;
@@ -926,33 +939,6 @@ void run_on_cpu(CPUState *cpu, void (*func)(void *data), void *data)
     }
 }
 
-void async_run_on_cpu(CPUState *cpu, void (*func)(void *data), void *data)
-{
-    struct qemu_work_item *wi;
-
-    if (qemu_cpu_is_self(cpu)) {
-        func(data);
-        return;
-    }
-
-    wi = g_malloc0(sizeof(struct qemu_work_item));
-    wi->func = func;
-    wi->data = data;
-    wi->free = true;
-
-    qemu_mutex_lock(&cpu->work_mutex);
-    if (cpu->queued_work_first == NULL) {
-        cpu->queued_work_first = wi;
-    } else {
-        cpu->queued_work_last->next = wi;
-    }
-    cpu->queued_work_last = wi;
-    wi->next = NULL;
-    wi->done = false;
-    qemu_mutex_unlock(&cpu->work_mutex);
-
-    qemu_cpu_kick(cpu);
-}
 
 static void flush_queued_work(CPUState *cpu)
 {
@@ -989,6 +975,9 @@ static void qemu_wait_io_event_common(CPUState *cpu)
         cpu->stopped = true;
         qemu_cond_broadcast(&qemu_pause_cond);
     }
+    qemu_mutex_unlock_iothread();
+    flush_queued_safe_work(cpu);
+    qemu_mutex_lock_iothread();
     flush_queued_work(cpu);
     cpu->thread_kicked = false;
 }
@@ -1168,19 +1157,6 @@ static void qemu_cpu_kick_thread(CPUState *cpu)
 #else /* _WIN32 */
     abort();
 #endif
-}
-
-static void qemu_cpu_kick_no_halt(void)
-{
-    CPUState *cpu;
-    /* Ensure whatever caused the exit has reached the CPU threads before
-     * writing exit_request.
-     */
-    atomic_mb_set(&exit_request, 1);
-    cpu = atomic_mb_read(&tcg_current_cpu);
-    if (cpu) {
-        cpu_exit(cpu);
-    }
 }
 
 void qemu_cpu_kick(CPUState *cpu)

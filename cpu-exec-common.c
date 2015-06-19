@@ -25,6 +25,9 @@
 bool exit_request;
 CPUState *tcg_current_cpu;
 
+/* Number of safe work pending for all VCPUs. */
+int safe_work_pending;
+
 /* exit the current TB from a signal handler. The host registers are
    restored in a state compatible with the CPU emulator
  */
@@ -79,4 +82,106 @@ void cpu_loop_exit_restore(CPUState *cpu, uintptr_t pc)
     }
     cpu->current_tb = NULL;
     siglongjmp(cpu->jmp_env, 1);
+}
+
+/* DUP: qemu_cpu_is_self from cpus.c */
+static bool qemu_cpu_thread_is_self(CPUState *cpu)
+{
+    return qemu_thread_is_self(cpu->thread);
+}
+
+void async_run_on_cpu(CPUState *cpu, void (*func)(void *data), void *data)
+{
+    struct qemu_work_item *wi;
+
+    if (qemu_cpu_thread_is_self(cpu)) {
+        func(data);
+        return;
+    }
+
+    wi = g_malloc0(sizeof(struct qemu_work_item));
+    wi->func = func;
+    wi->data = data;
+    wi->free = true;
+
+    qemu_mutex_lock(&cpu->work_mutex);
+    if (cpu->queued_work_first == NULL) {
+        cpu->queued_work_first = wi;
+    } else {
+        cpu->queued_work_last->next = wi;
+    }
+    cpu->queued_work_last = wi;
+    wi->next = NULL;
+    wi->done = false;
+    qemu_mutex_unlock(&cpu->work_mutex);
+
+    /* FIXME: what to do in the user case? */
+#ifdef CONFIG_SOFTMMU
+    qemu_cpu_kick(cpu);
+#endif
+}
+
+void async_run_safe_work_on_cpu(CPUState *cpu, void (*func)(void *data),
+                                void *data)
+{
+    struct qemu_work_item *wi;
+
+    wi = g_malloc0(sizeof(struct qemu_work_item));
+    wi->func = func;
+    wi->data = data;
+    wi->free = true;
+
+    atomic_inc(&safe_work_pending);
+    qemu_mutex_lock(&cpu->work_mutex);
+    if (cpu->queued_safe_work_first == NULL) {
+        cpu->queued_safe_work_first = wi;
+    } else {
+        cpu->queued_safe_work_last->next = wi;
+    }
+    cpu->queued_safe_work_last = wi;
+    wi->next = NULL;
+    wi->done = false;
+    qemu_mutex_unlock(&cpu->work_mutex);
+}
+
+/* FIXME: systememu does this from waitio, when would linux-user do
+ * this? */
+void flush_queued_safe_work(CPUState *cpu)
+{
+    struct qemu_work_item *wi;
+    CPUState *other_cpu;
+
+    if (cpu->queued_safe_work_first == NULL) {
+        return;
+    }
+
+    CPU_FOREACH(other_cpu) {
+        if (!tcg_cpu_try_block_execution(other_cpu)) {
+            return;
+        }
+    }
+
+    qemu_mutex_lock(&cpu->work_mutex);
+    while ((wi = cpu->queued_safe_work_first)) {
+        cpu->queued_safe_work_first = wi->next;
+        qemu_mutex_unlock(&cpu->work_mutex);
+        wi->func(wi->data);
+        qemu_mutex_lock(&cpu->work_mutex);
+        wi->done = true;
+        if (wi->free) {
+            g_free(wi);
+        }
+        atomic_dec(&safe_work_pending);
+    }
+    cpu->queued_safe_work_last = NULL;
+    qemu_mutex_unlock(&cpu->work_mutex);
+
+    /* FIXME: is this only relevant for softmmu?
+       qemu_cond_broadcast(&qemu_work_cond);
+    */
+}
+
+bool async_safe_work_pending(void)
+{
+    return safe_work_pending != 0;
 }
