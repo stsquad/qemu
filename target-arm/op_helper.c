@@ -880,21 +880,46 @@ uint32_t HELPER(ror_cc)(CPUARMState *env, uint32_t x, uint32_t i)
     }
 }
 
+extern void *qemu_get_ram_ptr(ram_addr_t addr);
+
+static uint8_t *get_host_vaddr(CPUARMState *env, uint64_t vaddr, uint32_t length)
+{
+    hwaddr phys_addr, addr1, l = length;
+    target_ulong page;
+    MemoryRegion *mr;
+    uint8_t *ptr;
+
+    ARMCPU *cpu = arm_env_get_cpu(env);
+    CPUState *cs = CPU(cpu);
+
+    page = vaddr & TARGET_PAGE_MASK;
+    phys_addr = cpu_get_phys_page_debug(cs, page);
+
+    // ensure that the physical page is mapped
+    assert(phys_addr != -1);
+    phys_addr += (vaddr & ~TARGET_PAGE_MASK);
+    mr = address_space_translate(cs->as, phys_addr, &addr1, &l, false);
+    ptr = qemu_get_ram_ptr(mr->ram_addr + addr1);
+
+    return ptr;
+}
+
+int get_phys_addr(CPUARMState *env, target_ulong address,
+                                int access_type, int is_user,
+                                hwaddr *phys_ptr, int *prot,
+                                target_ulong *page_size);
 void HELPER(inst_callback)(CPUARMState *env, uint64_t vaddr, uint32_t length, uint32_t type)
 {
     qsim_icount--;
-    //printf("%x:%x:%x\n", vaddr, length, type);
     if (qsim_icount == 0) {
         checkcontext();
         swapcontext(&qemu_context, &main_context);
     }
 
     if (qsim_inst_cb != NULL) {
-        uint8_t buf[length];
-        ARMCPU *cpu = arm_env_get_cpu(env);
-        CPUState *cs = CPU(cpu);
-        cpu_memory_rw_debug(cs, vaddr, buf, length, false);
-        //printf("v: 0x%lx, p: 0x%lx\n", vaddr, *(uint64_t *)buf);
+        uint8_t *buf;
+
+        buf = get_host_vaddr(env, vaddr, length);
         qsim_inst_cb(qsim_id, vaddr, 0, length, buf, type);
     }
 
@@ -915,11 +940,9 @@ static inline void memop_callback(CPUARMState *env, uint64_t addr, uint32_t size
 	if (qsim_mem_cb == NULL)
 		return;
     else {
-        uint8_t buf[size];
-        ARMCPU *cpu = arm_env_get_cpu(env);
-        CPUState *cs = CPU(cpu);
-        cpu_memory_rw_debug(cs, addr, buf, size, false);
-        qsim_mem_cb(qsim_id, addr, buf, size, type);
+        uint8_t *buf;
+        buf = get_host_vaddr(env, addr, size);
+        qsim_mem_cb(qsim_id, addr, (uint64_t)buf, size, type);
     }
 }
 

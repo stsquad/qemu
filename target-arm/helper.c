@@ -13,7 +13,7 @@
 #include <zlib.h> /* For crc32 */
 
 #ifndef CONFIG_USER_ONLY
-static inline int get_phys_addr(CPUARMState *env, target_ulong address,
+int get_phys_addr(CPUARMState *env, target_ulong address,
                                 int access_type, int is_user,
                                 hwaddr *phys_ptr, int *prot,
                                 target_ulong *page_size);
@@ -4785,7 +4785,7 @@ static int get_phys_addr_mpu(CPUARMState *env, uint32_t address,
  * @prot: set to the permissions for the page containing phys_ptr
  * @page_size: set to the size of the page containing phys_ptr
  */
-static inline int get_phys_addr(CPUARMState *env, target_ulong address,
+int get_phys_addr(CPUARMState *env, target_ulong address,
                                 int access_type, int is_user,
                                 hwaddr *phys_ptr, int *prot,
                                 target_ulong *page_size)

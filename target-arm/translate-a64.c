@@ -710,8 +710,23 @@ static void gen_adc_CC(int sf, TCGv_i64 dest, TCGv_i64 t0, TCGv_i64 t1)
 static void do_gpr_st_memidx(DisasContext *s, TCGv_i64 source,
                              TCGv_i64 tcg_addr, int size, int memidx)
 {
+    TCGv_i32 tmp_size = 0, tmp_type = 0;
+
     g_assert(size <= 3);
+
+    if (qsim_gen_callbacks) {
+      tmp_size = tcg_const_i32(1 << (size & MO_SIZE));
+      tmp_type = tcg_const_i32(1);
+      gen_helper_store_callback_pre(cpu_env, tcg_addr, tmp_size, tmp_type);
+    }
+
     tcg_gen_qemu_st_i64(source, tcg_addr, memidx, MO_TE + size);
+
+    if (qsim_gen_callbacks) {
+      gen_helper_store_callback_post(cpu_env, tcg_addr, tmp_size, tmp_type);
+      tcg_temp_free_i32(tmp_size);
+      tcg_temp_free_i32(tmp_type);
+    }
 }
 
 static void do_gpr_st(DisasContext *s, TCGv_i64 source,
@@ -736,7 +751,7 @@ static void do_gpr_ld_memidx(DisasContext *s, TCGv_i64 dest, TCGv_i64 tcg_addr,
     }
 
     if (qsim_gen_callbacks) {
-      tmp_size = tcg_const_i32(size);
+      tmp_size = tcg_const_i32(1 << (size & MO_SIZE));
       tmp_type = tcg_const_i32(1);
       gen_helper_load_callback_pre(cpu_env, tcg_addr, tmp_size, tmp_type);
     }
