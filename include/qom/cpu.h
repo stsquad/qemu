@@ -243,8 +243,9 @@ struct kvm_run;
  * @mem_io_pc: Host Program Counter at which the memory was accessed.
  * @mem_io_vaddr: Target virtual address at which the memory was accessed.
  * @kvm_fd: vCPU file descriptor for KVM.
- * @work_mutex: Lock to prevent multiple access to queued_work_*.
+ * @work_mutex: Lock to prevent multiple access to queued_* qemu_work_item.
  * @queued_work_first: First asynchronous work pending.
+ * @queued_safe_work_first: First item of safe work pending.
  *
  * State of one CPU core or thread.
  */
@@ -267,6 +268,7 @@ struct CPUState {
     struct QemuCond *halt_cond;
     QemuMutex work_mutex;
     struct qemu_work_item *queued_work_first, *queued_work_last;
+    struct qemu_work_item *queued_safe_work_first, *queued_safe_work_last;
     bool thread_kicked;
     bool created;
     bool stop;
@@ -573,6 +575,26 @@ void run_on_cpu(CPUState *cpu, void (*func)(void *data), void *data);
  * Schedules the function @func for execution on the vCPU @cpu asynchronously.
  */
 void async_run_on_cpu(CPUState *cpu, void (*func)(void *data), void *data);
+
+/**
+ * async_run_safe_work_on_cpu:
+ * @cpu: The vCPU to run on.
+ * @func: The function to be executed.
+ * @data: Data to pass to the function.
+ *
+ * Schedules the function @func for execution on the vCPU @cpu asynchronously
+ * when all the VCPUs are outside their loop.
+ */
+void async_run_safe_work_on_cpu(CPUState *cpu, void (*func)(void *data),
+                                void *data);
+
+/**
+ * async_safe_work_pending:
+ *
+ * Check whether any safe work is pending on any VCPUs.
+ * Returns: @true if a safe work is pending, @false otherwise.
+ */
+bool async_safe_work_pending(void);
 
 /**
  * qemu_get_cpu:
