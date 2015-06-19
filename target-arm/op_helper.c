@@ -910,35 +910,40 @@ void HELPER(inst_callback)(CPUARMState *env, uint64_t vaddr, uint32_t length, ui
     return;
 }
 
-static inline void memop_callback(uint64_t addr, uint32_t size, int type)
+static inline void memop_callback(CPUARMState *env, uint64_t addr, uint32_t size, int type)
 {
 	if (qsim_mem_cb == NULL)
 		return;
-
-	qsim_mem_cb(qsim_id, addr, 0, size, type);
+    else {
+        uint8_t buf[size];
+        ARMCPU *cpu = arm_env_get_cpu(env);
+        CPUState *cs = CPU(cpu);
+        cpu_memory_rw_debug(cs, addr, buf, size, false);
+        qsim_mem_cb(qsim_id, addr, buf, size, type);
+    }
 }
 
-void HELPER(store_callback_pre)(uint64_t vaddr, uint32_t length, uint32_t type)
+void HELPER(store_callback_pre)(CPUARMState *env, uint64_t vaddr, uint32_t length, uint32_t type)
 {
-	memop_callback(vaddr, length, type);
+	memop_callback(env, vaddr, length, type);
 	return;
 }
 
-void HELPER(store_callback_post)(uint64_t vaddr, uint32_t length, uint32_t type)
+void HELPER(store_callback_post)(CPUARMState *env, uint64_t vaddr, uint32_t length, uint32_t type)
 {
-	memop_callback(vaddr, length, type);
+	memop_callback(env, vaddr, length, type);
 	return;
 }
 
-void HELPER(load_callback_pre)(uint64_t vaddr, uint32_t length, uint32_t type)
+void HELPER(load_callback_pre)(CPUARMState *env, uint64_t vaddr, uint32_t length, uint32_t type)
 {
-	memop_callback(vaddr, length, type);
+	memop_callback(env, vaddr, length, type);
 	return;
 }
 
-void HELPER(load_callback_post)(uint64_t vaddr, uint32_t length, uint32_t type)
+void HELPER(load_callback_post)(CPUARMState *env, uint64_t vaddr, uint32_t length, uint32_t type)
 {
-	memop_callback(vaddr, length, type);
+	memop_callback(env, vaddr, length, type);
 	return;
 }
 
@@ -946,13 +951,13 @@ CPUARMState *qsim_cpu;
 
 void HELPER(reg_read_callback)(CPUARMState *env, uint32_t vaddr, uint32_t length, uint32_t type)
 {
-	memop_callback(vaddr, length, type);
+	memop_callback(env, vaddr, length, type);
 	return;
 }
 
 void HELPER(reg_write_callback)(CPUARMState *env, uint32_t vaddr, uint32_t length, uint32_t type)
 {
-	memop_callback(vaddr, length, type);
+	memop_callback(env, vaddr, length, type);
 	return;
 }
 
@@ -1043,8 +1048,6 @@ void set_reg64(enum regs64 r, uint64_t val)
 
 	return;
 }
-
-
 
 uint8_t mem_rd(uint64_t paddr)
 {

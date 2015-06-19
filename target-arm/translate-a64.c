@@ -738,13 +738,13 @@ static void do_gpr_ld_memidx(DisasContext *s, TCGv_i64 dest, TCGv_i64 tcg_addr,
     if (qsim_gen_callbacks) {
       tmp_size = tcg_const_i32(size);
       tmp_type = tcg_const_i32(1);
-      gen_helper_load_callback_pre(tcg_addr, tmp_size, tmp_type);
+      gen_helper_load_callback_pre(cpu_env, tcg_addr, tmp_size, tmp_type);
     }
 
     tcg_gen_qemu_ld_i64(dest, tcg_addr, memidx, memop);
 
     if (qsim_gen_callbacks) {
-      gen_helper_load_callback_post(tcg_addr, tmp_size, tmp_type);
+      gen_helper_load_callback_post(cpu_env, tcg_addr, tmp_size, tmp_type);
       tcg_temp_free_i32(tmp_size);
       tcg_temp_free_i32(tmp_type);
     }
