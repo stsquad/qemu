@@ -69,6 +69,8 @@ static CPUState *next_cpu;
 int64_t max_delay;
 int64_t max_advance;
 
+int safe_work_pending; /* Number of safe work pending for all VCPUs. */
+
 bool cpu_is_stopped(CPUState *cpu)
 {
     return cpu->stopped || !runstate_is_running();
@@ -76,7 +78,7 @@ bool cpu_is_stopped(CPUState *cpu)
 
 static bool cpu_thread_is_idle(CPUState *cpu)
 {
-    if (cpu->stop || cpu->queued_work_first) {
+    if (cpu->stop || cpu->queued_work_first || cpu->queued_safe_work_first) {
         return false;
     }
     if (cpu_is_stopped(cpu)) {
@@ -833,6 +835,45 @@ void qemu_init_cpu_loop(void)
     qemu_thread_get_self(&io_thread);
 }
 
+static void qemu_cpu_kick_thread(CPUState *cpu)
+{
+#ifndef _WIN32
+    int err;
+
+    err = pthread_kill(cpu->thread->thread, SIG_IPI);
+    if (err) {
+        fprintf(stderr, "qemu:%s: %s", __func__, strerror(err));
+        exit(1);
+    }
+#else /* _WIN32 */
+    if (!qemu_cpu_is_self(cpu)) {
+        CONTEXT tcgContext;
+
+        if (SuspendThread(cpu->hThread) == (DWORD)-1) {
+            fprintf(stderr, "qemu:%s: GetLastError:%lu\n", __func__,
+                    GetLastError());
+            exit(1);
+        }
+
+        /* On multi-core systems, we are not sure that the thread is actually
+         * suspended until we can get the context.
+         */
+        tcgContext.ContextFlags = CONTEXT_CONTROL;
+        while (GetThreadContext(cpu->hThread, &tcgContext) != 0) {
+            continue;
+        }
+
+        cpu_signal(0);
+
+        if (ResumeThread(cpu->hThread) == (DWORD)-1) {
+            fprintf(stderr, "qemu:%s: GetLastError:%lu\n", __func__,
+                    GetLastError());
+            exit(1);
+        }
+    }
+#endif
+}
+
 void run_on_cpu(CPUState *cpu, void (*func)(void *data), void *data)
 {
     struct qemu_work_item wi;
@@ -894,6 +935,70 @@ void async_run_on_cpu(CPUState *cpu, void (*func)(void *data), void *data)
     qemu_cpu_kick(cpu);
 }
 
+void async_run_safe_work_on_cpu(CPUState *cpu, void (*func)(void *data),
+                                void *data)
+{
+    struct qemu_work_item *wi;
+
+    wi = g_malloc0(sizeof(struct qemu_work_item));
+    wi->func = func;
+    wi->data = data;
+    wi->free = true;
+
+    atomic_inc(&safe_work_pending);
+    qemu_mutex_lock(&cpu->work_mutex);
+    if (cpu->queued_safe_work_first == NULL) {
+        cpu->queued_safe_work_first = wi;
+    } else {
+        cpu->queued_safe_work_last->next = wi;
+    }
+    cpu->queued_safe_work_last = wi;
+    wi->next = NULL;
+    wi->done = false;
+    qemu_mutex_unlock(&cpu->work_mutex);
+
+    CPU_FOREACH(cpu) {
+        qemu_cpu_kick_thread(cpu);
+    }
+}
+
+static void flush_queued_safe_work(CPUState *cpu)
+{
+    struct qemu_work_item *wi;
+    CPUState *other_cpu;
+
+    if (cpu->queued_safe_work_first == NULL) {
+        return;
+    }
+
+    CPU_FOREACH(other_cpu) {
+        if (!tcg_cpu_try_block_execution(other_cpu)) {
+            return;
+        }
+    }
+
+    qemu_mutex_lock(&cpu->work_mutex);
+    while ((wi = cpu->queued_safe_work_first)) {
+        cpu->queued_safe_work_first = wi->next;
+        qemu_mutex_unlock(&cpu->work_mutex);
+        wi->func(wi->data);
+        qemu_mutex_lock(&cpu->work_mutex);
+        wi->done = true;
+        if (wi->free) {
+            g_free(wi);
+        }
+        atomic_dec(&safe_work_pending);
+    }
+    cpu->queued_safe_work_last = NULL;
+    qemu_mutex_unlock(&cpu->work_mutex);
+    qemu_cond_broadcast(&qemu_work_cond);
+}
+
+bool async_safe_work_pending(void)
+{
+    return safe_work_pending != 0;
+}
+
 static void flush_queued_work(CPUState *cpu)
 {
     struct qemu_work_item *wi;
@@ -926,6 +1031,9 @@ static void qemu_wait_io_event_common(CPUState *cpu)
         cpu->stopped = true;
         qemu_cond_signal(&qemu_pause_cond);
     }
+    qemu_mutex_unlock_iothread();
+    flush_queued_safe_work(cpu);
+    qemu_mutex_lock_iothread();
     flush_queued_work(cpu);
     cpu->thread_kicked = false;
 }
@@ -1089,45 +1197,6 @@ static void *qemu_tcg_cpu_thread_fn(void *arg)
     }
 
     return NULL;
-}
-
-static void qemu_cpu_kick_thread(CPUState *cpu)
-{
-#ifndef _WIN32
-    int err;
-
-    err = pthread_kill(cpu->thread->thread, SIG_IPI);
-    if (err) {
-        fprintf(stderr, "qemu:%s: %s", __func__, strerror(err));
-        exit(1);
-    }
-#else /* _WIN32 */
-    if (!qemu_cpu_is_self(cpu)) {
-        CONTEXT tcgContext;
-
-        if (SuspendThread(cpu->hThread) == (DWORD)-1) {
-            fprintf(stderr, "qemu:%s: GetLastError:%lu\n", __func__,
-                    GetLastError());
-            exit(1);
-        }
-
-        /* On multi-core systems, we are not sure that the thread is actually
-         * suspended until we can get the context.
-         */
-        tcgContext.ContextFlags = CONTEXT_CONTROL;
-        while (GetThreadContext(cpu->hThread, &tcgContext) != 0) {
-            continue;
-        }
-
-        cpu_signal(0);
-
-        if (ResumeThread(cpu->hThread) == (DWORD)-1) {
-            fprintf(stderr, "qemu:%s: GetLastError:%lu\n", __func__,
-                    GetLastError());
-            exit(1);
-        }
-    }
-#endif
 }
 
 void qemu_cpu_kick(CPUState *cpu)
