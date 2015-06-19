@@ -75,7 +75,7 @@ bool cpu_is_stopped(CPUState *cpu)
 
 bool cpu_thread_is_idle(CPUState *cpu)
 {
-    if (cpu->stop || cpu->queued_work_first) {
+    if (cpu->stop || cpu->queued_work_first || cpu->queued_safe_work_first) {
         return false;
     }
     if (cpu_is_stopped(cpu)) {
@@ -892,6 +892,69 @@ void async_run_on_cpu(CPUState *cpu, void (*func)(void *data), void *data)
     qemu_cpu_kick(cpu);
 }
 
+void async_run_safe_work_on_cpu(CPUState *cpu, void (*func)(void *data),
+                                void *data)
+{
+    struct qemu_work_item *wi;
+
+    wi = g_malloc0(sizeof(struct qemu_work_item));
+    wi->func = func;
+    wi->data = data;
+    wi->free = true;
+    if (cpu->queued_safe_work_first == NULL) {
+        cpu->queued_safe_work_first = wi;
+    } else {
+        cpu->queued_safe_work_last->next = wi;
+    }
+    cpu->queued_safe_work_last = wi;
+    wi->next = NULL;
+    wi->done = false;
+
+    CPU_FOREACH(cpu) {
+        qemu_cpu_kick_thread(cpu);
+    }
+}
+
+static void flush_queued_safe_work(CPUState *cpu)
+{
+    struct qemu_work_item *wi;
+    CPUState *other_cpu;
+
+    if (cpu->queued_safe_work_first == NULL) {
+        return;
+    }
+
+    CPU_FOREACH(other_cpu) {
+        if (other_cpu->tcg_executing != 0) {
+            return;
+        }
+    }
+
+    while ((wi = cpu->queued_safe_work_first)) {
+        cpu->queued_safe_work_first = wi->next;
+        wi->func(wi->data);
+        wi->done = true;
+        if (wi->free) {
+            g_free(wi);
+        }
+    }
+    cpu->queued_safe_work_last = NULL;
+    qemu_cond_broadcast(&qemu_work_cond);
+}
+
+bool async_safe_work_pending(void)
+{
+    CPUState *cpu;
+
+    CPU_FOREACH(cpu) {
+        if (cpu->queued_safe_work_first) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 static void flush_queued_work(CPUState *cpu)
 {
     struct qemu_work_item *wi;
@@ -919,6 +982,9 @@ static void qemu_wait_io_event_common(CPUState *cpu)
         cpu->stopped = true;
         qemu_cond_signal(&qemu_pause_cond);
     }
+    qemu_mutex_unlock_iothread();
+    flush_queued_safe_work(cpu);
+    qemu_mutex_lock_iothread();
     flush_queued_work(cpu);
     cpu->thread_kicked = false;
 }
