@@ -887,7 +887,7 @@ static uint8_t *get_host_vaddr(CPUARMState *env, uint64_t vaddr, uint32_t length
     hwaddr phys_addr, addr1, l = length;
     target_ulong page;
     MemoryRegion *mr;
-    uint8_t *ptr;
+    uint8_t *ptr = NULL;
 
     ARMCPU *cpu = arm_env_get_cpu(env);
     CPUState *cs = CPU(cpu);
@@ -895,12 +895,20 @@ static uint8_t *get_host_vaddr(CPUARMState *env, uint64_t vaddr, uint32_t length
     page = vaddr & TARGET_PAGE_MASK;
     phys_addr = cpu_get_phys_page_debug(cs, page);
 
-    // ensure that the physical page is mapped
-    assert(phys_addr != -1);
+    /* ensure that the physical page is mapped
+     */
+    if (phys_addr == -1)
+        goto done;
+
     phys_addr += (vaddr & ~TARGET_PAGE_MASK);
     mr = address_space_translate(cs->as, phys_addr, &addr1, &l, false);
-    ptr = qemu_get_ram_ptr(mr->ram_addr + addr1);
 
+    /* Skip device I/O
+     */
+    if (mr->ram_addr != -1)
+        ptr = qemu_get_ram_ptr(mr->ram_addr + addr1);
+
+done:
     return ptr;
 }
 
@@ -940,9 +948,10 @@ static inline void memop_callback(CPUARMState *env, uint64_t addr, uint32_t size
 	if (qsim_mem_cb == NULL)
 		return;
     else {
-        uint8_t *buf;
+        uint8_t *buf = NULL;
         buf = get_host_vaddr(env, addr, size);
-        qsim_mem_cb(qsim_id, addr, (uint64_t)buf, size, type);
+        if (buf)
+            qsim_mem_cb(qsim_id, addr, (uint64_t)buf, size, type);
     }
 }
 
