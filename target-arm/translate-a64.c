@@ -752,7 +752,7 @@ static void do_gpr_ld_memidx(DisasContext *s, TCGv_i64 dest, TCGv_i64 tcg_addr,
 
     if (qsim_gen_callbacks) {
       tmp_size = tcg_const_i32(1 << (size & MO_SIZE));
-      tmp_type = tcg_const_i32(1);
+      tmp_type = tcg_const_i32(0);
       gen_helper_load_callback_pre(cpu_env, tcg_addr, tmp_size, tmp_type);
     }
 
