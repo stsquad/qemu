@@ -818,6 +818,21 @@ static void page_flush_tb(void)
     }
 }
 
+static void tb_flush_work(void *opaque)
+{
+    CPUState *cpu = opaque;
+    tb_flush(cpu);
+}
+
+void tb_flush_safe(CPUState *cpu)
+{
+#if 0 /* !MTTCG */
+    tb_flush(cpu);
+#else
+    async_run_safe_work_on_cpu(cpu, tb_flush_work, cpu);
+#endif /* MTTCG */
+}
+
 /* flush all the translation blocks */
 /* XXX: tb_flush is currently not thread safe */
 void tb_flush(CPUState *cpu)
