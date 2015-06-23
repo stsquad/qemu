@@ -4706,6 +4706,7 @@ void arm_cpu_do_interrupt(CPUState *cs)
     int new_mode;
     uint32_t offset;
     uint32_t moe;
+    uint32_t guest_pid;
 
     assert(!IS_M(env));
 
@@ -4745,6 +4746,8 @@ void arm_cpu_do_interrupt(CPUState *cs)
     if (moe) {
         env->cp15.mdscr_el1 = deposit64(env->cp15.mdscr_el1, 2, 4, moe);
     }
+
+    guest_pid = env->cp15.contextidr_el[1] >> 8;
 
     /* TODO: Vectored interrupt controller.  */
     switch (cs->exception_index) {
@@ -4800,6 +4803,7 @@ void arm_cpu_do_interrupt(CPUState *cs)
     case EXCP_PREFETCH_ABORT:
         A32_BANKED_CURRENT_REG_SET(env, ifsr, env->exception.fsr);
         A32_BANKED_CURRENT_REG_SET(env, ifar, env->exception.vaddress);
+        qemu_log_mask(CPU_LOG_INT, "...from %d\n", guest_pid);
         qemu_log_mask(CPU_LOG_INT, "...with IFSR 0x%x IFAR 0x%x\n",
                       env->exception.fsr, (uint32_t)env->exception.vaddress);
         new_mode = ARM_CPU_MODE_ABT;
@@ -4810,6 +4814,7 @@ void arm_cpu_do_interrupt(CPUState *cs)
     case EXCP_DATA_ABORT:
         A32_BANKED_CURRENT_REG_SET(env, dfsr, env->exception.fsr);
         A32_BANKED_CURRENT_REG_SET(env, dfar, env->exception.vaddress);
+        qemu_log_mask(CPU_LOG_INT, "...from %d\n", guest_pid);
         qemu_log_mask(CPU_LOG_INT, "...with DFSR 0x%x DFAR 0x%x\n",
                       env->exception.fsr,
                       (uint32_t)env->exception.vaddress);
