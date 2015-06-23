@@ -222,6 +222,7 @@ struct kvm_run;
  * @stopped: Indicates the CPU has been artificially stopped.
  * @tcg_exit_req: Set to force TCG to stop executing linked TBs for this
  *           CPU and return to its top level loop.
+ * @tcg_executing: This TCG thread is in cpu_exec().
  * @singlestep_enabled: Flags for single-stepping.
  * @icount_extra: Instructions until next timer event.
  * @icount_decr: Number of cycles left, with interrupt flag in high bit.
@@ -315,6 +316,8 @@ struct CPUState {
        (absolute value) offset as small as possible.  This reduces code
        size, especially for hosts without large memory offsets.  */
     volatile sig_atomic_t tcg_exit_req;
+
+    volatile int tcg_executing;
 };
 
 QTAILQ_HEAD(CPUTailQ, CPUState);

@@ -1377,6 +1377,7 @@ static int tcg_cpu_exec(CPUArchState *env)
     }
     qemu_mutex_unlock_iothread();
     ret = cpu_exec(env);
+    cpu->tcg_executing = 0;
     qemu_mutex_lock_iothread();
 #ifdef CONFIG_PROFILER
     tcg_time += profile_getclock() - ti;

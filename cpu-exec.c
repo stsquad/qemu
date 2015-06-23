@@ -390,6 +390,7 @@ int cpu_exec(CPUArchState *env)
         cpu->halted = 0;
     }
 
+    cpu->tcg_executing = 1;
     current_cpu = cpu;
 
     rcu_read_lock();
