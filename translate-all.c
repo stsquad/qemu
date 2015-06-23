@@ -1148,7 +1148,7 @@ TranslationBlock *tb_gen_code(CPUState *cpu,
     tb = tb_alloc(pc);
     if (!tb) {
         /* flush must be done */
-        tb_flush(cpu);
+        tb_flush_safe(cpu);
         /* cannot fail at this point */
         tb = tb_alloc(pc);
         /* Don't forget to invalidate previous TB info.  */
