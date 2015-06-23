@@ -357,6 +357,7 @@ struct CPUState {
        size, especially for hosts without large memory offsets.  */
     uint32_t tcg_exit_req;
     int tcg_exec_flag;
+    int pending_tlb_flush;
 };
 
 QTAILQ_HEAD(CPUTailQ, CPUState);
