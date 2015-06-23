@@ -72,6 +72,45 @@ void tlb_flush(CPUState *cpu, int flush_global)
     tlb_flush_count++;
 }
 
+struct TLBFlushParams {
+    CPUState *cpu;
+    int flush_global;
+};
+
+static void tlb_flush_async_work(void *opaque)
+{
+    struct TLBFlushParams *params = opaque;
+
+    tlb_flush(params->cpu, params->flush_global);
+    g_free(params);
+}
+
+void tlb_flush_all(int flush_global)
+{
+    CPUState *cpu;
+    struct TLBFlushParams *params;
+
+#if 0 /* MTTCG */
+    CPU_FOREACH(cpu) {
+        tlb_flush(cpu, flush_global);
+    }
+#else
+    CPU_FOREACH(cpu) {
+        if (qemu_cpu_is_self(cpu)) {
+            /* async_run_on_cpu handle this case but this just avoid a malloc
+             * here.
+             */
+            tlb_flush(cpu, flush_global);
+        } else {
+            params = g_malloc(sizeof(struct TLBFlushParams));
+            params->cpu = cpu;
+            params->flush_global = flush_global;
+            async_run_on_cpu(cpu, tlb_flush_async_work, params);
+        }
+    }
+#endif /* MTTCG */
+}
+
 static inline void tlb_flush_entry(CPUTLBEntry *tlb_entry, target_ulong addr)
 {
     if (addr == (tlb_entry->addr_read &
@@ -122,6 +161,43 @@ void tlb_flush_page(CPUState *cpu, target_ulong addr)
     }
 
     tb_flush_jmp_cache(cpu, addr);
+}
+
+struct TLBFlushPageParams {
+    CPUState *cpu;
+    target_ulong addr;
+};
+
+static void tlb_flush_page_async_work(void *opaque)
+{
+    struct TLBFlushPageParams *params = opaque;
+
+    tlb_flush_page(params->cpu, params->addr);
+    g_free(params);
+}
+
+void tlb_flush_page_all(target_ulong addr)
+{
+    CPUState *cpu;
+    struct TLBFlushPageParams *params;
+
+    CPU_FOREACH(cpu) {
+#if 0 /* !MTTCG */
+        tlb_flush_page(cpu, addr);
+#else
+        if (qemu_cpu_is_self(cpu)) {
+            /* async_run_on_cpu handle this case but this just avoid a malloc
+             * here.
+             */
+            tlb_flush_page(cpu, addr);
+        } else {
+            params = g_malloc(sizeof(struct TLBFlushPageParams));
+            params->cpu = cpu;
+            params->addr = addr;
+            async_run_on_cpu(cpu, tlb_flush_page_async_work, params);
+        }
+#endif /* MTTCG */
+    }
 }
 
 /* update the TLBs so that writes to code in the virtual page 'addr'
