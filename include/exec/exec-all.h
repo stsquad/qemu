@@ -97,7 +97,9 @@ bool qemu_in_vcpu_thread(void);
 void cpu_reload_memory_map(CPUState *cpu);
 void tcg_cpu_address_space_init(CPUState *cpu, AddressSpace *as);
 /* cputlb.c */
+void tlb_flush_page_all(target_ulong addr);
 void tlb_flush_page(CPUState *cpu, target_ulong addr);
+void tlb_flush_all(int flush_global);
 void tlb_flush(CPUState *cpu, int flush_global);
 void tlb_set_page(CPUState *cpu, target_ulong vaddr,
                   hwaddr paddr, int prot,
