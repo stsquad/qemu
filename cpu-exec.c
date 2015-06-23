@@ -371,6 +371,10 @@ int cpu_exec(CPUState *cpu)
         cpu->halted = 0;
     }
 
+    if (!tcg_cpu_try_start_execution(cpu)) {
+        cpu->exit_request = 1;
+        return 0;
+    }
     current_cpu = cpu;
 
     /* As long as current_cpu is null, up to the assignment just above,
@@ -583,5 +587,6 @@ int cpu_exec(CPUState *cpu)
 
     /* fail safe : never use current_cpu outside cpu_exec() */
     current_cpu = NULL;
+    tcg_cpu_allow_execution(cpu);
     return ret;
 }

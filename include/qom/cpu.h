@@ -226,6 +226,7 @@ struct kvm_run;
  * @stopped: Indicates the CPU has been artificially stopped.
  * @tcg_exit_req: Set to force TCG to stop executing linked TBs for this
  *           CPU and return to its top level loop.
+ * @tcg_exec_flag: See tcg_cpu_flag_* function.
  * @singlestep_enabled: Flags for single-stepping.
  * @icount_extra: Instructions until next timer event.
  * @icount_decr: Number of cycles left, with interrupt flag in high bit.
@@ -322,6 +323,8 @@ struct CPUState {
        (absolute value) offset as small as possible.  This reduces code
        size, especially for hosts without large memory offsets.  */
     volatile sig_atomic_t tcg_exit_req;
+
+    int tcg_exec_flag;
 };
 
 QTAILQ_HEAD(CPUTailQ, CPUState);
@@ -336,6 +339,35 @@ extern struct CPUTailQ cpus;
 
 DECLARE_TLS(CPUState *, current_cpu);
 #define current_cpu tls_var(current_cpu)
+
+
+/**
+ * tcg_cpu_try_block_execution
+ * @cpu: The CPU to block the execution
+ *
+ * Try to set the tcg_exec_flag to -1 saying the CPU can't execute code if the
+ * CPU is not executing code.
+ * Returns true if the cpu execution is blocked, false otherwise.
+ */
+bool tcg_cpu_try_block_execution(CPUState *cpu);
+
+/**
+ * tcg_cpu_allow_execution
+ * @cpu: The CPU to allow the execution.
+ *
+ * Just reset the state of tcg_exec_flag, and allow the execution of some code.
+ */
+void tcg_cpu_allow_execution(CPUState *cpu);
+
+/**
+ * tcg_cpu_try_start_execution
+ * @cpu: The CPU to start the execution.
+ *
+ * Just set the tcg_exec_flag to 1 saying the CPU is executing code if the CPU
+ * is allowed to run some code.
+ * Returns true if the cpu can execute, false otherwise.
+ */
+bool tcg_cpu_try_start_execution(CPUState *cpu);
 
 /**
  * cpu_paging_enabled:

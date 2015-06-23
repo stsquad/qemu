@@ -26,6 +26,23 @@
 #include "qemu/error-report.h"
 #include "sysemu/sysemu.h"
 
+bool tcg_cpu_try_block_execution(CPUState *cpu)
+{
+    return (atomic_cmpxchg(&cpu->tcg_exec_flag, 0, -1)
+           || (cpu->tcg_exec_flag == -1));
+}
+
+void tcg_cpu_allow_execution(CPUState *cpu)
+{
+    cpu->tcg_exec_flag = 0;
+}
+
+bool tcg_cpu_try_start_execution(CPUState *cpu)
+{
+    return (atomic_cmpxchg(&cpu->tcg_exec_flag, 0, 1)
+           || (cpu->tcg_exec_flag == 1));
+}
+
 bool cpu_exists(int64_t id)
 {
     CPUState *cpu;
@@ -249,6 +266,8 @@ static void cpu_common_reset(CPUState *cpu)
     cpu->icount_decr.u32 = 0;
     cpu->can_do_io = 0;
     cpu->exception_index = -1;
+
+    tcg_cpu_allow_execution(cpu);
     memset(cpu->tb_jmp_cache, 0, TB_JMP_CACHE_SIZE * sizeof(void *));
 }
 
