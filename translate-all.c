@@ -1104,12 +1104,11 @@ TranslationBlock *tb_gen_code(CPUState *cpu,
     if (unlikely(!tb)) {
  buffer_overflow:
         /* flush must be done */
-        tb_flush(cpu);
-        /* cannot fail at this point */
-        tb = tb_alloc(pc);
-        assert(tb != NULL);
+        tb_flush_safe(cpu);
         /* Don't forget to invalidate previous TB info.  */
         tcg_ctx.tb_ctx.tb_invalidated_flag = 1;
+        tb_unlock();
+        cpu_loop_exit(cpu);
     }
 
     gen_code_buf = tcg_ctx.code_gen_ptr;
