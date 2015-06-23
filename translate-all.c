@@ -815,6 +815,21 @@ static void page_flush_tb(void)
     }
 }
 
+static void tb_flush_work(void *opaque)
+{
+    CPUArchState *env = opaque;
+    tb_flush(env);
+}
+
+void tb_flush_safe(CPUArchState *env)
+{
+#if 0 /* !MTTCG */
+    tb_flush(env);
+#else
+    async_run_safe_work_on_cpu(ENV_GET_CPU(env), tb_flush_work, env);
+#endif /* MTTCG */
+}
+
 /* flush all the translation blocks */
 /* XXX: tb_flush is currently not thread safe */
 void tb_flush(CPUArchState *env1)
