@@ -126,6 +126,9 @@ void tlb_flush_page_by_mmuidx(CPUState *cpu, target_ulong addr, ...);
  * MMU indexes.
  */
 void tlb_flush_by_mmuidx(CPUState *cpu, ...);
+
+void tlb_flush_page_all(target_ulong addr);
+void tlb_flush_all(int flush_global);
 void tlb_set_page(CPUState *cpu, target_ulong vaddr,
                   hwaddr paddr, int prot,
                   int mmu_idx, target_ulong size);
