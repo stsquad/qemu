@@ -347,6 +347,15 @@ int cpu_exec(CPUState *cpu)
     uintptr_t next_tb;
     SyncClocks sc;
 
+    /*
+     * This happen when somebody doesn't want this CPU to start
+     * In case of MTTCG.
+     */
+    if (!tcg_cpu_try_start_execution(cpu)) {
+        cpu->exit_request = 1;
+        return 0;
+    }
+
     /* replay_interrupt may need current_cpu */
     current_cpu = cpu;
 
@@ -599,7 +608,9 @@ int cpu_exec(CPUState *cpu)
     /* fail safe : never use current_cpu outside cpu_exec() */
     current_cpu = NULL;
 
+    tcg_cpu_allow_execution(cpu);
     /* Does not need atomic_mb_set because a spurious wakeup is okay.  */
     atomic_set(&tcg_current_cpu, NULL);
+
     return ret;
 }
