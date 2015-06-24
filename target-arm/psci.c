@@ -211,6 +211,8 @@ void arm_handle_psci_call(ARMCPU *cpu)
         }
         target_cpu_class->set_pc(target_cpu_state, entry);
 
+        qemu_cond_signal(target_cpu_state->halt_cond);
+
         ret = 0;
         break;
     case QEMU_PSCI_0_1_FN_CPU_OFF:
