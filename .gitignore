@@ -102,4 +102,9 @@
 cscope.*
 tags
 TAGS
+GPATH
+GRTAGS
+GSYMS
+GTAGS
+compile_commands.json
 *~
