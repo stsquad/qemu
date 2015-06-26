@@ -89,6 +89,51 @@ void qemu_mutex_unlock(QemuMutex *mutex)
         error_exit(err, __func__);
 }
 
+void qemu_spin_init(QemuSpin *spin)
+{
+    int err;
+
+    err = pthread_spin_init(&spin->lock, 0);
+    if (err) {
+        error_exit(err, __func__);
+    }
+}
+
+void qemu_spin_destroy(QemuSpin *spin)
+{
+    int err;
+
+    err = pthread_spin_destroy(&spin->lock);
+    if (err) {
+        error_exit(err, __func__);
+    }
+}
+
+void qemu_spin_lock(QemuSpin *spin)
+{
+    int err;
+
+    err = pthread_spin_lock(&spin->lock);
+    if (err) {
+        error_exit(err, __func__);
+    }
+}
+
+int qemu_spin_trylock(QemuSpin *spin)
+{
+    return pthread_spin_trylock(&spin->lock);
+}
+
+void qemu_spin_unlock(QemuSpin *spin)
+{
+    int err;
+
+    err = pthread_spin_unlock(&spin->lock);
+    if (err) {
+        error_exit(err, __func__);
+    }
+}
+
 void qemu_cond_init(QemuCond *cond)
 {
     int err;
