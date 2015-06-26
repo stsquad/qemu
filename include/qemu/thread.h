@@ -5,6 +5,7 @@
 #include <stdbool.h>
 
 typedef struct QemuMutex QemuMutex;
+typedef struct QemuSpin QemuSpin;
 typedef struct QemuCond QemuCond;
 typedef struct QemuSemaphore QemuSemaphore;
 typedef struct QemuEvent QemuEvent;
@@ -24,6 +25,12 @@ void qemu_mutex_destroy(QemuMutex *mutex);
 void qemu_mutex_lock(QemuMutex *mutex);
 int qemu_mutex_trylock(QemuMutex *mutex);
 void qemu_mutex_unlock(QemuMutex *mutex);
+
+void qemu_spin_init(QemuSpin *spin);
+void qemu_spin_destroy(QemuSpin *spin);
+void qemu_spin_lock(QemuSpin *spin);
+int qemu_spin_trylock(QemuSpin *spin);
+void qemu_spin_unlock(QemuSpin *spin);
 
 void qemu_cond_init(QemuCond *cond);
 void qemu_cond_destroy(QemuCond *cond);
