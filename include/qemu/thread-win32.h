@@ -7,6 +7,10 @@ struct QemuMutex {
     LONG owner;
 };
 
+struct QemuSpin {
+    PKSPIN_LOCK lock;
+};
+
 struct QemuCond {
     LONG waiters, target;
     HANDLE sema;

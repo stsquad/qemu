@@ -80,6 +80,36 @@ void qemu_mutex_unlock(QemuMutex *mutex)
     LeaveCriticalSection(&mutex->lock);
 }
 
+void qemu_spin_init(QemuSpin *spin)
+{
+    printf("spinlock not implemented");
+    abort();
+}
+
+void qemu_spin_destroy(QemuSpin *spin)
+{
+    printf("spinlock not implemented");
+    abort();
+}
+
+void qemu_spin_lock(QemuSpin *spin)
+{
+    printf("spinlock not implemented");
+    abort();
+}
+
+int qemu_spin_trylock(QemuSpin *spin)
+{
+    printf("spinlock not implemented");
+    abort();
+}
+
+void qemu_spin_unlock(QemuSpin *spin)
+{
+    printf("spinlock not implemented");
+    abort();
+}
+
 void qemu_cond_init(QemuCond *cond)
 {
     memset(cond, 0, sizeof(*cond));

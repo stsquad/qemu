@@ -7,6 +7,10 @@ struct QemuMutex {
     pthread_mutex_t lock;
 };
 
+struct QemuSpin {
+    pthread_spinlock_t lock;
+};
+
 struct QemuCond {
     pthread_cond_t cond;
 };
