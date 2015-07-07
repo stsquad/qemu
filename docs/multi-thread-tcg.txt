@@ -20,9 +20,23 @@ CPU Scheduling
 
 While the aim of the design to avoid inter-CPU dependencies wherever
 possible there will be some cases when we will need to ensure all CPUs
-are brought to a halt.
+are brought to a halt. As we will be moving each CPU onto its own
+thread we need to provide some additional functionality over the
+current single threaded approach.
 
-[TODO: look at existing mechanisms]
+DESIGN REQUIREMENT: Provide a mechanism to halt individual CPUs
+
+This entails making the current global exit condition variable a
+per-vCPU one. We shall also need to make the current TCG execution
+state of each vCPU visible so we know when execution has halted.
+
+DESIGN REQUIREMENT: Provide a deferred execution mechanism for halted
+CPUs
+
+Not all work needs to be strictly synchronised so we shall provide a
+mechanism for carrying out work once the vCPU has been bought into
+its quiescent state.
+
 
 Memory Consistency
 ==================
