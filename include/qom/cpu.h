@@ -242,6 +242,8 @@ struct kvm_run;
  * @mem_io_pc: Host Program Counter at which the memory was accessed.
  * @mem_io_vaddr: Target virtual address at which the memory was accessed.
  * @kvm_fd: vCPU file descriptor for KVM.
+ * @work_mutex: Lock to prevent multiple access to queued_work_*.
+ * @queued_work_first: First asynchronous work pending.
  *
  * State of one CPU core or thread.
  */
@@ -262,6 +264,7 @@ struct CPUState {
     uint32_t host_tid;
     bool running;
     struct QemuCond *halt_cond;
+    QemuMutex work_mutex;
     struct qemu_work_item *queued_work_first, *queued_work_last;
     bool thread_kicked;
     bool created;
