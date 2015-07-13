@@ -71,6 +71,7 @@ matrix:
       compiler: gcc
     - env: TARGETS=i386-softmmu,x86_64-softmmu
            EXTRA_CONFIG="--enable-debug --enable-tcg-interpreter"
+           TEST_CMD="make check"
       compiler: gcc
     # All the extra -dev packages
     - env: TARGETS=i386-softmmu,x86_64-softmmu
