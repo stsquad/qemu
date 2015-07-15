@@ -2876,7 +2876,7 @@ void qemu_init(qemu_ramdesc_t *ram,
 #elif defined(ARM64)
     strcat(arm_kernel_path, "/../arm64_images/vmlinuz");
     strcat(arm_initrd_path, "/../arm64_images/initrd.img");
-    strcat(arm_sd_path, "/../arm64_images/arm64disk.img");
+    strcat(arm_sd_path, "/../arm64_images/arm64disk.qcow2");
 
     strcpy(arm_img_options, "file=");
     strcat(arm_img_options, arm_sd_path);
