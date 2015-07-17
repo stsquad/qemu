@@ -363,6 +363,11 @@ int cpu_exec(CPUState *cpu)
     /* This must be volatile so it is not trashed by longjmp() */
     volatile bool have_tb_lock = false;
 
+    if (async_safe_work_pending()) {
+        cpu->exit_request = 1;
+        return 0;
+    }
+
     if (cpu->halted) {
         if (!cpu_has_work(cpu)) {
             return EXCP_HALTED;
