@@ -21,6 +21,7 @@
 
 #ifndef CONFIG_USER_ONLY
 #include "hw/xen/xen.h"
+#include "sysemu/sysemu.h"
 
 struct RAMBlock {
     struct rcu_head rcu;
@@ -294,6 +295,10 @@ static inline void cpu_physical_memory_set_dirty_range(ram_addr_t start,
             bitmap_set_atomic(blocks[DIRTY_MEMORY_CODE]->blocks[idx],
                               offset, next - page);
         }
+        if (unlikely(mask & (1 << DIRTY_MEMORY_EXCLUSIVE))) {
+            bitmap_set_atomic(blocks[DIRTY_MEMORY_EXCLUSIVE]->blocks[idx],
+                              offset, next - page);
+        }
 
         page = next;
         idx++;
@@ -453,5 +458,69 @@ uint64_t cpu_physical_memory_sync_dirty_bitmap(unsigned long *dest,
 }
 
 void migration_bitmap_extend(ram_addr_t old, ram_addr_t new);
+
+/* Exclusive bitmap support. */
+
+/* Make the page of @addr not exclusive. */
+static inline void cpu_physical_memory_unset_excl(ram_addr_t addr)
+{
+    DirtyMemoryBlocks *blocks;
+    unsigned long idx, offset, page;
+
+    page = addr >> TARGET_PAGE_BITS;
+    idx = page / DIRTY_MEMORY_BLOCK_SIZE;
+    offset = page % DIRTY_MEMORY_BLOCK_SIZE;
+
+    rcu_read_lock();
+
+    blocks = atomic_rcu_read(&ram_list.dirty_memory[DIRTY_MEMORY_EXCLUSIVE]);
+    set_bit_atomic(offset, blocks->blocks[idx]);
+
+    rcu_read_unlock();
+}
+
+/* Return true if the page of @addr is exclusive, i.e. the EXCL bit is set. */
+static inline int cpu_physical_memory_is_excl(ram_addr_t addr)
+{
+    DirtyMemoryBlocks *blocks;
+    unsigned long idx, offset, page;
+    bool ret;
+
+    page = addr >> TARGET_PAGE_BITS;
+    idx = page / DIRTY_MEMORY_BLOCK_SIZE;
+    offset = page % DIRTY_MEMORY_BLOCK_SIZE;
+
+    rcu_read_lock();
+
+    blocks = atomic_rcu_read(&ram_list.dirty_memory[DIRTY_MEMORY_EXCLUSIVE]);
+    ret = test_bit(offset, blocks->blocks[idx]);
+
+    rcu_read_unlock();
+
+    return !ret;
+}
+
+/* Set the page of @addr as exclusive clearing its EXCL bit and return the
+ * previous bit's state. */
+static inline int cpu_physical_memory_set_excl(ram_addr_t addr)
+{
+    DirtyMemoryBlocks *blocks;
+    unsigned long idx, offset, page;
+    bool ret;
+
+    page = addr >> TARGET_PAGE_BITS;
+    idx = page / DIRTY_MEMORY_BLOCK_SIZE;
+    offset = page % DIRTY_MEMORY_BLOCK_SIZE;
+
+    rcu_read_lock();
+
+    blocks = atomic_rcu_read(&ram_list.dirty_memory[DIRTY_MEMORY_EXCLUSIVE]);
+    ret = bitmap_test_and_clear_atomic(blocks->blocks[idx], offset, 1);
+
+    rcu_read_unlock();
+
+    return ret;
+}
+
 #endif
 #endif
