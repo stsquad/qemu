@@ -21,6 +21,7 @@
 
 #ifndef CONFIG_USER_ONLY
 #include "hw/xen/xen.h"
+#include "sysemu/sysemu.h"
 
 ram_addr_t qemu_ram_alloc_from_file(ram_addr_t size, MemoryRegion *mr,
                                     bool share, const char *mem_path,
@@ -135,6 +136,10 @@ static inline void cpu_physical_memory_set_dirty_range(ram_addr_t start,
     if (unlikely(mask & (1 << DIRTY_MEMORY_CODE))) {
         bitmap_set_atomic(d[DIRTY_MEMORY_CODE], page, end - page);
     }
+    if (unlikely(mask & (1 << DIRTY_MEMORY_EXCLUSIVE))) {
+        bitmap_set_atomic(d[DIRTY_MEMORY_EXCLUSIVE],
+                          page * smp_cpus, (end - page) * smp_cpus);
+    }
     xen_modified_memory(start, length);
 }
 
@@ -248,6 +253,69 @@ uint64_t cpu_physical_memory_sync_dirty_bitmap(unsigned long *dest,
 
     return num_dirty;
 }
+
+/* Exclusive bitmap support. */
+#define EXCL_BITMAP_GET_OFFSET(addr) (smp_cpus * (addr >> TARGET_PAGE_BITS))
+static inline void cpu_physical_memory_set_excl_dirty(ram_addr_t addr,
+                                                      uint32_t cpu_index)
+{
+    set_bit_atomic(EXCL_BITMAP_GET_OFFSET(addr) + cpu_index,
+                   ram_list.dirty_memory[DIRTY_MEMORY_EXCLUSIVE]);
+}
+
+static inline int cpu_physical_memory_excl_atleast_one_clean(ram_addr_t addr)
+{
+    unsigned long *bitmap = ram_list.dirty_memory[DIRTY_MEMORY_EXCLUSIVE];
+    unsigned long next, end;
+
+    if (likely(smp_cpus <= BITS_PER_LONG)) {
+        unsigned long mask = (1 << smp_cpus) - 1;
+
+        return
+            (mask & (bitmap[BIT_WORD(EXCL_BITMAP_GET_OFFSET(addr))] >>
+            (EXCL_BITMAP_GET_OFFSET(addr) & (BITS_PER_LONG-1)))) != mask;
+    }
+
+    end = BIT_WORD(EXCL_BITMAP_GET_OFFSET(addr)) + smp_cpus;
+    next = find_next_zero_bit(bitmap, end,
+                              BIT_WORD(EXCL_BITMAP_GET_OFFSET(addr)));
+
+    return next < end;
+}
+
+static inline int cpu_physical_memory_excl_is_dirty(ram_addr_t addr,
+                                                    unsigned long cpu)
+{
+    unsigned long *bitmap = ram_list.dirty_memory[DIRTY_MEMORY_EXCLUSIVE];
+    unsigned long end, next;
+    uint32_t add;
+
+    assert(cpu <= smp_cpus);
+
+    if (likely(smp_cpus <= BITS_PER_LONG)) {
+        cpu = (cpu == smp_cpus) ? (1 << cpu) - 1 : (1 << cpu);
+
+        return cpu & (bitmap[BIT_WORD(EXCL_BITMAP_GET_OFFSET(addr))] >>
+                     (EXCL_BITMAP_GET_OFFSET(addr) & (BITS_PER_LONG-1)));
+    }
+
+    add = (cpu == smp_cpus) ? 0 : 1;
+    end = BIT_WORD(EXCL_BITMAP_GET_OFFSET(addr)) + cpu + add;
+    next = find_next_bit(bitmap, end, BIT_WORD(EXCL_BITMAP_GET_OFFSET(addr))
+                         + (cpu % smp_cpus));
+
+    return next < end;
+}
+
+static inline bool cpu_physical_memory_clear_excl_dirty(ram_addr_t addr,
+                                                        uint32_t cpu_index)
+{
+    return bitmap_test_and_clear_atomic(
+                                ram_list.dirty_memory[DIRTY_MEMORY_EXCLUSIVE],
+                                EXCL_BITMAP_GET_OFFSET(addr) + cpu_index, 1);
+}
+
+
 
 #endif
 #endif

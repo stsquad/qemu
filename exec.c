@@ -1493,11 +1493,14 @@ static ram_addr_t ram_block_add(RAMBlock *new_block, Error **errp)
         int i;
 
         /* ram_list.dirty_memory[] is protected by the iothread lock.  */
-        for (i = 0; i < DIRTY_MEMORY_NUM; i++) {
+        for (i = 0; i < DIRTY_MEMORY_EXCLUSIVE; i++) {
             ram_list.dirty_memory[i] =
                 bitmap_zero_extend(ram_list.dirty_memory[i],
                                    old_ram_size, new_ram_size);
-       }
+        }
+        ram_list.dirty_memory[DIRTY_MEMORY_EXCLUSIVE] = bitmap_zero_extend(
+                ram_list.dirty_memory[DIRTY_MEMORY_EXCLUSIVE],
+                old_ram_size * smp_cpus, new_ram_size * smp_cpus);
     }
     cpu_physical_memory_set_dirty_range(new_block->offset,
                                         new_block->used_length,
