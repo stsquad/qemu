@@ -918,8 +918,11 @@ int get_phys_addr(CPUARMState *env, target_ulong address,
                                 target_ulong *page_size);
 void HELPER(inst_callback)(CPUARMState *env, uint64_t vaddr, uint32_t length, uint32_t type)
 {
-    qsim_icount--;
-    if (qsim_icount == 0) {
+	ARMCPU* cpu = arm_env_get_cpu(env);
+	CPUState* cs = CPU(cpu);
+	qsim_id = cs->cpu_index;
+	qsim_icount--;
+	if (qsim_icount == 0) {
         checkcontext();
         swapcontext(&qemu_context, &main_context);
     }
