@@ -1885,6 +1885,25 @@ static void gen_ldst_i32(TCGOpcode opc, TCGv_i32 val, TCGv addr,
 #endif
 }
 
+/* An output operand to return the StoreConditional result */
+static void gen_stcond_i32(TCGOpcode opc, TCGv_i32 is_dirty, TCGv_i32 val,
+                           TCGv addr, TCGMemOp memop, TCGArg idx)
+{
+    TCGMemOpIdx oi = make_memop_idx(memop, idx);
+
+#if TARGET_LONG_BITS == 32
+    tcg_gen_op4i_i32(opc, is_dirty, val, addr, oi);
+#else
+    if (TCG_TARGET_REG_BITS == 32) {
+        tcg_gen_op5i_i32(opc, is_dirty, val, TCGV_LOW(addr), TCGV_HIGH(addr),
+                         oi);
+    } else {
+        tcg_gen_op4(&tcg_ctx, opc, GET_TCGV_I32(is_dirty), GET_TCGV_I32(val),
+                    GET_TCGV_I64(addr), oi);
+    }
+#endif
+}
+
 static void gen_ldst_i64(TCGOpcode opc, TCGv_i64 val, TCGv addr,
                          TCGMemOp memop, TCGArg idx)
 {
@@ -1905,6 +1924,32 @@ static void gen_ldst_i64(TCGOpcode opc, TCGv_i64 val, TCGv addr,
 #endif
 }
 
+static void gen_stcond_i64(TCGOpcode opc, TCGv_i32 is_dirty, TCGv_i64 val,
+                           TCGv addr, TCGMemOp memop, TCGArg idx)
+{
+    TCGMemOpIdx oi = make_memop_idx(memop, idx);
+#if TARGET_LONG_BITS == 32
+    if (TCG_TARGET_REG_BITS == 32) {
+        tcg_gen_op5i_i32(opc, is_dirty, TCGV_LOW(val), TCGV_HIGH(val),
+                         addr, oi);
+    } else {
+        tcg_gen_op4(&tcg_ctx, opc, GET_TCGV_I32(is_dirty), GET_TCGV_I64(val),
+                    GET_TCGV_I32(addr), oi);
+    }
+#else
+    if (TCG_TARGET_REG_BITS == 32) {
+        tcg_gen_op6i_i32(opc, is_dirty, TCGV_LOW(val), TCGV_HIGH(val),
+                         TCGV_LOW(addr), TCGV_HIGH(addr), oi);
+    } else {
+        TCGv_i64 is_dirty64 = tcg_temp_new_i64();
+
+        tcg_gen_extu_i32_i64(is_dirty64, is_dirty);
+        tcg_gen_op4i_i64(opc, is_dirty64, val, addr, oi);
+        tcg_temp_free_i64(is_dirty64);
+    }
+#endif
+}
+
 void tcg_gen_qemu_ld_i32(TCGv_i32 val, TCGv addr, TCGArg idx, TCGMemOp memop)
 {
     memop = tcg_canonicalize_memop(memop, 0, 0);
@@ -1915,6 +1960,13 @@ void tcg_gen_qemu_st_i32(TCGv_i32 val, TCGv addr, TCGArg idx, TCGMemOp memop)
 {
     memop = tcg_canonicalize_memop(memop, 0, 1);
     gen_ldst_i32(INDEX_op_qemu_st_i32, val, addr, memop, idx);
+}
+
+void tcg_gen_qemu_stcond_i32(TCGv_i32 is_dirty, TCGv_i32 val, TCGv addr,
+                             TCGArg idx, TCGMemOp memop)
+{
+    memop = tcg_canonicalize_memop(memop, 0, 1) | MO_EXCL;
+    gen_stcond_i32(INDEX_op_qemu_stcond_i32, is_dirty, val, addr, memop, idx);
 }
 
 void tcg_gen_qemu_ld_i64(TCGv_i64 val, TCGv addr, TCGArg idx, TCGMemOp memop)
@@ -1942,4 +1994,17 @@ void tcg_gen_qemu_st_i64(TCGv_i64 val, TCGv addr, TCGArg idx, TCGMemOp memop)
 
     memop = tcg_canonicalize_memop(memop, 1, 1);
     gen_ldst_i64(INDEX_op_qemu_st_i64, val, addr, memop, idx);
+}
+
+void tcg_gen_qemu_stcond_i64(TCGv_i32 is_dirty, TCGv_i64 val, TCGv addr,
+                             TCGArg idx, TCGMemOp memop)
+{
+    if (TCG_TARGET_REG_BITS == 32 && (memop & MO_SIZE) < MO_64) {
+        tcg_gen_qemu_stcond_i32(is_dirty, TCGV_LOW(val), addr, idx,
+                                memop | MO_EXCL);
+        return;
+    }
+
+    memop = tcg_canonicalize_memop(memop, 1, 1) | MO_EXCL;
+    gen_stcond_i64(INDEX_op_qemu_stcond_i64, is_dirty, val, addr, memop, idx);
 }

@@ -754,6 +754,10 @@ void tcg_gen_qemu_st_i32(TCGv_i32, TCGv, TCGArg, TCGMemOp);
 void tcg_gen_qemu_ld_i64(TCGv_i64, TCGv, TCGArg, TCGMemOp);
 void tcg_gen_qemu_st_i64(TCGv_i64, TCGv, TCGArg, TCGMemOp);
 
+/* Exclusive variants */
+void tcg_gen_qemu_stcond_i32(TCGv_i32, TCGv_i32, TCGv, TCGArg, TCGMemOp);
+void tcg_gen_qemu_stcond_i64(TCGv_i32, TCGv_i64, TCGv, TCGArg, TCGMemOp);
+
 static inline void tcg_gen_qemu_ld8u(TCGv ret, TCGv addr, int mem_index)
 {
     tcg_gen_qemu_ld_tl(ret, addr, mem_index, MO_UB);

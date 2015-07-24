@@ -1068,9 +1068,11 @@ void tcg_dump_ops(TCGContext *s)
                 i = 1;
                 break;
             case INDEX_op_qemu_ld_i32:
+            case INDEX_op_qemu_stcond_i32:
             case INDEX_op_qemu_st_i32:
             case INDEX_op_qemu_ld_i64:
             case INDEX_op_qemu_st_i64:
+            case INDEX_op_qemu_stcond_i64:
                 {
                     TCGMemOpIdx oi = args[k++];
                     TCGMemOp op = get_memop(oi);
