@@ -2015,8 +2015,10 @@ static CPAccessResult aa64_zva_access(CPUARMState *env, const ARMCPRegInfo *ri)
 
 extern uint64_t qsim_icount;
 extern bool qsim_gen_callbacks;
+extern bool qsim_sys_callbacks;
 extern magic_cb_t qsim_magic_cb;
 extern bool call_magic_cb;
+extern uint64_t qsim_tpid;
 
 static uint64_t aa64_dczid_read(CPUARMState *env, const ARMCPRegInfo *ri)
 {
@@ -2035,7 +2037,14 @@ static uint64_t aa64_dczid_read(CPUARMState *env, const ARMCPRegInfo *ri)
       if (num_consecutive_dczid_reads == 4) {
         qsim_gen_callbacks = !qsim_gen_callbacks;
 
-        printf("%s callback generation...\n", (qsim_gen_callbacks ? "Enabling" : "Disabling"));
+        if (qsim_gen_callbacks) {
+            qsim_tpid = extract64(env->cp15.contextidr_el1, 0, 32);
+            printf("Enabling callback generation ");
+            if (qsim_sys_callbacks)
+                printf("systemwide.\n");
+            else
+                printf("for pid %ld.\n", qsim_tpid);
+        }
 
         // enable magic callback at next instruction callback
         call_magic_cb = true;
