@@ -1137,6 +1137,28 @@ static void * const qemu_ld_helpers[16] = {
     [MO_BEQ]  = helper_be_ldq_mmu,
 };
 
+/* LoadLink helpers, only unsigned. Use the macro below to access them. */
+static void * const qemu_ldex_helpers[16] = {
+    [MO_UB]   = helper_ret_ldlinkub_mmu,
+
+    [MO_LEUW] = helper_le_ldlinkuw_mmu,
+    [MO_LEUL] = helper_le_ldlinkul_mmu,
+    [MO_LEQ]  = helper_le_ldlinkq_mmu,
+
+    [MO_BEUW] = helper_be_ldlinkuw_mmu,
+    [MO_BEUL] = helper_be_ldlinkul_mmu,
+    [MO_BEQ]  = helper_be_ldlinkq_mmu,
+};
+
+static inline tcg_insn_unit *ld_helper(TCGMemOp opc)
+{
+    if (opc & MO_EXCL) {
+        return qemu_ldex_helpers[((int)opc - MO_EXCL) & (MO_BSWAP | MO_SSIZE)];
+    }
+
+    return qemu_ld_helpers[opc & ~MO_SIGN];
+}
+
 /* helper signature: helper_ret_st_mmu(CPUState *env, target_ulong addr,
  *                                     uintxx_t val, int mmu_idx, uintptr_t ra)
  */
@@ -1149,6 +1171,26 @@ static void * const qemu_st_helpers[16] = {
     [MO_BEUL] = helper_be_stl_mmu,
     [MO_BEQ]  = helper_be_stq_mmu,
 };
+
+/* StoreConditional helpers. Use the macro below to access them. */
+static void * const qemu_stex_helpers[16] = {
+    [MO_UB]   = helper_ret_stcondb_mmu,
+    [MO_LEUW] = helper_le_stcondw_mmu,
+    [MO_LEUL] = helper_le_stcondl_mmu,
+    [MO_LEQ]  = helper_le_stcondq_mmu,
+    [MO_BEUW] = helper_be_stcondw_mmu,
+    [MO_BEUL] = helper_be_stcondl_mmu,
+    [MO_BEQ]  = helper_be_stcondq_mmu,
+};
+
+static inline tcg_insn_unit *st_helper(TCGMemOp opc)
+{
+    if (opc & MO_EXCL) {
+        return qemu_stex_helpers[((int)opc - MO_EXCL) & (MO_BSWAP | MO_SSIZE)];
+    }
+
+    return qemu_st_helpers[opc];
+}
 
 /* Perform the TLB load and compare.
 
@@ -1245,6 +1287,7 @@ static inline void tcg_out_tlb_load(TCGContext *s, TCGReg addrlo, TCGReg addrhi,
  * for a load or store, so that we can later generate the correct helper code
  */
 static void add_qemu_ldst_label(TCGContext *s, bool is_ld, TCGMemOpIdx oi,
+                                TCGReg llsc_success,
                                 TCGReg datalo, TCGReg datahi,
                                 TCGReg addrlo, TCGReg addrhi,
                                 tcg_insn_unit *raddr,
@@ -1253,6 +1296,7 @@ static void add_qemu_ldst_label(TCGContext *s, bool is_ld, TCGMemOpIdx oi,
     TCGLabelQemuLdst *label = new_ldst_label(s);
 
     label->is_ld = is_ld;
+    label->llsc_success = llsc_success;
     label->oi = oi;
     label->datalo_reg = datalo;
     label->datahi_reg = datahi;
@@ -1307,7 +1351,7 @@ static void tcg_out_qemu_ld_slow_path(TCGContext *s, TCGLabelQemuLdst *l)
                      (uintptr_t)l->raddr);
     }
 
-    tcg_out_call(s, qemu_ld_helpers[opc & (MO_BSWAP | MO_SIZE)]);
+    tcg_out_call(s, ld_helper(opc));
 
     data_reg = l->datalo_reg;
     switch (opc & MO_SSIZE) {
@@ -1411,9 +1455,16 @@ static void tcg_out_qemu_st_slow_path(TCGContext *s, TCGLabelQemuLdst *l)
         }
     }
 
-    /* "Tail call" to the helper, with the return address back inline.  */
-    tcg_out_push(s, retaddr);
-    tcg_out_jmp(s, qemu_st_helpers[opc & (MO_BSWAP | MO_SIZE)]);
+    if (opc & MO_EXCL) {
+        tcg_out_call(s, st_helper(opc));
+        /* Save the output of the StoreConditional */
+        tcg_out_mov(s, TCG_TYPE_I32, l->llsc_success, TCG_REG_EAX);
+        tcg_out_jmp(s, l->raddr);
+    } else {
+        /* "Tail call" to the helper, with the return address back inline.  */
+        tcg_out_push(s, retaddr);
+        tcg_out_jmp(s, st_helper(opc));
+    }
 }
 #elif defined(__x86_64__) && defined(__linux__)
 # include <asm/prctl.h>
@@ -1549,14 +1600,34 @@ static void tcg_out_qemu_ld(TCGContext *s, const TCGArg *args, bool is64)
     mem_index = get_mmuidx(oi);
     s_bits = opc & MO_SIZE;
 
-    tcg_out_tlb_load(s, addrlo, addrhi, mem_index, s_bits,
-                     label_ptr, offsetof(CPUTLBEntry, addr_read));
+    if (opc & MO_EXCL) {
+        TCGType t = ((TCG_TARGET_REG_BITS == 64) && (TARGET_LONG_BITS == 64)) ?
+                                                   TCG_TYPE_I64 : TCG_TYPE_I32;
+        /* The JMP address will be patched afterwards,
+         * in tcg_out_qemu_ld_slow_path (two times when
+         * TARGET_LONG_BITS > TCG_TARGET_REG_BITS). */
+        tcg_out_mov(s, t, TCG_REG_L1, addrlo);
 
-    /* TLB Hit.  */
-    tcg_out_qemu_ld_direct(s, datalo, datahi, TCG_REG_L1, 0, 0, opc);
+        if (TARGET_LONG_BITS > TCG_TARGET_REG_BITS) {
+            /* Store the second part of the address. */
+            tcg_out_mov(s, t, TCG_REG_L0, addrhi);
+            /* We add 4 to include the jmp that follows. */
+            label_ptr[1] = s->code_ptr + 4;
+        }
+
+        tcg_out_opc(s, OPC_JMP_long, 0, 0, 0);
+        label_ptr[0] = s->code_ptr;
+        s->code_ptr += 4;
+    } else {
+        tcg_out_tlb_load(s, addrlo, addrhi, mem_index, s_bits,
+                         label_ptr, offsetof(CPUTLBEntry, addr_read));
+
+        /* TLB Hit.  */
+        tcg_out_qemu_ld_direct(s, datalo, datahi, TCG_REG_L1, 0, 0, opc);
+    }
 
     /* Record the current context of a load into ldst label */
-    add_qemu_ldst_label(s, true, oi, datalo, datahi, addrlo, addrhi,
+    add_qemu_ldst_label(s, true, oi, 0, datalo, datahi, addrlo, addrhi,
                         s->code_ptr, label_ptr);
 #else
     {
@@ -1659,9 +1730,10 @@ static void tcg_out_qemu_st_direct(TCGContext *s, TCGReg datalo, TCGReg datahi,
     }
 }
 
-static void tcg_out_qemu_st(TCGContext *s, const TCGArg *args, bool is64)
+static void tcg_out_qemu_st(TCGContext *s, const TCGArg *args, bool is64,
+                            bool isStoreCond)
 {
-    TCGReg datalo, datahi, addrlo;
+    TCGReg datalo, datahi, addrlo, llsc_success;
     TCGReg addrhi __attribute__((unused));
     TCGMemOpIdx oi;
     TCGMemOp opc;
@@ -1670,6 +1742,9 @@ static void tcg_out_qemu_st(TCGContext *s, const TCGArg *args, bool is64)
     TCGMemOp s_bits;
     tcg_insn_unit *label_ptr[2];
 #endif
+
+    /* The stcond variant has one more param */
+    llsc_success = (isStoreCond ? *args++ : 0);
 
     datalo = *args++;
     datahi = (TCG_TARGET_REG_BITS == 32 && is64 ? *args++ : 0);
@@ -1682,15 +1757,35 @@ static void tcg_out_qemu_st(TCGContext *s, const TCGArg *args, bool is64)
     mem_index = get_mmuidx(oi);
     s_bits = opc & MO_SIZE;
 
-    tcg_out_tlb_load(s, addrlo, addrhi, mem_index, s_bits,
-                     label_ptr, offsetof(CPUTLBEntry, addr_write));
+    if (opc & MO_EXCL) {
+        TCGType t = ((TCG_TARGET_REG_BITS == 64) && (TARGET_LONG_BITS == 64)) ?
+                                                   TCG_TYPE_I64 : TCG_TYPE_I32;
+        /* The JMP address will be filled afterwards,
+         * in tcg_out_qemu_ld_slow_path (two times when
+         * TARGET_LONG_BITS > TCG_TARGET_REG_BITS). */
+        tcg_out_mov(s, t, TCG_REG_L1, addrlo);
 
-    /* TLB Hit.  */
-    tcg_out_qemu_st_direct(s, datalo, datahi, TCG_REG_L1, 0, 0, opc);
+        if (TARGET_LONG_BITS > TCG_TARGET_REG_BITS) {
+            /* Store the second part of the address. */
+            tcg_out_mov(s, t, TCG_REG_L0, addrhi);
+            /* We add 4 to include the jmp that follows. */
+            label_ptr[1] = s->code_ptr + 4;
+        }
+
+        tcg_out_opc(s, OPC_JMP_long, 0, 0, 0);
+        label_ptr[0] = s->code_ptr;
+        s->code_ptr += 4;
+    } else {
+        tcg_out_tlb_load(s, addrlo, addrhi, mem_index, s_bits,
+                         label_ptr, offsetof(CPUTLBEntry, addr_write));
+
+        /* TLB Hit.  */
+        tcg_out_qemu_st_direct(s, datalo, datahi, TCG_REG_L1, 0, 0, opc);
+    }
 
     /* Record the current context of a store into ldst label */
-    add_qemu_ldst_label(s, false, oi, datalo, datahi, addrlo, addrhi,
-                        s->code_ptr, label_ptr);
+    add_qemu_ldst_label(s, false, oi, llsc_success, datalo, datahi, addrlo,
+                        addrhi, s->code_ptr, label_ptr);
 #else
     {
         int32_t offset = GUEST_BASE;
@@ -1957,10 +2052,16 @@ static inline void tcg_out_op(TCGContext *s, TCGOpcode opc,
         tcg_out_qemu_ld(s, args, 1);
         break;
     case INDEX_op_qemu_st_i32:
-        tcg_out_qemu_st(s, args, 0);
+        tcg_out_qemu_st(s, args, 0, 0);
+        break;
+    case INDEX_op_qemu_stcond_i32:
+        tcg_out_qemu_st(s, args, 0, 1);
         break;
     case INDEX_op_qemu_st_i64:
-        tcg_out_qemu_st(s, args, 1);
+        tcg_out_qemu_st(s, args, 1, 0);
+        break;
+    case INDEX_op_qemu_stcond_i64:
+        tcg_out_qemu_st(s, args, 1, 1);
         break;
 
     OP_32_64(mulu2):
@@ -2182,19 +2283,28 @@ static const TCGTargetOpDef x86_op_defs[] = {
 
 #if TCG_TARGET_REG_BITS == 64
     { INDEX_op_qemu_ld_i32, { "r", "L" } },
+    { INDEX_op_qemu_ldlink_i32, { "r", "L" } },
     { INDEX_op_qemu_st_i32, { "L", "L" } },
+    { INDEX_op_qemu_stcond_i32, { "r", "L", "L" } },
     { INDEX_op_qemu_ld_i64, { "r", "L" } },
     { INDEX_op_qemu_st_i64, { "L", "L" } },
+    { INDEX_op_qemu_stcond_i64, { "r", "L", "L" } },
 #elif TARGET_LONG_BITS <= TCG_TARGET_REG_BITS
     { INDEX_op_qemu_ld_i32, { "r", "L" } },
+    { INDEX_op_qemu_ldlink_i32, { "r", "L" } },
     { INDEX_op_qemu_st_i32, { "L", "L" } },
+    { INDEX_op_qemu_stcond_i32, { "r", "L", "L" } },
     { INDEX_op_qemu_ld_i64, { "r", "r", "L" } },
     { INDEX_op_qemu_st_i64, { "L", "L", "L" } },
+    { INDEX_op_qemu_stcond_i64, { "r", "L", "L", "L" } },
 #else
     { INDEX_op_qemu_ld_i32, { "r", "L", "L" } },
+    { INDEX_op_qemu_ldlink_i32, { "r", "L", "L" } },
     { INDEX_op_qemu_st_i32, { "L", "L", "L" } },
+    { INDEX_op_qemu_stcond_i32, { "r", "L", "L", "L" } },
     { INDEX_op_qemu_ld_i64, { "r", "r", "L", "L" } },
     { INDEX_op_qemu_st_i64, { "L", "L", "L", "L" } },
+    { INDEX_op_qemu_stcond_i64, { "r", "L", "L", "L", "L" } },
 #endif
     { -1 },
 };
