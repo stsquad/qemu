@@ -961,6 +961,9 @@ static inline void memop_callback(CPUARMState *env, uint64_t addr, uint32_t size
 		return;
     else {
         uint8_t *buf = NULL;
+        ARMCPU* cpu = arm_env_get_cpu(env);
+        CPUState* cs = CPU(cpu);
+        qsim_id = cs->cpu_index;
         buf = get_host_vaddr(env, addr, size);
         if (buf)
             qsim_mem_cb(qsim_id, addr, (uint64_t)buf, size, type);
