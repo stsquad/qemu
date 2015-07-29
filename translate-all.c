@@ -956,7 +956,7 @@ void tb_phys_invalidate(TranslationBlock *tb, tb_page_addr_t page_addr)
 
     /* suppress any remaining jumps to this TB */
     tb1 = tb->jmp_first;
-    for (;;) {
+    for (;tb1;) {
         n1 = (uintptr_t)tb1 & 3;
         if (n1 == 2) {
             break;
