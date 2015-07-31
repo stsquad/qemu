@@ -1717,10 +1717,16 @@ void qemu_devices_reset(void)
 {
     QEMUResetEntry *re, *nre;
 
+    /*
+     * Some device's reset needs to grab the global_mutex. So just release it
+     * here.
+     */
+    qemu_mutex_unlock_iothread();
     /* reset all devices */
     QTAILQ_FOREACH_SAFE(re, &reset_handlers, entry, nre) {
         re->func(re->opaque);
     }
+    qemu_mutex_lock_iothread();
 }
 
 void qemu_system_reset(bool report)
