@@ -1069,6 +1069,42 @@ static void * const qemu_ld_helpers[16] = {
     [MO_BESL] = helper_be_ldul_mmu,
 };
 
+/* LoadLink helpers, only unsigned. Use the macro below to access them. */
+static void * const qemu_ldex_helpers[16] = {
+    [MO_UB]   = helper_ret_ldlinkub_mmu,
+
+    [MO_LEUW] = helper_le_ldlinkuw_mmu,
+    [MO_LEUL] = helper_le_ldlinkul_mmu,
+    [MO_LEQ]  = helper_le_ldlinkq_mmu,
+
+    [MO_BEUW] = helper_be_ldlinkuw_mmu,
+    [MO_BEUL] = helper_be_ldlinkul_mmu,
+    [MO_BEQ]  = helper_be_ldlinkq_mmu,
+};
+
+static inline tcg_insn_unit *ld_helper(TCGMemOp *opc)
+{
+    if (*opc & MO_EXCL) {
+        /* No signed-extended exclusive variants for ARM. */
+        assert(!(*opc & MO_SIGN));
+
+        return qemu_ldex_helpers[((int)*opc - MO_EXCL) & (MO_BSWAP | MO_SSIZE)];
+    } else {
+        /* For armv6 we can use the canonical unsigned helpers and minimize
+           icache usage.  For pre-armv6, use the signed helpers since we do
+           not have a single insn sign-extend.  */
+        if (!use_armv6_instructions) {
+            if (*opc & MO_SIGN) {
+                *opc = MO_UL;
+            }
+
+            return qemu_ld_helpers[*opc & (MO_BSWAP | MO_SSIZE)];
+        }
+    }
+
+    return qemu_ld_helpers[*opc & (MO_BSWAP | MO_SIZE)];
+}
+
 /* helper signature: helper_ret_st_mmu(CPUState *env, target_ulong addr,
  *                                     uintxx_t val, int mmu_idx, uintptr_t ra)
  */
@@ -1081,6 +1117,26 @@ static void * const qemu_st_helpers[16] = {
     [MO_BEUL] = helper_be_stl_mmu,
     [MO_BEQ]  = helper_be_stq_mmu,
 };
+
+/* StoreConditional helpers. Use the macro below to access them. */
+static void * const qemu_stex_helpers[16] = {
+    [MO_UB]   = helper_ret_stcondb_mmu,
+    [MO_LEUW] = helper_le_stcondw_mmu,
+    [MO_LEUL] = helper_le_stcondl_mmu,
+    [MO_LEQ]  = helper_le_stcondq_mmu,
+    [MO_BEUW] = helper_be_stcondw_mmu,
+    [MO_BEUL] = helper_be_stcondl_mmu,
+    [MO_BEQ]  = helper_be_stcondq_mmu,
+};
+
+static inline tcg_insn_unit *st_helper(TCGMemOp *opc)
+{
+    if (*opc & MO_EXCL) {
+        return qemu_stex_helpers[((int)*opc - MO_EXCL) & (MO_BSWAP | MO_SSIZE)];
+    }
+
+    return qemu_st_helpers[*opc & (MO_BSWAP | MO_SIZE)];
+}
 
 /* Helper routines for marshalling helper function arguments into
  * the correct registers and stack.
@@ -1222,13 +1278,14 @@ static TCGReg tcg_out_tlb_read(TCGContext *s, TCGReg addrlo, TCGReg addrhi,
    path for a load or store, so that we can later generate the correct
    helper code.  */
 static void add_qemu_ldst_label(TCGContext *s, bool is_ld, TCGMemOpIdx oi,
-                                TCGReg datalo, TCGReg datahi, TCGReg addrlo,
-                                TCGReg addrhi, tcg_insn_unit *raddr,
-                                tcg_insn_unit *label_ptr)
+                                TCGReg llsc_success, TCGReg datalo,
+                                TCGReg datahi, TCGReg addrlo, TCGReg addrhi,
+                                tcg_insn_unit *raddr, tcg_insn_unit *label_ptr)
 {
     TCGLabelQemuLdst *label = new_ldst_label(s);
 
     label->is_ld = is_ld;
+    label->llsc_success = llsc_success;
     label->oi = oi;
     label->datalo_reg = datalo;
     label->datahi_reg = datahi;
@@ -1256,17 +1313,7 @@ static void tcg_out_qemu_ld_slow_path(TCGContext *s, TCGLabelQemuLdst *lb)
     argreg = tcg_out_arg_imm32(s, argreg, oi);
     argreg = tcg_out_arg_reg32(s, argreg, TCG_REG_R14);
 
-    /* For armv6 we can use the canonical unsigned helpers and minimize
-       icache usage.  For pre-armv6, use the signed helpers since we do
-       not have a single insn sign-extend.  */
-    if (use_armv6_instructions) {
-        func = qemu_ld_helpers[opc & (MO_BSWAP | MO_SIZE)];
-    } else {
-        func = qemu_ld_helpers[opc & (MO_BSWAP | MO_SSIZE)];
-        if (opc & MO_SIGN) {
-            opc = MO_UL;
-        }
-    }
+    func = ld_helper(&opc);
     tcg_out_call(s, func);
 
     datalo = lb->datalo_reg;
@@ -1336,8 +1383,15 @@ static void tcg_out_qemu_st_slow_path(TCGContext *s, TCGLabelQemuLdst *lb)
     argreg = tcg_out_arg_imm32(s, argreg, oi);
     argreg = tcg_out_arg_reg32(s, argreg, TCG_REG_R14);
 
-    /* Tail-call to the helper, which will return to the fast path.  */
-    tcg_out_goto(s, COND_AL, qemu_st_helpers[opc & (MO_BSWAP | MO_SIZE)]);
+    if (opc & MO_EXCL) {
+        tcg_out_call(s, st_helper(&opc));
+        /* Save the output of the StoreConditional */
+        tcg_out_mov_reg(s, COND_AL, lb->llsc_success, TCG_REG_R0);
+        tcg_out_goto(s, COND_AL, lb->raddr);
+    } else {
+        /* Tail-call to the helper, which will return to the fast path.  */
+        tcg_out_goto(s, COND_AL, st_helper(&opc));
+    }
 }
 #endif /* SOFTMMU */
 
@@ -1468,7 +1522,6 @@ static void tcg_out_qemu_ld(TCGContext *s, const TCGArg *args, bool is64)
     TCGMemOp opc;
 #ifdef CONFIG_SOFTMMU
     int mem_index;
-    TCGReg addend;
     tcg_insn_unit *label_ptr;
 #endif
 
@@ -1481,16 +1534,26 @@ static void tcg_out_qemu_ld(TCGContext *s, const TCGArg *args, bool is64)
 
 #ifdef CONFIG_SOFTMMU
     mem_index = get_mmuidx(oi);
-    addend = tcg_out_tlb_read(s, addrlo, addrhi, opc & MO_SIZE, mem_index, 1);
 
     /* This a conditional BL only to load a pointer within this opcode into LR
-       for the slow path.  We will not be using the value for a tail call.  */
-    label_ptr = s->code_ptr;
-    tcg_out_bl_noaddr(s, COND_NE);
+       for the slow path.  We will not be using the value for a tail call.
+       In the context of a LoadLink instruction, we don't check the TLB but we
+       always follow the slow path.  */
+    if (opc & MO_EXCL) {
+        label_ptr = s->code_ptr;
+        tcg_out_bl_noaddr(s, COND_AL);
+    } else {
+        TCGReg addend;
 
-    tcg_out_qemu_ld_index(s, opc, datalo, datahi, addrlo, addend);
+        addend = tcg_out_tlb_read(s, addrlo, addrhi, opc & MO_SIZE,
+                                  mem_index, 1);
+        label_ptr = s->code_ptr;
+        tcg_out_bl_noaddr(s, COND_NE);
 
-    add_qemu_ldst_label(s, true, oi, datalo, datahi, addrlo, addrhi,
+        tcg_out_qemu_ld_index(s, opc, datalo, datahi, addrlo, addend);
+    }
+
+    add_qemu_ldst_label(s, true, oi, 0, datalo, datahi, addrlo, addrhi,
                         s->code_ptr, label_ptr);
 #else /* !CONFIG_SOFTMMU */
     if (GUEST_BASE) {
@@ -1592,15 +1655,20 @@ static inline void tcg_out_qemu_st_direct(TCGContext *s, TCGMemOp opc,
     }
 }
 
-static void tcg_out_qemu_st(TCGContext *s, const TCGArg *args, bool is64)
+static void tcg_out_qemu_st(TCGContext *s, const TCGArg *args, bool is64,
+                            bool isStoreCond)
 {
     TCGReg addrlo, datalo, datahi, addrhi __attribute__((unused));
     TCGMemOpIdx oi;
     TCGMemOp opc;
 #ifdef CONFIG_SOFTMMU
+    TCGReg llsc_success;
     int mem_index;
     TCGReg addend;
     tcg_insn_unit *label_ptr;
+
+    /* The stcond variant has one more param */
+    llsc_success = (isStoreCond ? *args++ : 0);
 #endif
 
     datalo = *args++;
@@ -1612,16 +1680,24 @@ static void tcg_out_qemu_st(TCGContext *s, const TCGArg *args, bool is64)
 
 #ifdef CONFIG_SOFTMMU
     mem_index = get_mmuidx(oi);
-    addend = tcg_out_tlb_read(s, addrlo, addrhi, opc & MO_SIZE, mem_index, 0);
 
-    tcg_out_qemu_st_index(s, COND_EQ, opc, datalo, datahi, addrlo, addend);
+    if (isStoreCond) {
+        /* Always follow the slow-path for an exclusive access */
+        label_ptr = s->code_ptr;
+        tcg_out_bl_noaddr(s, COND_AL);
+    } else {
+        addend = tcg_out_tlb_read(s, addrlo, addrhi, opc & MO_SIZE,
+                                  mem_index, 0);
 
-    /* The conditional call must come last, as we're going to return here.  */
-    label_ptr = s->code_ptr;
-    tcg_out_bl_noaddr(s, COND_NE);
+        tcg_out_qemu_st_index(s, COND_EQ, opc, datalo, datahi, addrlo, addend);
 
-    add_qemu_ldst_label(s, false, oi, datalo, datahi, addrlo, addrhi,
-                        s->code_ptr, label_ptr);
+        /* The conditional call must come last, as we're going to return here.*/
+        label_ptr = s->code_ptr;
+        tcg_out_bl_noaddr(s, COND_NE);
+    }
+
+    add_qemu_ldst_label(s, false, oi, llsc_success, datalo, datahi, addrlo,
+                        addrhi, s->code_ptr, label_ptr);
 #else /* !CONFIG_SOFTMMU */
     if (GUEST_BASE) {
         tcg_out_movi(s, TCG_TYPE_PTR, TCG_REG_TMP, GUEST_BASE);
@@ -1870,10 +1946,16 @@ static inline void tcg_out_op(TCGContext *s, TCGOpcode opc,
         tcg_out_qemu_ld(s, args, 1);
         break;
     case INDEX_op_qemu_st_i32:
-        tcg_out_qemu_st(s, args, 0);
+        tcg_out_qemu_st(s, args, 0, 0);
+        break;
+    case INDEX_op_qemu_stcond_i32:
+        tcg_out_qemu_st(s, args, 0, 1); /* StoreConditional */
         break;
     case INDEX_op_qemu_st_i64:
-        tcg_out_qemu_st(s, args, 1);
+        tcg_out_qemu_st(s, args, 1, 0);
+        break;
+    case INDEX_op_qemu_stcond_i64:
+        tcg_out_qemu_st(s, args, 1, 1); /* StoreConditional */
         break;
 
     case INDEX_op_bswap16_i32:
@@ -1959,12 +2041,16 @@ static const TCGTargetOpDef arm_op_defs[] = {
     { INDEX_op_qemu_ld_i32, { "r", "l" } },
     { INDEX_op_qemu_ld_i64, { "r", "r", "l" } },
     { INDEX_op_qemu_st_i32, { "s", "s" } },
+    { INDEX_op_qemu_stcond_i32, { "r", "s", "s" } },
     { INDEX_op_qemu_st_i64, { "s", "s", "s" } },
+    { INDEX_op_qemu_stcond_i64, { "r", "s", "s", "s" } },
 #else
     { INDEX_op_qemu_ld_i32, { "r", "l", "l" } },
     { INDEX_op_qemu_ld_i64, { "r", "r", "l", "l" } },
     { INDEX_op_qemu_st_i32, { "s", "s", "s" } },
+    { INDEX_op_qemu_stcond_i32, { "r", "s", "s", "s" } },
     { INDEX_op_qemu_st_i64, { "s", "s", "s", "s" } },
+    { INDEX_op_qemu_stcond_i64, { "r", "s", "s", "s", "s" } },
 #endif
 
     { INDEX_op_bswap16_i32, { "r", "r" } },
