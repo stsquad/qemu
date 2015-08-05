@@ -415,6 +415,8 @@ static inline void lookup_and_reset_cpus_ll_addr(hwaddr addr, hwaddr size)
 
 #define MMUSUFFIX _mmu
 
+/* Generates LoadLink/StoreConditional helpers in softmmu_template.h */
+#define GEN_EXCLUSIVE_HELPERS
 #define SHIFT 0
 #include "softmmu_template.h"
 
@@ -427,6 +429,7 @@ static inline void lookup_and_reset_cpus_ll_addr(hwaddr addr, hwaddr size)
 #define SHIFT 3
 #include "softmmu_template.h"
 #undef MMUSUFFIX
+#undef GEN_EXCLUSIVE_HELPERS
 
 #define MMUSUFFIX _cmmu
 #undef GETPC_ADJ

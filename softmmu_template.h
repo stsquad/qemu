@@ -640,6 +640,18 @@ void probe_write(CPUArchState *env, target_ulong addr, int mmu_idx,
 #endif
 #endif /* !defined(SOFTMMU_CODE_ACCESS) */
 
+#ifdef GEN_EXCLUSIVE_HELPERS
+
+#if DATA_SIZE > 1 /* The 8-bit helpers are generate along with LE helpers */
+#define BIGENDIAN_EXCLUSIVE_HELPERS
+#include "softmmu_llsc_template.h"
+#undef BIGENDIAN_EXCLUSIVE_HELPERS
+#endif
+
+#include "softmmu_llsc_template.h"
+
+#endif /* !defined(GEN_EXCLUSIVE_HELPERS) */
+
 #undef READ_ACCESS_TYPE
 #undef SHIFT
 #undef DATA_TYPE
