@@ -29,11 +29,13 @@ static void raise_exception(CPUARMState *env, uint32_t excp,
                             uint32_t syndrome, uint32_t target_el)
 {
     CPUState *cs = CPU(arm_env_get_cpu(env));
+    CPUClass *cc = CPU_GET_CLASS(cs);
 
     assert(!excp_is_internal(excp));
     cs->exception_index = excp;
     env->exception.syndrome = syndrome;
     env->exception.target_el = target_el;
+    cc->cpu_reset_excl_context(cs);
     cpu_loop_exit(cs);
 }
 
@@ -49,6 +51,14 @@ static int exception_target_el(CPUARMState *env)
     }
 
     return target_el;
+}
+
+void HELPER(atomic_clear)(CPUARMState *env)
+{
+    CPUState *cs = ENV_GET_CPU(env);
+    CPUClass *cc = CPU_GET_CLASS(cs);
+
+    cc->cpu_reset_excl_context(cs);
 }
 
 uint32_t HELPER(neon_tbl)(CPUARMState *env, uint32_t ireg, uint32_t def,
@@ -854,6 +864,8 @@ static int el_from_spsr(uint32_t spsr)
 
 void HELPER(exception_return)(CPUARMState *env)
 {
+    CPUState *cs = ENV_GET_CPU(env);
+    CPUClass *cc = CPU_GET_CLASS(cs);
     int cur_el = arm_current_el(env);
     unsigned int spsr_idx = aarch64_banked_spsr_index(cur_el);
     uint32_t spsr = env->banked_spsr[spsr_idx];
@@ -862,7 +874,7 @@ void HELPER(exception_return)(CPUARMState *env)
 
     aarch64_save_sp(env, cur_el);
 
-    env->exclusive_addr = -1;
+    cc->cpu_reset_excl_context(cs);
 
     /* We must squash the PSTATE.SS bit to zero unless both of the
      * following hold:

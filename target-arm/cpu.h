@@ -462,6 +462,9 @@ typedef struct CPUARMState {
         float_status fp_status;
         float_status standard_fp_status;
     } vfp;
+    /* Even if we don't use these values anymore, we still keep them for
+     * retro-compatibility in case of migration toward QEMU versions without
+     * the LoadLink/StoreExclusive backend. */
     uint64_t exclusive_addr;
     uint64_t exclusive_val;
     uint64_t exclusive_high;

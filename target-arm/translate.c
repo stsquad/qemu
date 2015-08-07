@@ -61,6 +61,7 @@ TCGv_env cpu_env;
 static TCGv_i64 cpu_V0, cpu_V1, cpu_M0;
 static TCGv_i32 cpu_R[16];
 TCGv_i32 cpu_CF, cpu_NF, cpu_VF, cpu_ZF;
+/* The following two variables are still used by the aarch64 front-end */
 TCGv_i64 cpu_exclusive_addr;
 TCGv_i64 cpu_exclusive_val;
 #ifdef CONFIG_USER_ONLY
@@ -7678,57 +7679,139 @@ static void gen_logicq_cc(TCGv_i32 lo, TCGv_i32 hi)
     tcg_gen_or_i32(cpu_ZF, lo, hi);
 }
 
-/* Load/Store exclusive instructions are implemented by remembering
-   the value/address loaded, and seeing if these are the same
-   when the store is performed. This should be sufficient to implement
-   the architecturally mandated semantics, and avoids having to monitor
-   regular stores.
+/* If the softmmu is enabled, the translation of Load/Store exclusive
+   instructions will rely on the gen_helper_{ldlink,stcond} helpers,
+   offloading most of the work to the softmmu_llsc_template.h functions.
+   All the accesses made by the exclusive instructions include an
+   alignment check.
 
-   In system emulation mode only one CPU will be running at once, so
-   this sequence is effectively atomic.  In user emulation mode we
-   throw an exception and handle the atomic operation elsewhere.  */
+   In user emulation mode we throw an exception and handle the atomic
+   operation elsewhere.  */
+
+#if TARGET_LONG_BITS == 32
+#define DO_GEN_LDREX(SUFF)                                             \
+static inline void gen_ldrex_##SUFF(TCGv_i32 dst, TCGv_i32 addr,       \
+                                    TCGv_i32 index)                    \
+{                                                                      \
+    gen_helper_ldlink_##SUFF(dst, cpu_env, addr, index);               \
+}
+
+#define DO_GEN_STREX(SUFF)                                             \
+static inline void gen_strex_##SUFF(TCGv_i32 dst, TCGv_i32 addr,       \
+                                    TCGv_i32 val, TCGv_i32 index)      \
+{                                                                      \
+    gen_helper_stcond_##SUFF(dst, cpu_env, addr, val, index);          \
+}
+
+static inline void gen_ldrex_i64a(TCGv_i64 dst, TCGv_i32 addr, TCGv_i32 index)
+{
+    gen_helper_ldlink_i64a(dst, cpu_env, addr, index);
+}
+
+static inline void gen_strex_i64a(TCGv_i32 dst, TCGv_i32 addr, TCGv_i64 val,
+                                  TCGv_i32 index)
+{
+
+    gen_helper_stcond_i64a(dst, cpu_env, addr, val, index);
+}
+#else
+#define DO_GEN_LDREX(SUFF)                                             \
+static inline void gen_ldrex_##SUFF(TCGv_i32 dst, TCGv_i32 addr,       \
+                                         TCGv_i32 index)               \
+{                                                                      \
+    TCGv addr64 = tcg_temp_new();                                      \
+    tcg_gen_extu_i32_i64(addr64, addr);                                \
+    gen_helper_ldlink_##SUFF(dst, cpu_env, addr64, index);             \
+    tcg_temp_free(addr64);                                             \
+}
+
+#define DO_GEN_STREX(SUFF)                                             \
+static inline void gen_strex_##SUFF(TCGv_i32 dst, TCGv_i32 addr,       \
+                                    TCGv_i32 val, TCGv_i32 index)      \
+{                                                                      \
+    TCGv addr64 = tcg_temp_new();                                      \
+    TCGv dst64 = tcg_temp_new();                                       \
+    tcg_gen_extu_i32_i64(addr64, addr);                                \
+    gen_helper_stcond_##SUFF(dst64, cpu_env, addr64, val, index);      \
+    tcg_gen_extrl_i64_i32(dst, dst64);                                 \
+    tcg_temp_free(dst64);                                              \
+    tcg_temp_free(addr64);                                             \
+}
+
+static inline void gen_ldrex_i64a(TCGv_i64 dst, TCGv_i32 addr, TCGv_i32 index)
+{
+    TCGv addr64 = tcg_temp_new();
+    tcg_gen_extu_i32_i64(addr64, addr);
+    gen_helper_ldlink_i64a(dst, cpu_env, addr64, index);
+    tcg_temp_free(addr64);
+}
+
+static inline void gen_strex_i64a(TCGv_i32 dst, TCGv_i32 addr, TCGv_i64 val,
+                                  TCGv_i32 index)
+{
+    TCGv addr64 = tcg_temp_new();
+    TCGv dst64 = tcg_temp_new();
+
+    tcg_gen_extu_i32_i64(addr64, addr);
+    gen_helper_stcond_i64a(dst64, cpu_env, addr64, val, index);
+    tcg_gen_extrl_i64_i32(dst, dst64);
+
+    tcg_temp_free(dst64);
+    tcg_temp_free(addr64);
+}
+#endif
+
+DO_GEN_LDREX(i8)
+DO_GEN_LDREX(i16a)
+DO_GEN_LDREX(i32a)
+
+DO_GEN_STREX(i8)
+DO_GEN_STREX(i16a)
+DO_GEN_STREX(i32a)
+
 static void gen_load_exclusive(DisasContext *s, int rt, int rt2,
                                TCGv_i32 addr, int size)
 {
     TCGv_i32 tmp = tcg_temp_new_i32();
+    TCGv_i32 mem_idx = tcg_temp_new_i32();
 
-    s->is_ldex = true;
+    tcg_gen_movi_i32(mem_idx, get_mem_index(s));
 
-    switch (size) {
-    case 0:
-        gen_aa32_ld8u(s, tmp, addr, get_mem_index(s));
-        break;
-    case 1:
-        gen_aa32_ld16ua(s, tmp, addr, get_mem_index(s));
-        break;
-    case 2:
-    case 3:
-        gen_aa32_ld32ua(s, tmp, addr, get_mem_index(s));
-        break;
-    default:
-        abort();
-    }
+    if (size != 3) {
+        switch (size) {
+        case 0:
+            gen_ldrex_i8(tmp, addr, mem_idx);
+            break;
+        case 1:
+            gen_ldrex_i16a(tmp, addr, mem_idx);
+            break;
+        case 2:
+            gen_ldrex_i32a(tmp, addr, mem_idx);
+            break;
+        default:
+            abort();
+        }
 
-    if (size == 3) {
-        TCGv_i32 tmp2 = tcg_temp_new_i32();
-        TCGv_i32 tmp3 = tcg_temp_new_i32();
-
-        tcg_gen_addi_i32(tmp2, addr, 4);
-        gen_aa32_ld32u(s, tmp3, tmp2, get_mem_index(s));
-        tcg_temp_free_i32(tmp2);
-        tcg_gen_concat_i32_i64(cpu_exclusive_val, tmp, tmp3);
-        store_reg(s, rt2, tmp3);
+        store_reg(s, rt, tmp);
     } else {
-        tcg_gen_extu_i32_i64(cpu_exclusive_val, tmp);
+        TCGv_i64 tmp64 = tcg_temp_new_i64();
+        TCGv_i32 tmph = tcg_temp_new_i32();
+
+        gen_ldrex_i64a(tmp64, addr, mem_idx);
+        tcg_gen_extr_i64_i32(tmp, tmph, tmp64);
+
+        store_reg(s, rt, tmp);
+        store_reg(s, rt2, tmph);
+
+        tcg_temp_free_i64(tmp64);
     }
 
-    store_reg(s, rt, tmp);
-    tcg_gen_extu_i32_i64(cpu_exclusive_addr, addr);
+    tcg_temp_free_i32(mem_idx);
 }
 
 static void gen_clrex(DisasContext *s)
 {
-    tcg_gen_movi_i64(cpu_exclusive_addr, -1);
+    gen_helper_atomic_clear(cpu_env);
 }
 
 #ifdef CONFIG_USER_ONLY
@@ -7744,85 +7827,42 @@ static void gen_store_exclusive(DisasContext *s, int rd, int rt, int rt2,
 static void gen_store_exclusive(DisasContext *s, int rd, int rt, int rt2,
                                 TCGv_i32 addr, int size)
 {
-    TCGv_i32 tmp;
-    TCGv_i64 val64, extaddr;
-    TCGLabel *done_label;
-    TCGLabel *fail_label;
+    TCGv_i32 tmp, mem_idx;
 
-    /* if (env->exclusive_addr == addr && env->exclusive_val == [addr]) {
-         [addr] = {Rt};
-         {Rd} = 0;
-       } else {
-         {Rd} = 1;
-       } */
-    fail_label = gen_new_label();
-    done_label = gen_new_label();
-    extaddr = tcg_temp_new_i64();
-    tcg_gen_extu_i32_i64(extaddr, addr);
-    tcg_gen_brcond_i64(TCG_COND_NE, extaddr, cpu_exclusive_addr, fail_label);
-    tcg_temp_free_i64(extaddr);
+    mem_idx = tcg_temp_new_i32();
 
-    tmp = tcg_temp_new_i32();
-    switch (size) {
-    case 0:
-        gen_aa32_ld8u(s, tmp, addr, get_mem_index(s));
-        break;
-    case 1:
-        gen_aa32_ld16u(s, tmp, addr, get_mem_index(s));
-        break;
-    case 2:
-    case 3:
-        gen_aa32_ld32u(s, tmp, addr, get_mem_index(s));
-        break;
-    default:
-        abort();
-    }
-
-    val64 = tcg_temp_new_i64();
-    if (size == 3) {
-        TCGv_i32 tmp2 = tcg_temp_new_i32();
-        TCGv_i32 tmp3 = tcg_temp_new_i32();
-        tcg_gen_addi_i32(tmp2, addr, 4);
-        gen_aa32_ld32u(s, tmp3, tmp2, get_mem_index(s));
-        tcg_temp_free_i32(tmp2);
-        tcg_gen_concat_i32_i64(val64, tmp, tmp3);
-        tcg_temp_free_i32(tmp3);
-    } else {
-        tcg_gen_extu_i32_i64(val64, tmp);
-    }
-    tcg_temp_free_i32(tmp);
-
-    tcg_gen_brcond_i64(TCG_COND_NE, val64, cpu_exclusive_val, fail_label);
-    tcg_temp_free_i64(val64);
-
+    tcg_gen_movi_i32(mem_idx, get_mem_index(s));
     tmp = load_reg(s, rt);
-    switch (size) {
-    case 0:
-        gen_aa32_st8(s, tmp, addr, get_mem_index(s));
-        break;
-    case 1:
-        gen_aa32_st16(s, tmp, addr, get_mem_index(s));
-        break;
-    case 2:
-    case 3:
-        gen_aa32_st32(s, tmp, addr, get_mem_index(s));
-        break;
-    default:
-        abort();
+
+    if (size != 3) {
+        switch (size) {
+        case 0:
+            gen_strex_i8(cpu_R[rd], addr, tmp, mem_idx);
+            break;
+        case 1:
+            gen_strex_i16a(cpu_R[rd], addr, tmp, mem_idx);
+            break;
+        case 2:
+            gen_strex_i32a(cpu_R[rd], addr, tmp, mem_idx);
+            break;
+        default:
+            abort();
+        }
+    } else {
+        TCGv_i64 tmp64;
+        TCGv_i32 tmp2;
+
+        tmp64 = tcg_temp_new_i64();
+        tmp2 = load_reg(s, rt2);
+        tcg_gen_concat_i32_i64(tmp64, tmp, tmp2);
+        gen_strex_i64a(cpu_R[rd], addr, tmp64, mem_idx);
+
+        tcg_temp_free_i32(tmp2);
+        tcg_temp_free_i64(tmp64);
     }
+
     tcg_temp_free_i32(tmp);
-    if (size == 3) {
-        tcg_gen_addi_i32(addr, addr, 4);
-        tmp = load_reg(s, rt2);
-        gen_aa32_st32(s, tmp, addr, get_mem_index(s));
-        tcg_temp_free_i32(tmp);
-    }
-    tcg_gen_movi_i32(cpu_R[rd], 0);
-    tcg_gen_br(done_label);
-    gen_set_label(fail_label);
-    tcg_gen_movi_i32(cpu_R[rd], 1);
-    gen_set_label(done_label);
-    tcg_gen_movi_i64(cpu_exclusive_addr, -1);
+    tcg_temp_free_i32(mem_idx);
 }
 #endif
 

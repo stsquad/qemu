@@ -201,6 +201,7 @@ static const VMStateInfo vmstate_cpsr = {
 static void cpu_pre_save(void *opaque)
 {
     ARMCPU *cpu = opaque;
+    CPUARMState *env = &cpu->env;
 
     if (kvm_enabled()) {
         if (!write_kvmstate_to_list(cpu)) {
@@ -219,6 +220,12 @@ static void cpu_pre_save(void *opaque)
            cpu->cpreg_array_len * sizeof(uint64_t));
     memcpy(cpu->cpreg_vmstate_values, cpu->cpreg_values,
            cpu->cpreg_array_len * sizeof(uint64_t));
+
+    /* Ensure to fail the next STREX for versions of QEMU with the
+     * old backend. */
+    env->exclusive_addr = -1;
+    env->exclusive_val = -1;
+    env->exclusive_high = -1;
 }
 
 static int cpu_post_load(void *opaque, int version_id)
