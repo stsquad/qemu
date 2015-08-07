@@ -65,8 +65,12 @@ TCGv_ptr cpu_env;
 static TCGv_i64 cpu_V0, cpu_V1, cpu_M0;
 static TCGv_i32 cpu_R[16];
 static TCGv_i32 cpu_CF, cpu_NF, cpu_VF, cpu_ZF;
+#ifndef CONFIG_TCG_USE_LDST_EXCL
 static TCGv_i64 cpu_exclusive_addr;
 static TCGv_i64 cpu_exclusive_val;
+#else
+static TCGv_i32 cpu_ll_sc_context;
+#endif
 #ifdef CONFIG_USER_ONLY
 static TCGv_i64 cpu_exclusive_test;
 static TCGv_i32 cpu_exclusive_info;
@@ -99,10 +103,15 @@ void arm_translate_init(void)
     cpu_VF = tcg_global_mem_new_i32(TCG_AREG0, offsetof(CPUARMState, VF), "VF");
     cpu_ZF = tcg_global_mem_new_i32(TCG_AREG0, offsetof(CPUARMState, ZF), "ZF");
 
+#ifdef CONFIG_TCG_USE_LDST_EXCL
+    cpu_ll_sc_context = tcg_global_mem_new_i32(TCG_AREG0,
+        offsetof(CPUARMState, ll_sc_context), "ll_sc_context");
+#else
     cpu_exclusive_addr = tcg_global_mem_new_i64(TCG_AREG0,
         offsetof(CPUARMState, exclusive_addr), "exclusive_addr");
     cpu_exclusive_val = tcg_global_mem_new_i64(TCG_AREG0,
         offsetof(CPUARMState, exclusive_val), "exclusive_val");
+#endif
 #ifdef CONFIG_USER_ONLY
     cpu_exclusive_test = tcg_global_mem_new_i64(TCG_AREG0,
         offsetof(CPUARMState, exclusive_test), "exclusive_test");
@@ -904,14 +913,32 @@ static inline void gen_aa32_st##SUFF(TCGv_i32 val, TCGv_i32 addr, int index) \
     tcg_gen_qemu_st_i32(val, addr, index, OPC);                          \
 }
 
+#define DO_GEN_STEX(SUFF, OPC)                                           \
+static inline void gen_aa32_stex##SUFF(TCGv_i32 is_dirty, TCGv_i32 val,  \
+                                       TCGv_i32 addr, int index)         \
+{                                                                        \
+    tcg_gen_qemu_stcond_i32(is_dirty, val, addr, index, OPC);            \
+}
+
 static inline void gen_aa32_ld64(TCGv_i64 val, TCGv_i32 addr, int index)
 {
     tcg_gen_qemu_ld_i64(val, addr, index, MO_TEQ);
 }
 
+static inline void gen_aa32_ld64ex(TCGv_i64 val, TCGv_i32 addr, int index)
+{
+    tcg_gen_qemu_ld_i64(val, addr, index, MO_TEQ | MO_EXCL);
+}
+
 static inline void gen_aa32_st64(TCGv_i64 val, TCGv_i32 addr, int index)
 {
     tcg_gen_qemu_st_i64(val, addr, index, MO_TEQ);
+}
+
+static inline void gen_aa32_stex64(TCGv_i32 is_dirty, TCGv_i64 val,
+                                   TCGv_i32 addr, int index)
+{
+    tcg_gen_qemu_stcond_i64(is_dirty, val, addr, index, MO_TEQ | MO_EXCL);
 }
 
 #else
@@ -934,11 +961,29 @@ static inline void gen_aa32_st##SUFF(TCGv_i32 val, TCGv_i32 addr, int index) \
     tcg_temp_free(addr64);                                               \
 }
 
+#define DO_GEN_STEX(SUFF, OPC)                                           \
+static inline void gen_aa32_stex##SUFF(TCGv_i32 is_dirty, TCGv_i32 val,  \
+                                               TCGv_i32 addr, int index) \
+{                                                                        \
+    TCGv addr64 = tcg_temp_new();                                        \
+    tcg_gen_extu_i32_i64(addr64, addr);                                  \
+    tcg_gen_qemu_stcond_i32(is_dirty, val, addr64, index, OPC);          \
+    tcg_temp_free(addr64);                                               \
+}
+
 static inline void gen_aa32_ld64(TCGv_i64 val, TCGv_i32 addr, int index)
 {
     TCGv addr64 = tcg_temp_new();
     tcg_gen_extu_i32_i64(addr64, addr);
     tcg_gen_qemu_ld_i64(val, addr64, index, MO_TEQ);
+    tcg_temp_free(addr64);
+}
+
+static inline void gen_aa32_ld64ex(TCGv_i64 val, TCGv_i32 addr, int index)
+{
+    TCGv addr64 = tcg_temp_new();
+    tcg_gen_extu_i32_i64(addr64, addr);
+    tcg_gen_qemu_ld_i64(val, addr64, index, MO_TEQ | MO_EXCL);
     tcg_temp_free(addr64);
 }
 
@@ -950,16 +995,33 @@ static inline void gen_aa32_st64(TCGv_i64 val, TCGv_i32 addr, int index)
     tcg_temp_free(addr64);
 }
 
+static inline void gen_aa32_stex64(TCGv_i32 is_dirty, TCGv_i64 val,
+                                   TCGv_i32 addr, int index)
+{
+    TCGv addr64 = tcg_temp_new();
+    tcg_gen_extu_i32_i64(addr64, addr);
+    tcg_gen_qemu_stcond_i64(is_dirty, val, addr64, index, MO_TEQ | MO_EXCL);
+    tcg_temp_free(addr64);
+}
+
 #endif
 
 DO_GEN_LD(8s, MO_SB)
 DO_GEN_LD(8u, MO_UB)
+DO_GEN_LD(8uex, MO_UB | MO_EXCL)
 DO_GEN_LD(16s, MO_TESW)
 DO_GEN_LD(16u, MO_TEUW)
+DO_GEN_LD(16uex, MO_TEUW | MO_EXCL)
 DO_GEN_LD(32u, MO_TEUL)
+DO_GEN_LD(32uex, MO_TEUL | MO_EXCL)
 DO_GEN_ST(8, MO_UB)
 DO_GEN_ST(16, MO_TEUW)
 DO_GEN_ST(32, MO_TEUL)
+
+/* Load/Store exclusive generators (always unsigned) */
+DO_GEN_STEX(8, MO_UB)
+DO_GEN_STEX(16, MO_TEUW)
+DO_GEN_STEX(32, MO_TEUL)
 
 static inline void gen_set_pc_im(DisasContext *s, target_ulong val)
 {
@@ -7382,15 +7444,60 @@ static void gen_logicq_cc(TCGv_i32 lo, TCGv_i32 hi)
     tcg_gen_or_i32(cpu_ZF, lo, hi);
 }
 
-/* Load/Store exclusive instructions are implemented by remembering
+/* If the TCG backend supports the slowpath for atomic instructions,
+   then the Load/Store exclusive instructions will use it, offloading
+   most of the work to the softmmu_llsc_template.h functions.
+
+   Otherwise, these instructions are implemented by remembering
    the value/address loaded, and seeing if these are the same
    when the store is performed. This should be sufficient to implement
    the architecturally mandated semantics, and avoids having to monitor
    regular stores.
 
-   In system emulation mode only one CPU will be running at once, so
-   this sequence is effectively atomic.  In user emulation mode we
-   throw an exception and handle the atomic operation elsewhere.  */
+   In user emulation mode we throw an exception and handle the atomic
+   operation elsewhere.  */
+#ifdef CONFIG_TCG_USE_LDST_EXCL
+static void gen_load_exclusive(DisasContext *s, int rt, int rt2,
+                               TCGv_i32 addr, int size)
+{
+    TCGv_i32 tmp = tcg_temp_new_i32();
+
+    if (size != 3) {
+        switch (size) {
+        case 0:
+            gen_aa32_ld8uex(tmp, addr, get_mem_index(s));
+            break;
+        case 1:
+            gen_aa32_ld16uex(tmp, addr, get_mem_index(s));
+            break;
+        case 2:
+            gen_aa32_ld32uex(tmp, addr, get_mem_index(s));
+            break;
+        default:
+            abort();
+        }
+
+        store_reg(s, rt, tmp);
+    } else {
+        TCGv_i64 tmp64 = tcg_temp_new_i64();
+        TCGv_i32 tmph = tcg_temp_new_i32();
+
+        gen_aa32_ld64ex(tmp64, addr, get_mem_index(s));
+        tcg_gen_extr_i64_i32(tmp, tmph, tmp64);
+
+        store_reg(s, rt, tmp);
+        store_reg(s, rt2, tmph);
+
+        tcg_temp_free_i32(tmph);
+        tcg_temp_free_i64(tmp64);
+    }
+
+    tcg_temp_free_i32(tmp);
+
+    /* From now on we are in LL/SC context. */
+    tcg_gen_movi_i32(cpu_ll_sc_context, 1);
+}
+#else
 static void gen_load_exclusive(DisasContext *s, int rt, int rt2,
                                TCGv_i32 addr, int size)
 {
@@ -7429,10 +7536,14 @@ static void gen_load_exclusive(DisasContext *s, int rt, int rt2,
     store_reg(s, rt, tmp);
     tcg_gen_extu_i32_i64(cpu_exclusive_addr, addr);
 }
+#endif
 
 static void gen_clrex(DisasContext *s)
 {
+#ifdef CONFIG_TCG_USE_LDST_EXCL
+#else
     tcg_gen_movi_i64(cpu_exclusive_addr, -1);
+#endif
 }
 
 #ifdef CONFIG_USER_ONLY
@@ -7443,6 +7554,66 @@ static void gen_store_exclusive(DisasContext *s, int rd, int rt, int rt2,
     tcg_gen_movi_i32(cpu_exclusive_info,
                      size | (rd << 4) | (rt << 8) | (rt2 << 12));
     gen_exception_internal_insn(s, 4, EXCP_STREX);
+}
+#elif defined CONFIG_TCG_USE_LDST_EXCL
+static void gen_store_exclusive(DisasContext *s, int rd, int rt, int rt2,
+                                TCGv_i32 addr, int size)
+{
+    TCGv_i32 is_dirty;
+    TCGLabel *done_label;
+    TCGLabel *fail_label;
+
+    fail_label = gen_new_label();
+    done_label = gen_new_label();
+
+    is_dirty = tcg_temp_new_i32();
+
+    /* Fail if we are not in LL/SC context. */
+    tcg_gen_brcondi_i32(TCG_COND_NE, cpu_ll_sc_context, 1, fail_label);
+    tcg_gen_movi_i32(cpu_ll_sc_context, 0);
+
+    TCGv_i32 tmp;
+    tmp = tcg_temp_new_i32();
+    tmp = load_reg(s, rt);
+
+    if (size != 3) {
+        switch (size) {
+        case 0:
+            gen_aa32_stex8(is_dirty, tmp, addr, get_mem_index(s));
+            break;
+        case 1:
+            gen_aa32_stex16(is_dirty, tmp, addr, get_mem_index(s));
+            break;
+        case 2:
+            gen_aa32_stex32(is_dirty, tmp, addr, get_mem_index(s));
+            break;
+        default:
+            abort();
+        }
+    } else {
+        TCGv_i64 tmp64;
+        TCGv_i32 tmp2;
+
+        tmp64 = tcg_temp_new_i64();
+        tmp2 = tcg_temp_new_i32();
+        tmp2 = load_reg(s, rt2);
+        tcg_gen_concat_i32_i64(tmp64, tmp, tmp2);
+
+        gen_aa32_stex64(is_dirty, tmp64, addr, get_mem_index(s));
+        tcg_temp_free_i32(tmp2);
+        tcg_temp_free_i64(tmp64);
+    }
+    tcg_temp_free_i32(tmp);
+
+    /* Check if the store conditional has to fail. */
+    tcg_gen_brcondi_i32(TCG_COND_EQ, is_dirty, 1, fail_label);
+    tcg_temp_free_i32(is_dirty);
+
+    tcg_gen_movi_i32(cpu_R[rd], 0); /* is_dirty = 0 */
+    tcg_gen_br(done_label);
+    gen_set_label(fail_label);
+    tcg_gen_movi_i32(cpu_R[rd], 1); /* is_dirty = 1 */
+    gen_set_label(done_label);
 }
 #else
 static void gen_store_exclusive(DisasContext *s, int rd, int rt, int rt2,
@@ -8394,16 +8565,20 @@ static void disas_arm_insn(DisasContext *s, unsigned int insn)
                             rm = insn & 0xf;
                             switch (op1) {
                             case 0:  /*  strex */
-                                gen_store_exclusive(s, rd, rm, 15, addr, 2);
+                                gen_store_exclusive(s, rd, rm, 15,
+                                                    addr, 2);
                                 break;
                             case 1: /*  strexd */
-                                gen_store_exclusive(s, rd, rm, rm + 1, addr, 3);
+                                gen_store_exclusive(s, rd, rm, rm + 1,
+                                                    addr, 3);
                                 break;
                             case 2: /*  strexb */
-                                gen_store_exclusive(s, rd, rm, 15, addr, 0);
+                                gen_store_exclusive(s, rd, rm, 15,
+                                                    addr, 0);
                                 break;
                             case 3: /* strexh */
-                                gen_store_exclusive(s, rd, rm, 15, addr, 1);
+                                gen_store_exclusive(s, rd, rm, 15,
+                                                    addr, 1);
                                 break;
                             default:
                                 abort();
