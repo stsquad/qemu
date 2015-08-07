@@ -264,6 +264,7 @@ debug_tcg="no"
 debug="no"
 strip_opt="yes"
 tcg_interpreter="no"
+tcg_use_ldst_excl="no"
 bigendian="no"
 mingw32="no"
 gcov="no"
@@ -934,6 +935,10 @@ for opt do
   ;;
   --enable-tcg-interpreter) tcg_interpreter="yes"
   ;;
+  --disable-tcg-ldst-excl) tcg_use_ldst_excl="no"
+  ;;
+  --enable-tcg-ldst-excl) tcg_use_ldst_excl="yes"
+  ;;
   --disable-cap-ng)  cap_ng="no"
   ;;
   --enable-cap-ng) cap_ng="yes"
@@ -1391,6 +1396,18 @@ if test "$ARCH" = "unknown"; then
         error_exit "Unsupported CPU = $cpu, try --enable-tcg-interpreter"
     fi
 fi
+
+# Check if the slow-path for atomic instructions is supported by the
+# TCG backend.
+case $cpu in
+    i386|x86_64|arm|aarch64)
+        ;;
+    *)
+        if test "$tcg_use_ldst_excl" = "yes"; then
+            error_exit "Load and store exclusive not supported for $cpu hosts"
+        fi
+        ;;
+esac
 
 # Consult white-list to determine whether to enable werror
 # by default.  Only enable by default for git builds
@@ -4526,6 +4543,7 @@ echo "Install blobs     $blobs"
 echo "KVM support       $kvm"
 echo "RDMA support      $rdma"
 echo "TCG interpreter   $tcg_interpreter"
+echo "use ld/st excl    $tcg_use_ldst_excl"
 echo "fdt support       $fdt"
 echo "preadv support    $preadv"
 echo "fdatasync         $fdatasync"
@@ -4902,6 +4920,9 @@ if test "$signalfd" = "yes" ; then
 fi
 if test "$tcg_interpreter" = "yes" ; then
   echo "CONFIG_TCG_INTERPRETER=y" >> $config_host_mak
+fi
+if test "$tcg_use_ldst_excl" = "yes" ; then
+  echo "CONFIG_TCG_USE_LDST_EXCL=y" >> $config_host_mak
 fi
 if test "$fdatasync" = "yes" ; then
   echo "CONFIG_FDATASYNC=y" >> $config_host_mak
