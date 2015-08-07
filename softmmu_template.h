@@ -409,19 +409,53 @@ void helper_le_st_name(CPUArchState *env, target_ulong addr, DATA_TYPE val,
         tlb_addr = env->tlb_table[mmu_idx][index].addr_write;
     }
 
-    /* Handle an IO access.  */
+    /* Handle an IO access or exclusive access.  */
     if (unlikely(tlb_addr & ~TARGET_PAGE_MASK)) {
-        CPUIOTLBEntry *iotlbentry;
-        if ((addr & (DATA_SIZE - 1)) != 0) {
-            goto do_unaligned_access;
-        }
-        iotlbentry = &env->iotlb[mmu_idx][index];
+        CPUIOTLBEntry *iotlbentry = &env->iotlb[mmu_idx][index];
 
-        /* ??? Note that the io helpers always read data in the target
-           byte ordering.  We should push the LE/BE request down into io.  */
-        val = TGT_LE(val);
-        glue(io_write, SUFFIX)(env, iotlbentry, val, addr, retaddr);
-        return;
+        if ((tlb_addr & ~TARGET_PAGE_MASK) == TLB_EXCL) {
+            /* The slow-path has been forced since we are writing to
+             * exclusive-protected memory. */
+            hwaddr hw_addr = (iotlbentry->addr & TARGET_PAGE_MASK) + addr;
+
+            /* The function lookup_and_reset_cpus_ll_addr could have reset the
+             * exclusive address. Fail the SC in this case.
+             * N.B.: Here excl_succeeded == 0 means that helper_le_st_name has
+             * not been called by a softmmu_llsc_template.h. */
+            if(env->excl_succeeded) {
+                if (env->excl_protected_range.begin != hw_addr) {
+                    /* The vCPU is SC-ing to an unprotected address. */
+                    env->excl_protected_range.begin = EXCLUSIVE_RESET_ADDR;
+                    env->excl_succeeded = 0;
+
+                    return;
+                }
+
+                cpu_physical_memory_set_excl_dirty(hw_addr, ENV_GET_CPU(env)->cpu_index);
+            }
+
+            haddr = addr + env->tlb_table[mmu_idx][index].addend;
+        #if DATA_SIZE == 1
+            glue(glue(st, SUFFIX), _p)((uint8_t *)haddr, val);
+        #else
+            glue(glue(st, SUFFIX), _le_p)((uint8_t *)haddr, val);
+        #endif
+
+            lookup_and_reset_cpus_ll_addr(hw_addr, DATA_SIZE);
+
+            return;
+        } else {
+            if ((addr & (DATA_SIZE - 1)) != 0) {
+                goto do_unaligned_access;
+            }
+            iotlbentry = &env->iotlb[mmu_idx][index];
+
+            /* ??? Note that the io helpers always read data in the target
+               byte ordering.  We should push the LE/BE request down into io.  */
+            val = TGT_LE(val);
+            glue(io_write, SUFFIX)(env, iotlbentry, val, addr, retaddr);
+            return;
+        }
     }
 
     /* Handle slow unaligned access (it spans two pages or IO).  */
@@ -489,19 +523,53 @@ void helper_be_st_name(CPUArchState *env, target_ulong addr, DATA_TYPE val,
         tlb_addr = env->tlb_table[mmu_idx][index].addr_write;
     }
 
-    /* Handle an IO access.  */
+    /* Handle an IO access or exclusive access.  */
     if (unlikely(tlb_addr & ~TARGET_PAGE_MASK)) {
-        CPUIOTLBEntry *iotlbentry;
-        if ((addr & (DATA_SIZE - 1)) != 0) {
-            goto do_unaligned_access;
-        }
-        iotlbentry = &env->iotlb[mmu_idx][index];
+        CPUIOTLBEntry *iotlbentry = &env->iotlb[mmu_idx][index];
 
-        /* ??? Note that the io helpers always read data in the target
-           byte ordering.  We should push the LE/BE request down into io.  */
-        val = TGT_BE(val);
-        glue(io_write, SUFFIX)(env, iotlbentry, val, addr, retaddr);
-        return;
+        if ((tlb_addr & ~TARGET_PAGE_MASK) == TLB_EXCL) {
+            /* The slow-path has been forced since we are writing to
+             * exclusive-protected memory. */
+            hwaddr hw_addr = (iotlbentry->addr & TARGET_PAGE_MASK) + addr;
+
+            /* The function lookup_and_reset_cpus_ll_addr could have reset the
+             * exclusive address. Fail the SC in this case.
+             * N.B.: Here excl_succeeded == 0 means that helper_le_st_name has
+             * not been called by a softmmu_llsc_template.h. */
+            if(env->excl_succeeded) {
+                if (env->excl_protected_range.begin != hw_addr) {
+                    /* The vCPU is SC-ing to an unprotected address. */
+                    env->excl_protected_range.begin = EXCLUSIVE_RESET_ADDR;
+                    env->excl_succeeded = 0;
+
+                    return;
+                }
+
+                cpu_physical_memory_set_excl_dirty(hw_addr, ENV_GET_CPU(env)->cpu_index);
+            }
+
+            haddr = addr + env->tlb_table[mmu_idx][index].addend;
+        #if DATA_SIZE == 1
+            glue(glue(st, SUFFIX), _p)((uint8_t *)haddr, val);
+        #else
+            glue(glue(st, SUFFIX), _le_p)((uint8_t *)haddr, val);
+        #endif
+
+            lookup_and_reset_cpus_ll_addr(hw_addr, DATA_SIZE);
+
+            return;
+        } else {
+            if ((addr & (DATA_SIZE - 1)) != 0) {
+                goto do_unaligned_access;
+            }
+            iotlbentry = &env->iotlb[mmu_idx][index];
+
+            /* ??? Note that the io helpers always read data in the target
+               byte ordering.  We should push the LE/BE request down into io.  */
+            val = TGT_BE(val);
+            glue(io_write, SUFFIX)(env, iotlbentry, val, addr, retaddr);
+            return;
+        }
     }
 
     /* Handle slow unaligned access (it spans two pages or IO).  */

@@ -299,6 +299,13 @@ void tlb_set_page_with_attrs(CPUState *cpu, target_ulong vaddr,
     env->tlb_v_table[mmu_idx][vidx] = *te;
     env->iotlb_v[mmu_idx][vidx] = env->iotlb[mmu_idx][index];
 
+    if (unlikely(!(te->addr_write & TLB_MMIO) && (te->addr_write & TLB_EXCL))) {
+        /* We are removing an exclusive entry, set the page to dirty. */
+        hwaddr hw_addr = (env->iotlb[mmu_idx][index].addr & TARGET_PAGE_MASK) +
+                                          (te->addr_write & TARGET_PAGE_MASK);
+        cpu_physical_memory_set_excl_dirty(hw_addr, cpu->cpu_index);
+    }
+
     /* refill the tlb */
     env->iotlb[mmu_idx][index].addr = iotlb - vaddr;
     env->iotlb[mmu_idx][index].attrs = attrs;
@@ -324,7 +331,15 @@ void tlb_set_page_with_attrs(CPUState *cpu, target_ulong vaddr,
                                                    + xlat)) {
             te->addr_write = address | TLB_NOTDIRTY;
         } else {
-            te->addr_write = address;
+            if (!(address & TLB_MMIO) &&
+                cpu_physical_memory_excl_atleast_one_clean(section->mr->ram_addr
+                                                           + xlat)) {
+                /* There is at least one vCPU that has flagged the address as
+                 * exclusive. */
+                te->addr_write = address | TLB_EXCL;
+            } else {
+                te->addr_write = address;
+            }
         }
     } else {
         te->addr_write = -1;
@@ -374,6 +389,28 @@ tb_page_addr_t get_page_addr_code(CPUArchState *env1, target_ulong addr)
     }
     p = (void *)((uintptr_t)addr + env1->tlb_table[mmu_idx][page_index].addend);
     return qemu_ram_addr_from_host_nofail(p);
+}
+
+/* Atomic insn translation TLB support. */
+#define EXCLUSIVE_RESET_ADDR ULLONG_MAX
+/* For every vCPU compare the exclusive address and reset it in case of a
+ * match. Since only one vCPU is running at once, no lock has to be held to
+ * guard this operation. */
+static inline void lookup_and_reset_cpus_ll_addr(hwaddr addr, hwaddr size)
+{
+    CPUState *cpu;
+    CPUArchState *acpu;
+
+    CPU_FOREACH(cpu) {
+        acpu = (CPUArchState *)cpu->env_ptr;
+
+        if (acpu->excl_protected_range.begin != EXCLUSIVE_RESET_ADDR &&
+            ranges_overlap(acpu->excl_protected_range.begin,
+            acpu->excl_protected_range.end - acpu->excl_protected_range.begin,
+            addr, size)) {
+            acpu->excl_protected_range.begin = EXCLUSIVE_RESET_ADDR;
+        }
+    }
 }
 
 #define MMUSUFFIX _mmu

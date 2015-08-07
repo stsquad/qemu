@@ -320,6 +320,14 @@ extern RAMList ram_list;
 #define TLB_NOTDIRTY    (1 << 4)
 /* Set if TLB entry is an IO callback.  */
 #define TLB_MMIO        (1 << 5)
+/* Set if TLB entry references a page that requires exclusive access.  */
+#define TLB_EXCL        (1 << 6)
+
+/* Do not allow a TARGET_PAGE_MASK which covers one or more bits defined
+ * above. */
+#if TLB_EXCL >= TARGET_PAGE_SIZE
+#error TARGET_PAGE_MASK covering the low bits of the TLB virtual address
+#endif
 
 void dump_exec_info(FILE *f, fprintf_function cpu_fprintf);
 void dump_opcount_info(FILE *f, fprintf_function cpu_fprintf);

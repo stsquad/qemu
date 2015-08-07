@@ -27,6 +27,7 @@
 #include <inttypes.h>
 #include "qemu/osdep.h"
 #include "qemu/queue.h"
+#include "qemu/range.h"
 #include "tcg-target.h"
 #ifndef CONFIG_USER_ONLY
 #include "exec/hwaddr.h"
@@ -150,5 +151,16 @@ typedef struct CPUIOTLBEntry {
 #define CPU_COMMON                                                      \
     /* soft mmu support */                                              \
     CPU_COMMON_TLB                                                      \
+                                                                        \
+    /* Used by the atomic insn translation backend. */                  \
+    int ll_sc_context;                                                  \
+    /* vCPU current exclusive addresses range.
+     * The address is set to EXCLUSIVE_RESET_ADDR if the vCPU is not.
+     * in the middle of a LL/SC. */                                     \
+    struct Range excl_protected_range;                                  \
+    /* Used to carry the SC result but also to flag a normal (legacy)
+     * store access made by a stcond (see softmmu_template.h). */       \
+    int excl_succeeded;                                                 \
+
 
 #endif
