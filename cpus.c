@@ -674,8 +674,7 @@ static void cpu_signal(int sig)
         cpu_exit(current_cpu);
     }
 
-    /* FIXME: We might want to check if the cpu is running? */
-    tcg_thread_cpu->exit_request = true;
+    cpu_exit(tcg_thread_cpu);
 }
 
 #ifdef CONFIG_LINUX
