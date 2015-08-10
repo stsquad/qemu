@@ -24,6 +24,15 @@ static inline bool get_phys_addr(CPUARMState *env, target_ulong address,
 #define PMCRE   0x1
 #endif
 
+bool arm_get_phys_addr(CPUARMState *env, target_ulong address, int access_type,
+                       hwaddr *phys_ptr, int *prot, target_ulong *page_size)
+{
+    MemTxAttrs attrs = {};
+    uint32_t fsr;
+    return get_phys_addr(env, address, access_type, cpu_mmu_index(env),
+                         phys_ptr, &attrs, prot, page_size, &fsr);
+}
+
 static int vfp_gdb_get_reg(CPUARMState *env, uint8_t *buf, int reg)
 {
     int nregs;
@@ -4824,6 +4833,10 @@ void arm_cpu_do_interrupt(CPUState *cs)
     assert(!IS_M(env));
 
     arm_log_exception(cs->exception_index);
+
+    arm_exclusive_lock();
+    env->exclusive_addr = -1;
+    arm_exclusive_unlock();
 
     if (arm_is_psci_call(cpu, cs->exception_index)) {
         arm_handle_psci_call(cpu);
