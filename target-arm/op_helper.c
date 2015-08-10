@@ -954,7 +954,7 @@ void HELPER(inst_callback)(CPUARMState *env, uint64_t vaddr, uint32_t length, ui
 
 static inline void memop_callback(CPUARMState *env, uint64_t addr, uint32_t size, int type)
 {
-    if (!qsim_sys_callbacks && extract64(env->cp15.tpidrro_el0, 0, 32) != qsim_tpid)
+    if (!qsim_sys_callbacks && extract64(env->cp15.contextidr_el1, 0, 32) != qsim_tpid)
         return;
 
 	if (qsim_mem_cb == NULL)
