@@ -157,11 +157,6 @@ void cpu_reload_memory_map(CPUState *cpu)
         /* Do not let the guest prolong the critical section as much as it
          * as it desires.
          *
-         * Currently, this is prevented by the I/O thread's periodinc kicking
-         * of the VCPU thread (iothread_requesting_mutex, qemu_cpu_kick_thread)
-         * but this will go away once TCG's execution moves out of the global
-         * mutex.
-         *
          * This pair matches cpu_exec's rcu_read_lock()/rcu_read_unlock(), which
          * only protects cpu->as->dispatch.  Since we reload it below, we can
          * split the critical section.
@@ -377,8 +372,6 @@ static void cpu_handle_debug_exception(CPUState *cpu)
 
 /* main execution loop */
 
-volatile sig_atomic_t exit_request;
-
 int cpu_exec(CPUState *cpu)
 {
     CPUClass *cc = CPU_GET_CLASS(cpu);
@@ -400,12 +393,7 @@ int cpu_exec(CPUState *cpu)
         cpu->halted = 0;
     }
 
-    atomic_mb_set(&current_cpu, cpu);
     rcu_read_lock();
-
-    if (unlikely(atomic_mb_read(&exit_request))) {
-        cpu->exit_request = 1;
-    }
 
     cc->cpu_exec_enter(cpu);
 
@@ -501,7 +489,6 @@ int cpu_exec(CPUState *cpu)
                     }
                 }
                 if (unlikely(cpu->exit_request)) {
-                    cpu->exit_request = 0;
                     cpu->exception_index = EXCP_INTERRUPT;
                     cpu_loop_exit(cpu);
                 }
@@ -611,8 +598,5 @@ int cpu_exec(CPUState *cpu)
 
     cc->cpu_exec_exit(cpu);
     rcu_read_unlock();
-
-    /* fail safe : never use current_cpu outside cpu_exec() */
-    current_cpu = NULL;
     return ret;
 }

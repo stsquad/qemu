@@ -130,26 +130,20 @@ static void *l1_map[V_L1_SIZE];
 TCGContext tcg_ctx;
 
 /* translation block context */
-#ifdef CONFIG_USER_ONLY
 __thread volatile int have_tb_lock;
-#endif
 
 void tb_lock(void)
 {
-#ifdef CONFIG_USER_ONLY
     assert(!have_tb_lock);
     qemu_mutex_lock(&tcg_ctx.tb_ctx.tb_lock);
     have_tb_lock++;
-#endif
 }
 
 void tb_unlock(void)
 {
-#ifdef CONFIG_USER_ONLY
     assert(have_tb_lock);
     have_tb_lock--;
     qemu_mutex_unlock(&tcg_ctx.tb_ctx.tb_lock);
-#endif
 }
 
 bool tb_lock_recursive(void)
@@ -163,12 +157,10 @@ bool tb_lock_recursive(void)
 
 void tb_lock_reset(void)
 {
-#ifdef CONFIG_USER_ONLY
     if (have_tb_lock) {
         qemu_mutex_unlock(&tcg_ctx.tb_ctx.tb_lock);
         have_tb_lock = 0;
     }
-#endif
 }
 
 static void tb_link_page(TranslationBlock *tb, tb_page_addr_t phys_pc,
