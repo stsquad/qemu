@@ -74,6 +74,7 @@ typedef struct TranslationBlock TranslationBlock;
 
 void gen_intermediate_code(CPUArchState *env, struct TranslationBlock *tb);
 void gen_intermediate_code_pc(CPUArchState *env, struct TranslationBlock *tb);
+/* Called with tb_lock held.  */
 void restore_state_to_opc(CPUArchState *env, struct TranslationBlock *tb,
                           int pc_pos);
 
@@ -278,6 +279,7 @@ static inline void tb_set_jmp_target(TranslationBlock *tb,
 
 #endif
 
+/* Called with tb_lock held.  */
 static inline void tb_add_jump(TranslationBlock *tb, int n,
                                TranslationBlock *tb_next)
 {
