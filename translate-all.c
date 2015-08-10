@@ -823,6 +823,25 @@ static void page_flush_tb(void)
     }
 }
 
+#ifdef CONFIG_USER_ONLY
+void tb_flush_safe(CPUState *cpu)
+{
+    tb_flush(cpu);
+}
+#else
+static void tb_flush_work(void *opaque)
+{
+    CPUState *cpu = opaque;
+    tb_flush(cpu);
+}
+
+void tb_flush_safe(CPUState *cpu)
+{
+    tb_flush(cpu);
+    async_run_safe_work_on_cpu(cpu, tb_flush_work, cpu);
+}
+#endif
+
 /* flush all the translation blocks */
 /* XXX: tb_flush is currently not thread safe */
 void tb_flush(CPUState *cpu)
