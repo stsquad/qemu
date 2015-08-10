@@ -30,6 +30,10 @@
 #include "exec/ram_addr.h"
 #include "tcg/tcg.h"
 
+#ifdef CONFIG_SOFTMMU
+#include "qemu/main-loop.h"
+#endif
+
 //#define DEBUG_TLB
 //#define DEBUG_TLB_CHECK
 
