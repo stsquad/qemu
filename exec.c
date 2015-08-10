@@ -1948,6 +1948,9 @@ static void check_watchpoint(int offset, int len, MemTxAttrs attrs, int flags)
             wp->hitattrs = attrs;
             if (!cpu->watchpoint_hit) {
                 cpu->watchpoint_hit = wp;
+
+                /* Unlocked by cpu_loop_exit or cpu_resume_from_signal.  */
+                tb_lock();
                 tb_check_watchpoint(cpu);
                 if (wp->flags & BP_STOP_BEFORE_ACCESS) {
                     cpu->exception_index = EXCP_DEBUG;

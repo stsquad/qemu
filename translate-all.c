@@ -301,6 +301,8 @@ bool cpu_restore_state(CPUState *cpu, uintptr_t retaddr)
 {
     TranslationBlock *tb;
 
+    tb_lock();
+
     tb = tb_find_pc(retaddr);
     if (tb) {
         cpu_restore_state_from_tb(cpu, tb, retaddr);
@@ -310,8 +312,12 @@ bool cpu_restore_state(CPUState *cpu, uintptr_t retaddr)
             tb_phys_invalidate(tb, -1);
             tb_free(tb);
         }
+
+        tb_unlock();
         return true;
     }
+
+    tb_unlock();
     return false;
 }
 
@@ -820,6 +826,8 @@ static void page_flush_tb(void)
 /* XXX: tb_flush is currently not thread safe */
 void tb_flush(CPUState *cpu)
 {
+    tb_lock();
+
 #if defined(DEBUG_FLUSH)
     printf("qemu: flush code_size=%ld nb_tbs=%d avg_tb_size=%ld\n",
            (unsigned long)(tcg_ctx.code_gen_ptr - tcg_ctx.code_gen_buffer),
@@ -844,6 +852,8 @@ void tb_flush(CPUState *cpu)
     /* XXX: flush processor icache at this point if cache flush is
        expensive */
     tcg_ctx.tb_ctx.tb_flush_count++;
+
+    tb_unlock();
 }
 
 #ifdef DEBUG_TB_CHECK
@@ -1151,6 +1161,7 @@ void tb_invalidate_phys_page_range(tb_page_addr_t start, tb_page_addr_t end,
     /* we remove all the TBs in the range [start, end[ */
     /* XXX: see if in some cases it could be faster to invalidate all
        the code */
+    tb_lock();
     tb = p->first_tb;
     while (tb != NULL) {
         n = (uintptr_t)tb & 3;
@@ -1218,12 +1229,13 @@ void tb_invalidate_phys_page_range(tb_page_addr_t start, tb_page_addr_t end,
     if (current_tb_modified) {
         /* we generate a block containing just the instruction
            modifying the memory. It will ensure that it cannot modify
-           itself */
+           itself.  cpu_resume_from_signal unlocks tb_lock.  */
         cpu->current_tb = NULL;
         tb_gen_code(cpu, current_pc, current_cs_base, current_flags, 1);
         cpu_resume_from_signal(cpu, NULL);
     }
 #endif
+    tb_unlock();
 }
 
 #ifdef CONFIG_SOFTMMU
@@ -1290,6 +1302,8 @@ static void tb_invalidate_phys_page(tb_page_addr_t addr,
     if (!p) {
         return;
     }
+
+    tb_lock();
     tb = p->first_tb;
 #ifdef TARGET_HAS_PRECISE_SMC
     if (tb && pc != 0) {
@@ -1331,9 +1345,12 @@ static void tb_invalidate_phys_page(tb_page_addr_t addr,
         if (locked) {
             mmap_unlock();
         }
+
+        /* tb_lock released by cpu_resume_from_signal.  */
         cpu_resume_from_signal(cpu, puc);
     }
 #endif
+    tb_unlock();
 }
 #endif
 
@@ -1563,6 +1580,7 @@ void cpu_io_recompile(CPUState *cpu, uintptr_t retaddr)
     target_ulong pc, cs_base;
     uint64_t flags;
 
+    tb_lock();
     tb = tb_find_pc(retaddr);
     if (!tb) {
         cpu_abort(cpu, "cpu_io_recompile: could not find TB for pc=%p",
@@ -1614,11 +1632,15 @@ void cpu_io_recompile(CPUState *cpu, uintptr_t retaddr)
     /* FIXME: In theory this could raise an exception.  In practice
        we have already translated the block once so it's probably ok.  */
     tb_gen_code(cpu, pc, cs_base, flags, cflags);
-    /* TODO: If env->pc != tb->pc (i.e. the faulting instruction was not
-       the first in the TB) then we end up generating a whole new TB and
-       repeating the fault, which is horribly inefficient.
-       Better would be to execute just this insn uncached, or generate a
-       second new TB.  */
+
+    /* This unlocks the tb_lock.
+     *
+     * TODO: If env->pc != tb->pc (i.e. the faulting instruction was not
+     * the first in the TB) then we end up generating a whole new TB and
+     * repeating the fault, which is horribly inefficient.
+     * Better would be to execute just this insn uncached, or generate a
+     * second new TB.
+     */
     cpu_resume_from_signal(cpu, NULL);
 }
 
@@ -1642,6 +1664,8 @@ void dump_exec_info(FILE *f, fprintf_function cpu_fprintf)
     int i, target_code_size, max_target_code_size;
     int direct_jmp_count, direct_jmp2_count, cross_page;
     TranslationBlock *tb;
+
+    tb_lock();
 
     target_code_size = 0;
     max_target_code_size = 0;
@@ -1698,6 +1722,8 @@ void dump_exec_info(FILE *f, fprintf_function cpu_fprintf)
             tcg_ctx.tb_ctx.tb_phys_invalidate_count);
     cpu_fprintf(f, "TLB flush count     %d\n", tlb_flush_count);
     tcg_dump_info(f, cpu_fprintf);
+
+    tb_unlock();
 }
 
 void dump_opcount_info(FILE *f, fprintf_function cpu_fprintf)
