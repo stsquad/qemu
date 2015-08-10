@@ -1120,12 +1120,16 @@ TranslationBlock *tb_gen_code(CPUState *cpu,
     tb = tb_alloc(pc);
     if (!tb) {
         /* flush must be done */
+#ifdef CONFIG_USER_ONLY
+        /* FIXME: kick all other CPUs out also for user-mode emulation.  */
         tb_flush(cpu);
-        /* cannot fail at this point */
-        tb = tb_alloc(pc);
-        /* Don't forget to invalidate previous TB info.  */
-        tcg_ctx.tb_ctx.tb_invalidated_flag = 1;
+        mmap_unlock();
+#else
+        tb_flush_safe(cpu);
+#endif
+        cpu_loop_exit(cpu);
     }
+
     tb->tc_ptr = tcg_ctx.code_gen_ptr;
     tb->cs_base = cs_base;
     tb->flags = flags;
