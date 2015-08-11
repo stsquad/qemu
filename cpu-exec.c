@@ -367,19 +367,10 @@ int cpu_exec(CPUState *cpu)
         cpu->halted = 0;
     }
 
-    current_cpu = cpu;
-
-    /* As long as current_cpu is null, up to the assignment just above,
-     * requests by other threads to exit the execution loop are expected to
-     * be issued using the exit_request global. We must make sure that our
-     * evaluation of the global value is performed past the current_cpu
-     * value transition point, which requires a memory barrier as well as
-     * an instruction scheduling constraint on modern architectures.  */
-    smp_mb();
-
+    atomic_mb_set(&current_cpu, cpu);
     rcu_read_lock();
 
-    if (unlikely(exit_request)) {
+    if (unlikely(atomic_mb_read(&exit_request))) {
         cpu->exit_request = 1;
     }
 
@@ -519,8 +510,11 @@ int cpu_exec(CPUState *cpu)
                          * loop. Whatever requested the exit will also
                          * have set something else (eg exit_request or
                          * interrupt_request) which we will handle
-                         * next time around the loop.
+                         * next time around the loop.  But we need to
+                         * ensure tcg_exit_req is read before exit_request
+                         * or interrupt_request.
                          */
+                        smp_rmb();
                         next_tb = 0;
                         break;
                     case TB_EXIT_ICOUNT_EXPIRED:
