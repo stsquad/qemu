@@ -92,7 +92,6 @@ void cpu_exec_init(CPUState *cpu, Error **errp);
 void QEMU_NORETURN cpu_loop_exit(CPUState *cpu);
 
 #if !defined(CONFIG_USER_ONLY)
-bool qemu_in_vcpu_thread(void);
 void cpu_reload_memory_map(CPUState *cpu);
 void tcg_cpu_address_space_init(CPUState *cpu, AddressSpace *as);
 /* cputlb.c */
@@ -320,8 +319,6 @@ extern uintptr_t tci_tb_ptr;
 
 #if !defined(CONFIG_USER_ONLY)
 
-void phys_mem_set_alloc(void *(*alloc)(size_t, uint64_t *align));
-
 struct MemoryRegion *iotlb_to_region(CPUState *cpu,
                                      hwaddr index);
 
@@ -346,7 +343,4 @@ extern int singlestep;
 /* cpu-exec.c */
 extern volatile sig_atomic_t exit_request;
 
-#if !defined(CONFIG_USER_ONLY)
-void migration_bitmap_extend(ram_addr_t old, ram_addr_t new);
-#endif
 #endif

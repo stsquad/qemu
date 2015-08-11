@@ -22,12 +22,15 @@
 #include "disas/disas.h"
 #include "tcg.h"
 #include "qemu/atomic.h"
-#include "sysemu/qtest.h"
 #include "qemu/timer.h"
+#include "exec/tb-hash.h"
+#include "qemu/rcu.h"
+
+#if !defined(CONFIG_USER_ONLY)
 #include "exec/address-spaces.h"
 #include "exec/memory-internal.h"
-#include "qemu/rcu.h"
-#include "exec/tb-hash.h"
+#include "sysemu/sysemu.h"
+#endif
 
 /* -icount align implementation. */
 

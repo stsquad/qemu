@@ -205,6 +205,9 @@ QemuOpts *qemu_get_machine_opts(void);
 bool defaults_enabled(void);
 bool usb_enabled(void);
 
+bool qemu_in_vcpu_thread(void);
+void phys_mem_set_alloc(void *(*alloc)(size_t, uint64_t *align));
+
 extern QemuOptsList qemu_legacy_drive_opts;
 extern QemuOptsList qemu_common_drive_opts;
 extern QemuOptsList qemu_drive_opts;
