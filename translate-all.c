@@ -437,14 +437,14 @@ static PageDesc *page_find_alloc(tb_page_addr_t index, int alloc)
 
     /* Level 2..N-1.  */
     for (i = V_L1_SHIFT / V_L2_BITS - 1; i > 0; i--) {
-        void **p = *lp;
+        void **p = atomic_rcu_read(lp);
 
         if (p == NULL) {
             if (!alloc) {
                 return NULL;
             }
             p = g_new0(void *, V_L2_SIZE);
-            *lp = p;
+            atomic_rcu_set(lp, p);
         }
 
         lp = p + ((index >> (i * V_L2_BITS)) & (V_L2_SIZE - 1));
@@ -456,7 +456,7 @@ static PageDesc *page_find_alloc(tb_page_addr_t index, int alloc)
             return NULL;
         }
         pd = g_new0(PageDesc, V_L2_SIZE);
-        *lp = pd;
+        atomic_rcu_set(lp, pd);
     }
 
     return pd + (index & (V_L2_SIZE - 1));
