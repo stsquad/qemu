@@ -1807,6 +1807,21 @@ static void disas_ldst_excl(DisasContext *s, uint32_t insn)
         return;
     }
 
+    /* Store Pair Exclusive offers CONSTRAINED UNPREDICTABLE behaviour
+     * when: s == t || (pair && s == t2) and s == n.
+     * We take the easiest option of being UNDEFINED instead of NOP or
+     * random behaviour
+     */
+    if (is_excl) {
+        if (is_store && ((rt == rs) || (rs == rn))) {
+            unallocated_encoding(s);
+            return;
+        } else if (is_pair && rt == rt2) {
+            unallocated_encoding(s);
+            return;
+        }
+    }
+
     if (rn == 31) {
         gen_check_sp_alignment(s);
     }
@@ -1941,6 +1956,15 @@ static void disas_ldst_pair(DisasContext *s, uint32_t insn)
     int size;
 
     if (opc == 3) {
+        unallocated_encoding(s);
+        return;
+    }
+
+    /* Load Pair offers CONSTRAINED UNPREDICTABLE behaviour for the
+     * case of SIMD&FP loads where rt & rt2 match. We take the easiest
+     * option of being UNDEFINED instead of NOP or random behaviour
+     */
+    if (is_vector && is_load && rt == rt2) {
         unallocated_encoding(s);
         return;
     }
