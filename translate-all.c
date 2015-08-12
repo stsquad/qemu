@@ -152,6 +152,15 @@ void tb_unlock(void)
 #endif
 }
 
+bool tb_lock_recursive(void)
+{
+    if(have_tb_lock) {
+        return false;
+    }
+    tb_lock();
+    return true;
+}
+
 void tb_lock_reset(void)
 {
 #ifdef CONFIG_USER_ONLY
@@ -931,6 +940,14 @@ static inline void tb_page_remove(TranslationBlock **ptb, TranslationBlock *tb)
     }
 }
 
+/* reset the jump entry 'n' of a TB so that it is not chained to
+   another TB */
+static inline void tb_reset_jump(TranslationBlock *tb, int n)
+{
+    tb_set_jmp_target(tb, n, (uintptr_t)(tb->tc_ptr + tb->tb_next_offset[n]));
+    tb->jmp_next[n] = NULL;
+}
+
 static inline void tb_jmp_remove(TranslationBlock *tb, int n)
 {
     TranslationBlock *tb1, **ptb;
@@ -955,16 +972,8 @@ static inline void tb_jmp_remove(TranslationBlock *tb, int n)
         }
         /* now we can suppress tb(n) from the list */
         *ptb = tb->jmp_next[n];
-
-        tb->jmp_next[n] = NULL;
+        tb_reset_jump(tb, n);
     }
-}
-
-/* reset the jump entry 'n' of a TB so that it is not chained to
-   another TB */
-static inline void tb_reset_jump(TranslationBlock *tb, int n)
-{
-    tb_set_jmp_target(tb, n, (uintptr_t)(tb->tc_ptr + tb->tb_next_offset[n]));
 }
 
 /* invalidate one TB
@@ -979,7 +988,14 @@ void tb_phys_invalidate(TranslationBlock *tb, tb_page_addr_t page_addr)
     tb_page_addr_t phys_pc;
     TranslationBlock *tb1, *tb2;
 
-    /* remove the TB from the hash list */
+    /* Set the invalidated_flag first, to block patching a
+     * jump to tb.  FIXME: invalidated_flag should be per TB.
+     */
+    atomic_mb_set(&tcg_ctx.tb_ctx.tb_invalidated_flag, 1);
+
+    /* Now remove the TB from the hash list, so that tb_find_slow
+     * cannot find it anymore.
+     */
     phys_pc = tb->page_addr[0] + (tb->pc & ~TARGET_PAGE_MASK);
     h = tb_phys_hash_func(phys_pc);
     tb_hash_remove(&tcg_ctx.tb_ctx.tb_phys_hash[h], tb);
@@ -996,16 +1012,6 @@ void tb_phys_invalidate(TranslationBlock *tb, tb_page_addr_t page_addr)
         invalidate_page_bitmap(p);
     }
 
-    tcg_ctx.tb_ctx.tb_invalidated_flag = 1;
-
-    /* remove the TB from the hash list */
-    h = tb_jmp_cache_hash_func(tb->pc);
-    CPU_FOREACH(cpu) {
-        if (cpu->tb_jmp_cache[h] == tb) {
-            cpu->tb_jmp_cache[h] = NULL;
-        }
-    }
-
     /* suppress this TB from the two jump lists */
     tb_jmp_remove(tb, 0);
     tb_jmp_remove(tb, 1);
@@ -1020,10 +1026,36 @@ void tb_phys_invalidate(TranslationBlock *tb, tb_page_addr_t page_addr)
         tb1 = (TranslationBlock *)((uintptr_t)tb1 & ~3);
         tb2 = tb1->jmp_next[n1];
         tb_reset_jump(tb1, n1);
-        tb1->jmp_next[n1] = NULL;
         tb1 = tb2;
     }
     tb->jmp_first = (TranslationBlock *)((uintptr_t)tb | 2); /* fail safe */
+
+#if 0
+    /* TODO: I think this barrier is not necessary.  On the
+     * cpu_exec side, it is okay if the read from tb_jmp_cache
+     * comes after the read from tb_phys_hash.  This is because
+     * the read would be bleeding into the tb_lock critical
+     * section, hence there cannot be any concurrent tb_invalidate.
+     * And if you don't need a barrier there, you shouldn't need
+     * one here, either.
+     */
+     smp_wmb();
+#endif
+
+    /* Finally, remove the TB from the per-CPU cache that is
+     * accessed without tb_lock.  The tb can still be executed
+     * once after returning, if the cache was accessed before
+     * this point, but that's it.
+     *
+     * The cache cannot be filled with this tb anymore, because
+     * the lists are accessed with tb_lock held.
+     */
+    h = tb_jmp_cache_hash_func(tb->pc);
+    CPU_FOREACH(cpu) {
+        if (cpu->tb_jmp_cache[h] == tb) {
+            cpu->tb_jmp_cache[h] = NULL;
+        }
+    }
 
     tcg_ctx.tb_ctx.tb_phys_invalidate_count++;
 }
@@ -1429,7 +1461,7 @@ static void tb_link_page(TranslationBlock *tb, tb_page_addr_t phys_pc,
     h = tb_phys_hash_func(phys_pc);
     ptb = &tcg_ctx.tb_ctx.tb_phys_hash[h];
     tb->phys_hash_next = *ptb;
-    *ptb = tb;
+    atomic_rcu_set(ptb, tb);
 
     /* add in the page list */
     tb_alloc_page(tb, 0, phys_pc & TARGET_PAGE_MASK);

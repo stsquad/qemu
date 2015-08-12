@@ -244,7 +244,9 @@ static void cpu_exec_nocache(CPUState *cpu, int max_cycles,
     tb_lock();
     tb = tb_gen_code(cpu, orig_tb->pc, orig_tb->cs_base, orig_tb->flags,
                      max_cycles | CF_NOCACHE);
-    tb->orig_tb = tcg_ctx.tb_ctx.tb_invalidated_flag ? NULL : orig_tb;
+    tb->orig_tb = (atomic_mb_read(&tcg_ctx.tb_ctx.tb_invalidated_flag)
+                   ? NULL
+                   : orig_tb);
     cpu->current_tb = tb;
     tb_unlock();
 
@@ -271,7 +273,7 @@ static TranslationBlock *tb_find_physical(CPUState *cpu,
     tb_page_addr_t phys_pc, phys_page1;
     target_ulong virt_page2;
 
-    tcg_ctx.tb_ctx.tb_invalidated_flag = 0;
+    atomic_mb_set(&tcg_ctx.tb_ctx.tb_invalidated_flag, 0);
 
     /* find translated block using physical mappings */
     phys_pc = get_page_addr_code(env, pc);
@@ -279,7 +281,7 @@ static TranslationBlock *tb_find_physical(CPUState *cpu,
     h = tb_phys_hash_func(phys_pc);
     ptb1 = &tcg_ctx.tb_ctx.tb_phys_hash[h];
     for(;;) {
-        tb = *ptb1;
+        tb = atomic_rcu_read(ptb1);
         if (!tb) {
             return NULL;
         }
@@ -304,10 +306,6 @@ static TranslationBlock *tb_find_physical(CPUState *cpu,
         ptb1 = &tb->phys_hash_next;
     }
 
-    /* Move the TB to the head of the list */
-    *ptb1 = tb->phys_hash_next;
-    tb->phys_hash_next = tcg_ctx.tb_ctx.tb_phys_hash[h];
-    tcg_ctx.tb_ctx.tb_phys_hash[h] = tb;
     return tb;
 }
 
@@ -318,35 +316,27 @@ static TranslationBlock *tb_find_slow(CPUState *cpu,
 {
     TranslationBlock *tb;
 
-    tb = tb_find_physical(cpu, pc, cs_base, flags);
-    if (tb) {
-        goto found;
-    }
-
-#ifdef CONFIG_USER_ONLY
-    /* mmap_lock is needed by tb_gen_code, and mmap_lock must be
-     * taken outside tb_lock.  Since we're momentarily dropping
-     * tb_lock, there's a chance that our desired tb has been
-     * translated.
+    /* First try to get the tb.  If we don't find it we need to lock and
+     * compile it.
      */
-    tb_unlock();
-    mmap_lock();
-    tb_lock();
     tb = tb_find_physical(cpu, pc, cs_base, flags);
-    if (tb) {
-        mmap_unlock();
-        goto found;
+    if (!tb) {
+        /* mmap_lock is needed by tb_gen_code, and mmap_lock must be
+         * taken outside tb_lock.  tb_lock is released later in
+         * cpu_exec.
+         */
+        mmap_lock();
+        tb_lock();
+
+        /* Retry to get the TB in case a CPU just translate it to avoid having
+         * duplicated TB in the pool.
+         */
+        tb = tb_find_physical(cpu, pc, cs_base, flags);
+        if (!tb) {
+            tb = tb_gen_code(cpu, pc, cs_base, flags, 0);
+        }
     }
-#endif
 
-    /* if no translated code available, then translate it now */
-    tb = tb_gen_code(cpu, pc, cs_base, flags, 0);
-
-#ifdef CONFIG_USER_ONLY
-    mmap_unlock();
-#endif
-
-found:
     /* we add the TB in the virtual pc hash table */
     cpu->tb_jmp_cache[tb_jmp_cache_hash_func(pc)] = tb;
     return tb;
@@ -509,16 +499,15 @@ int cpu_exec(CPUState *cpu)
                     cpu->exception_index = EXCP_INTERRUPT;
                     cpu_loop_exit(cpu);
                 }
-                tb_lock();
                 tb = tb_find_fast(cpu);
                 /* Note: we do it here to avoid a gcc bug on Mac OS X when
                    doing it in tb_find_slow */
-                if (tcg_ctx.tb_ctx.tb_invalidated_flag) {
+                if (atomic_mb_read(&tcg_ctx.tb_ctx.tb_invalidated_flag)) {
                     /* as some TB could have been invalidated because
                        of memory exceptions while generating the code, we
                        must recompute the hash index here */
                     next_tb = 0;
-                    tcg_ctx.tb_ctx.tb_invalidated_flag = 0;
+                    atomic_mb_set(&tcg_ctx.tb_ctx.tb_invalidated_flag, 0);
                 }
                 if (qemu_loglevel_mask(CPU_LOG_EXEC)) {
                     qemu_log("Trace %p [" TARGET_FMT_lx "] %s\n",
@@ -528,10 +517,15 @@ int cpu_exec(CPUState *cpu)
                    spans two pages, we cannot safely do a direct
                    jump. */
                 if (next_tb != 0 && tb->page_addr[1] == -1) {
+                    tb_lock_recursive();
                     tb_add_jump((TranslationBlock *)(next_tb & ~TB_EXIT_MASK),
                                 next_tb & TB_EXIT_MASK, tb);
                 }
-                tb_unlock();
+                /* The lock may not be taken if we went through the
+                 * fast lookup path and did not have to do any patching.
+                 */
+                tb_lock_reset();
+
                 /* cpu_interrupt might be called while translating the
                    TB, but before it is linked into a potentially
                    infinite loop and becomes env->current_tb. Avoid

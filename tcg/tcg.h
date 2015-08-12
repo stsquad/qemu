@@ -597,6 +597,7 @@ void tcg_pool_delete(TCGContext *s);
 
 void tb_lock(void);
 void tb_unlock(void);
+bool tb_lock_recursive(void);
 void tb_lock_reset(void);
 
 /* Called with tb_lock held.  */
