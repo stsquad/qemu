@@ -2957,7 +2957,7 @@ int main(int argc, char **argv, char **envp)
     const char *boot_once = NULL;
     DisplayState *ds;
     int cyls, heads, secs, translation;
-    QemuOpts *hda_opts = NULL, *opts, *machine_opts, *icount_opts = NULL;
+    QemuOpts *hda_opts = NULL, *opts, *machine_opts, *icount_opts = NULL, *tcg_opts = NULL;
     QemuOptsList *olist;
     int optind;
     const char *optarg;
@@ -3746,6 +3746,13 @@ int main(int argc, char **argv, char **envp)
             case QEMU_OPTION_no_reboot:
                 no_reboot = 1;
                 break;
+            case QEMU_OPTION_tcg:
+                tcg_opts = qemu_opts_parse_noisily(qemu_find_opts("tcg"),
+                                                   optarg, false);
+                if (!tcg_opts) {
+                    exit(1);
+                }
+                break;
             case QEMU_OPTION_no_shutdown:
                 no_shutdown = 1;
                 break;
@@ -4025,6 +4032,8 @@ int main(int argc, char **argv, char **envp)
     loc_set_none();
 
     replay_configure(icount_opts);
+
+    qemu_tcg_configure(tcg_opts);
 
     machine_class = select_machine();
 
