@@ -146,6 +146,7 @@ typedef struct TimersState {
 } TimersState;
 
 static TimersState timers_state;
+static bool mttcg_enabled;
 
 int64_t cpu_get_icount_raw(void)
 {
@@ -1523,6 +1524,21 @@ static void tcg_exec_all(void)
 
     /* Pairs with smp_wmb in qemu_cpu_kick.  */
     atomic_mb_set(&exit_request, 0);
+}
+
+void qemu_tcg_enable_mttcg(void)
+{
+    /*
+     * TODO: Check if we have a chance to have MTTCG working on this guest/host.
+     *       Basically is the atomic instruction implemented? Is there any
+     *       memory ordering issue?
+     */
+    mttcg_enabled = true;
+}
+
+bool qemu_tcg_mttcg_enabled(void)
+{
+    return mttcg_enabled;
 }
 
 void list_cpus(FILE *f, fprintf_function cpu_fprintf, const char *optarg)
