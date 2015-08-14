@@ -3208,6 +3208,14 @@ Attach to existing xen domain.
 xend will use this when starting QEMU (XEN only).
 ETEXI
 
+DEF("enable-mttcg", 0, QEMU_OPTION_mttcg, \
+    "-enable-mttcg   enable MultiThread TCG\n", QEMU_ARCH_ALL)
+STEXI
+@item -enable-mttcg
+@findex -enable-mttcg
+Enable MultiThread TCG.
+ETEXI
+
 DEF("no-reboot", 0, QEMU_OPTION_no_reboot, \
     "-no-reboot      exit instead of rebooting\n", QEMU_ARCH_ALL)
 STEXI
