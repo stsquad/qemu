@@ -3751,6 +3751,9 @@ int main(int argc, char **argv, char **envp)
             case QEMU_OPTION_no_reboot:
                 no_reboot = 1;
                 break;
+            case QEMU_OPTION_mttcg:
+                qemu_tcg_enable_mttcg();
+                break;
             case QEMU_OPTION_no_shutdown:
                 no_shutdown = 1;
                 break;
