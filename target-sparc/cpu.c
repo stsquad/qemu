@@ -40,7 +40,6 @@ static void sparc_cpu_reset(CPUState *s)
     env->wim = 1;
 #endif
     env->regwptr = env->regbase + (env->cwp * 16);
-    CC_OP = CC_OP_FLAGS;
 #if defined(CONFIG_USER_ONLY)
 #ifdef TARGET_SPARC64
     env->cleanwin = env->nwindows - 2;
@@ -679,25 +678,6 @@ static void cpu_print_cc(FILE *f, fprintf_function cpu_fprintf,
                 cc & PSR_CARRY ? 'C' : '-');
 }
 
-static const char *cc_op_name(uint32_t op)
-{
-    switch (op) {
-    case CC_OP_DYNAMIC:  return "dynamic";
-    case CC_OP_FLAGS:    return "flags";
-    case CC_OP_DIV:      return "div";
-    case CC_OP_ADD:      return "add";
-    case CC_OP_ADDX:     return "addx";
-    case CC_OP_TADD:     return "tadd";
-    case CC_OP_TADDTV:   return "taddtv";
-    case CC_OP_SUB:      return "sub";
-    case CC_OP_SUBX:     return "subx";
-    case CC_OP_TSUB:     return "tsub";
-    case CC_OP_TSUBTV:   return "tsubtv";
-    case CC_OP_LOGIC:    return "logic";
-    default:             return "*bad*";
-    }
-}
-
 #ifdef TARGET_SPARC64
 #define REGS_PER_LINE 4
 #else
@@ -771,10 +751,6 @@ void sparc_cpu_dump_state(CPUState *cs, FILE *f, fprintf_function cpu_fprintf,
     cpu_fprintf(f, "fsr: " TARGET_FMT_lx " y: " TARGET_FMT_lx "\n",
                 env->fsr, env->y);
 #endif
-    cpu_fprintf(f, "cc dst: " TARGET_FMT_lx " src: " TARGET_FMT_lx
-                " src2: " TARGET_FMT_lx " op: %s\n",
-                env->cc_dst, env->cc_src, env->cc_src2,
-                cc_op_name(env->cc_op));
     cpu_fprintf(f, "\n");
 }
 

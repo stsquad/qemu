@@ -1288,11 +1288,6 @@ void cpu_loop (CPUSPARCState *env)
         trapnr = cpu_sparc_exec(cs);
         cpu_exec_end(cs);
 
-        /* Compute PSR before exposing state.  */
-        if (env->cc_op != CC_OP_FLAGS) {
-            cpu_get_psr(env);
-        }
-
         switch (trapnr) {
 #ifndef TARGET_SPARC64
         case 0x88:
@@ -1308,16 +1303,16 @@ void cpu_loop (CPUSPARCState *env)
                               0, 0);
             if ((abi_ulong)ret >= (abi_ulong)(-515)) {
 #if defined(TARGET_SPARC64) && !defined(TARGET_ABI32)
-                env->xcc |= PSR_CARRY;
+                env->cc_xc = 1;
 #else
-                env->icc |= PSR_CARRY;
+                env->cc_ic = 1;
 #endif
                 ret = -ret;
             } else {
 #if defined(TARGET_SPARC64) && !defined(TARGET_ABI32)
-                env->xcc &= ~PSR_CARRY;
+                env->cc_xc = 0;
 #else
-                env->icc &= ~PSR_CARRY;
+                env->cc_ic = 0;
 #endif
             }
             env->regwptr[0] = ret;

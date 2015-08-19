@@ -2236,9 +2236,9 @@ static inline abi_ulong get_sigframe(struct target_sigaction *sa,
 static int
 setup___siginfo(__siginfo_t *si, CPUSPARCState *env, abi_ulong mask)
 {
-	int err = 0, i;
+    int err = 0, i;
 
-    __put_user(env->icc, &si->si_regs.psr);
+    __put_user(cpu_get_icc(env), &si->si_regs.psr);
     __put_user(env->pc, &si->si_regs.pc);
     __put_user(env->npc, &si->si_regs.npc);
     __put_user(env->y, &si->si_regs.y);
@@ -2402,7 +2402,7 @@ long do_sigreturn(CPUSPARCState *env)
         __get_user(up_psr, &sf->info.si_regs.psr);
 
         /* User can only change condition codes and FPU enabling in %psr. */
-        env->icc = up_psr & PSR_ICC;
+        cpu_put_icc(env, up_psr);
 #ifndef TARGET_SPARC64
         env->psref = (up_psr & PSR_EF ? 1 : 0);
 #endif

@@ -72,7 +72,7 @@ static target_ulong helper_udiv_common(CPUSPARCState *env, target_ulong a,
                                        target_ulong b, int cc)
 {
     SPARCCPU *cpu = sparc_env_get_cpu(env);
-    int overflow = 0;
+    target_ulong overflow = 0;
     uint64_t x0;
     uint32_t x1;
 
@@ -87,13 +87,17 @@ static target_ulong helper_udiv_common(CPUSPARCState *env, target_ulong a,
     x0 = x0 / x1;
     if (x0 > UINT32_MAX) {
         x0 = UINT32_MAX;
-        overflow = 1;
+        overflow = 0x80000000u;
     }
 
     if (cc) {
-        env->cc_dst = x0;
-        env->cc_src2 = overflow;
-        env->cc_op = CC_OP_DIV;
+        env->cc_n = x0;
+        env->cc_z = x0;
+        env->cc_v = overflow;
+        env->cc_ic = 0;
+#ifdef TARGET_SPARC64
+        env->cc_xc = 0;
+#endif
     }
     return x0;
 }
@@ -112,7 +116,7 @@ static target_ulong helper_sdiv_common(CPUSPARCState *env, target_ulong a,
                                        target_ulong b, int cc)
 {
     SPARCCPU *cpu = sparc_env_get_cpu(env);
-    int overflow = 0;
+    target_ulong overflow = 0;
     int64_t x0;
     int32_t x1;
 
@@ -124,19 +128,23 @@ static target_ulong helper_sdiv_common(CPUSPARCState *env, target_ulong a,
         helper_raise_exception(env, TT_DIV_ZERO);
     } else if (x1 == -1 && x0 == INT64_MIN) {
         x0 = INT32_MAX;
-        overflow = 1;
+        overflow = 0x80000000u;
     } else {
         x0 = x0 / x1;
         if ((int32_t) x0 != x0) {
             x0 = x0 < 0 ? INT32_MIN : INT32_MAX;
-            overflow = 1;
+            overflow = 0x80000000u;
         }
     }
 
     if (cc) {
-        env->cc_dst = x0;
-        env->cc_src2 = overflow;
-        env->cc_op = CC_OP_DIV;
+        env->cc_n = x0;
+        env->cc_z = x0;
+        env->cc_v = overflow;
+        env->cc_ic = 0;
+#ifdef TARGET_SPARC64
+        env->cc_xc = 0;
+#endif
     }
     return x0;
 }
@@ -185,7 +193,7 @@ target_ulong helper_taddcctv(CPUSPARCState *env, target_ulong src1,
                              target_ulong src2)
 {
     SPARCCPU *cpu = sparc_env_get_cpu(env);
-    target_ulong dst;
+    target_ulong dst, ovf;
 
     /* Tag overflow occurs if either input has bits 0 or 1 set.  */
     if ((src1 | src2) & 3) {
@@ -193,17 +201,21 @@ target_ulong helper_taddcctv(CPUSPARCState *env, target_ulong src1,
     }
 
     dst = src1 + src2;
+    ovf = (dst ^ src1) & ~(src1 ^ src2);
 
     /* Tag overflow occurs if the addition overflows.  */
-    if (~(src1 ^ src2) & (src1 ^ dst) & (1u << 31)) {
+    if (ovf & (1u << 31)) {
         goto tag_overflow;
     }
 
     /* Only modify the CC after any exceptions have been generated.  */
-    env->cc_op = CC_OP_TADDTV;
-    env->cc_src = src1;
-    env->cc_src2 = src2;
-    env->cc_dst = dst;
+    env->cc_n = dst;
+    env->cc_z = dst;
+    env->cc_v = ovf;
+    env->cc_ic = (uint32_t)dst < (uint32_t)src1;
+#ifdef TARGET_SPARC64
+    env->cc_xc = dst < src1;
+#endif
     return dst;
 
  tag_overflow:
@@ -215,7 +227,7 @@ target_ulong helper_tsubcctv(CPUSPARCState *env, target_ulong src1,
                              target_ulong src2)
 {
     SPARCCPU *cpu = sparc_env_get_cpu(env);
-    target_ulong dst;
+    target_ulong dst, ovf;
 
     /* Tag overflow occurs if either input has bits 0 or 1 set.  */
     if ((src1 | src2) & 3) {
@@ -223,17 +235,21 @@ target_ulong helper_tsubcctv(CPUSPARCState *env, target_ulong src1,
     }
 
     dst = src1 - src2;
+    ovf = (dst ^ src1) & (src1 ^ src2);
 
     /* Tag overflow occurs if the subtraction overflows.  */
-    if ((src1 ^ src2) & (src1 ^ dst) & (1u << 31)) {
+    if (ovf & (1u << 31)) {
         goto tag_overflow;
     }
 
     /* Only modify the CC after any exceptions have been generated.  */
-    env->cc_op = CC_OP_TSUBTV;
-    env->cc_src = src1;
-    env->cc_src2 = src2;
-    env->cc_dst = dst;
+    env->cc_n = dst;
+    env->cc_z = dst;
+    env->cc_v = ovf;
+    env->cc_ic = (uint32_t)src1 < (uint32_t)src2;
+#ifdef TARGET_SPARC64
+    env->cc_xc = src1 < src2;
+#endif
     return dst;
 
  tag_overflow:

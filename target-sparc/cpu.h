@@ -103,27 +103,6 @@
 #define PSR_CWP   0x1f
 #endif
 
-#define CC_SRC (env->cc_src)
-#define CC_SRC2 (env->cc_src2)
-#define CC_DST (env->cc_dst)
-#define CC_OP  (env->cc_op)
-
-enum {
-    CC_OP_DYNAMIC, /* must use dynamic code to get cc_op */
-    CC_OP_FLAGS,   /* all cc are back in status register */
-    CC_OP_DIV,     /* modify N, Z and V, C = 0*/
-    CC_OP_ADD,     /* modify all flags, CC_DST = res, CC_SRC = src1 */
-    CC_OP_ADDX,    /* modify all flags, CC_DST = res, CC_SRC = src1 */
-    CC_OP_TADD,    /* modify all flags, CC_DST = res, CC_SRC = src1 */
-    CC_OP_TADDTV,  /* modify all flags except V, CC_DST = res, CC_SRC = src1 */
-    CC_OP_SUB,     /* modify all flags, CC_DST = res, CC_SRC = src1 */
-    CC_OP_SUBX,    /* modify all flags, CC_DST = res, CC_SRC = src1 */
-    CC_OP_TSUB,    /* modify all flags, CC_DST = res, CC_SRC = src1 */
-    CC_OP_TSUBTV,  /* modify all flags except V, CC_DST = res, CC_SRC = src1 */
-    CC_OP_LOGIC,   /* modify N and Z, C = V = 0, CC_DST = res */
-    CC_OP_NB,
-};
-
 /* Trap base register */
 #define TBR_BASE_MASK 0xfffff000
 
@@ -391,16 +370,19 @@ struct CPUSPARCState {
     target_ulong y;        /* multiply/divide register */
 
     /* emulator internal flags handling */
-    target_ulong cc_src, cc_src2;
-    target_ulong cc_dst;
-    uint32_t cc_op;
+    target_ulong cc_n;
+    target_ulong cc_z;
+    target_ulong cc_v;
+    target_ulong cc_ic;
+#ifdef TARGET_SPARC64
+    target_ulong cc_xc;
+#endif
 
     target_ulong cond; /* conditional branch result (XXX: save it in a
                           temporary register when possible) */
 
     target_ulong fsr;      /* FPU state register */
     CPU_DoubleU fpr[TARGET_DPREGS];  /* floating point registers */
-    uint32_t icc;      /* 32-bit carry state from the PSR */
     uint32_t cwp;      /* index of current register window (extracted
                           from PSR) */
 #if !defined(TARGET_SPARC64) || defined(TARGET_ABI32)
@@ -476,7 +458,6 @@ struct CPUSPARCState {
 #define MAXTL_MAX 8
 #define MAXTL_MASK (MAXTL_MAX - 1)
     trap_state ts[MAXTL_MAX];
-    uint32_t xcc;               /* Extended integer condition codes */
     uint32_t asi;
     uint32_t pstate;
     uint32_t tl;
@@ -541,14 +522,16 @@ int cpu_sparc_exec(CPUState *cpu);
 
 /* cc_helper.c */
 uint32_t cpu_get_icc(CPUSPARCState *env1);
-uint32_t cpu_get_xcc(CPUSPARCState *env1);
+void cpu_put_icc(CPUSPARCState *env1, uint32_t);
+#ifdef TARGET_SPARC64
+uint64_t cpu_get_ccr(CPUSPARCState *env1);
+void cpu_put_ccr(CPUSPARCState *env1, uint32_t);
+#endif
 
 /* win_helper.c */
 target_ulong cpu_get_psr(CPUSPARCState *env1);
 void cpu_put_psr(CPUSPARCState *env1, target_ulong val);
 #ifdef TARGET_SPARC64
-target_ulong cpu_get_ccr(CPUSPARCState *env1);
-void cpu_put_ccr(CPUSPARCState *env1, target_ulong val);
 target_ulong cpu_get_cwp64(CPUSPARCState *env1);
 void cpu_put_cwp64(CPUSPARCState *env1, int cwp);
 void cpu_change_pstate(CPUSPARCState *env1, uint32_t new_pstate);

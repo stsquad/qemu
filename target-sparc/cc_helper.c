@@ -20,472 +20,92 @@
 #include "cpu.h"
 #include "exec/helper-proto.h"
 
-static uint32_t compute_all_flags(CPUSPARCState *env)
-{
-    return env->icc & PSR_ICC;
-}
-
-static uint32_t compute_C_flags(CPUSPARCState *env)
-{
-    return env->icc & PSR_CARRY;
-}
-
-static inline uint32_t get_NZ_icc(int32_t dst)
-{
-    uint32_t ret = 0;
-
-    if (dst == 0) {
-        ret = PSR_ZERO;
-    } else if (dst < 0) {
-        ret = PSR_NEG;
-    }
-    return ret;
-}
-
-#ifdef TARGET_SPARC64
-static uint32_t compute_all_flags_xcc(CPUSPARCState *env)
-{
-    return env->xcc & PSR_ICC;
-}
-
-static uint32_t compute_C_flags_xcc(CPUSPARCState *env)
-{
-    return env->xcc & PSR_CARRY;
-}
-
-static inline uint32_t get_NZ_xcc(target_long dst)
-{
-    uint32_t ret = 0;
-
-    if (!dst) {
-        ret = PSR_ZERO;
-    } else if (dst < 0) {
-        ret = PSR_NEG;
-    }
-    return ret;
-}
-#endif
-
-static inline uint32_t get_V_div_icc(target_ulong src2)
-{
-    uint32_t ret = 0;
-
-    if (src2 != 0) {
-        ret = PSR_OVF;
-    }
-    return ret;
-}
-
-static uint32_t compute_all_div(CPUSPARCState *env)
-{
-    uint32_t ret;
-
-    ret = get_NZ_icc(CC_DST);
-    ret |= get_V_div_icc(CC_SRC2);
-    return ret;
-}
-
-static uint32_t compute_C_div(CPUSPARCState *env)
-{
-    return 0;
-}
-
-static inline uint32_t get_C_add_icc(uint32_t dst, uint32_t src1)
-{
-    uint32_t ret = 0;
-
-    if (dst < src1) {
-        ret = PSR_CARRY;
-    }
-    return ret;
-}
-
-static inline uint32_t get_C_addx_icc(uint32_t dst, uint32_t src1,
-                                      uint32_t src2)
-{
-    uint32_t ret = 0;
-
-    if (((src1 & src2) | (~dst & (src1 | src2))) & (1U << 31)) {
-        ret = PSR_CARRY;
-    }
-    return ret;
-}
-
-static inline uint32_t get_V_add_icc(uint32_t dst, uint32_t src1,
-                                     uint32_t src2)
-{
-    uint32_t ret = 0;
-
-    if (((src1 ^ src2 ^ -1) & (src1 ^ dst)) & (1U << 31)) {
-        ret = PSR_OVF;
-    }
-    return ret;
-}
-
-#ifdef TARGET_SPARC64
-static inline uint32_t get_C_add_xcc(target_ulong dst, target_ulong src1)
-{
-    uint32_t ret = 0;
-
-    if (dst < src1) {
-        ret = PSR_CARRY;
-    }
-    return ret;
-}
-
-static inline uint32_t get_C_addx_xcc(target_ulong dst, target_ulong src1,
-                                      target_ulong src2)
-{
-    uint32_t ret = 0;
-
-    if (((src1 & src2) | (~dst & (src1 | src2))) & (1ULL << 63)) {
-        ret = PSR_CARRY;
-    }
-    return ret;
-}
-
-static inline uint32_t get_V_add_xcc(target_ulong dst, target_ulong src1,
-                                     target_ulong src2)
-{
-    uint32_t ret = 0;
-
-    if (((src1 ^ src2 ^ -1) & (src1 ^ dst)) & (1ULL << 63)) {
-        ret = PSR_OVF;
-    }
-    return ret;
-}
-
-static uint32_t compute_all_add_xcc(CPUSPARCState *env)
-{
-    uint32_t ret;
-
-    ret = get_NZ_xcc(CC_DST);
-    ret |= get_C_add_xcc(CC_DST, CC_SRC);
-    ret |= get_V_add_xcc(CC_DST, CC_SRC, CC_SRC2);
-    return ret;
-}
-
-static uint32_t compute_C_add_xcc(CPUSPARCState *env)
-{
-    return get_C_add_xcc(CC_DST, CC_SRC);
-}
-#endif
-
-static uint32_t compute_all_add(CPUSPARCState *env)
-{
-    uint32_t ret;
-
-    ret = get_NZ_icc(CC_DST);
-    ret |= get_C_add_icc(CC_DST, CC_SRC);
-    ret |= get_V_add_icc(CC_DST, CC_SRC, CC_SRC2);
-    return ret;
-}
-
-static uint32_t compute_C_add(CPUSPARCState *env)
-{
-    return get_C_add_icc(CC_DST, CC_SRC);
-}
-
-#ifdef TARGET_SPARC64
-static uint32_t compute_all_addx_xcc(CPUSPARCState *env)
-{
-    uint32_t ret;
-
-    ret = get_NZ_xcc(CC_DST);
-    ret |= get_C_addx_xcc(CC_DST, CC_SRC, CC_SRC2);
-    ret |= get_V_add_xcc(CC_DST, CC_SRC, CC_SRC2);
-    return ret;
-}
-
-static uint32_t compute_C_addx_xcc(CPUSPARCState *env)
-{
-    uint32_t ret;
-
-    ret = get_C_addx_xcc(CC_DST, CC_SRC, CC_SRC2);
-    return ret;
-}
-#endif
-
-static uint32_t compute_all_addx(CPUSPARCState *env)
-{
-    uint32_t ret;
-
-    ret = get_NZ_icc(CC_DST);
-    ret |= get_C_addx_icc(CC_DST, CC_SRC, CC_SRC2);
-    ret |= get_V_add_icc(CC_DST, CC_SRC, CC_SRC2);
-    return ret;
-}
-
-static uint32_t compute_C_addx(CPUSPARCState *env)
-{
-    uint32_t ret;
-
-    ret = get_C_addx_icc(CC_DST, CC_SRC, CC_SRC2);
-    return ret;
-}
-
-static inline uint32_t get_V_tag_icc(target_ulong src1, target_ulong src2)
-{
-    uint32_t ret = 0;
-
-    if ((src1 | src2) & 0x3) {
-        ret = PSR_OVF;
-    }
-    return ret;
-}
-
-static uint32_t compute_all_tadd(CPUSPARCState *env)
-{
-    uint32_t ret;
-
-    ret = get_NZ_icc(CC_DST);
-    ret |= get_C_add_icc(CC_DST, CC_SRC);
-    ret |= get_V_add_icc(CC_DST, CC_SRC, CC_SRC2);
-    ret |= get_V_tag_icc(CC_SRC, CC_SRC2);
-    return ret;
-}
-
-static uint32_t compute_all_taddtv(CPUSPARCState *env)
-{
-    uint32_t ret;
-
-    ret = get_NZ_icc(CC_DST);
-    ret |= get_C_add_icc(CC_DST, CC_SRC);
-    return ret;
-}
-
-static inline uint32_t get_C_sub_icc(uint32_t src1, uint32_t src2)
-{
-    uint32_t ret = 0;
-
-    if (src1 < src2) {
-        ret = PSR_CARRY;
-    }
-    return ret;
-}
-
-static inline uint32_t get_C_subx_icc(uint32_t dst, uint32_t src1,
-                                      uint32_t src2)
-{
-    uint32_t ret = 0;
-
-    if (((~src1 & src2) | (dst & (~src1 | src2))) & (1U << 31)) {
-        ret = PSR_CARRY;
-    }
-    return ret;
-}
-
-static inline uint32_t get_V_sub_icc(uint32_t dst, uint32_t src1,
-                                     uint32_t src2)
-{
-    uint32_t ret = 0;
-
-    if (((src1 ^ src2) & (src1 ^ dst)) & (1U << 31)) {
-        ret = PSR_OVF;
-    }
-    return ret;
-}
-
-
-#ifdef TARGET_SPARC64
-static inline uint32_t get_C_sub_xcc(target_ulong src1, target_ulong src2)
-{
-    uint32_t ret = 0;
-
-    if (src1 < src2) {
-        ret = PSR_CARRY;
-    }
-    return ret;
-}
-
-static inline uint32_t get_C_subx_xcc(target_ulong dst, target_ulong src1,
-                                      target_ulong src2)
-{
-    uint32_t ret = 0;
-
-    if (((~src1 & src2) | (dst & (~src1 | src2))) & (1ULL << 63)) {
-        ret = PSR_CARRY;
-    }
-    return ret;
-}
-
-static inline uint32_t get_V_sub_xcc(target_ulong dst, target_ulong src1,
-                                     target_ulong src2)
-{
-    uint32_t ret = 0;
-
-    if (((src1 ^ src2) & (src1 ^ dst)) & (1ULL << 63)) {
-        ret = PSR_OVF;
-    }
-    return ret;
-}
-
-static uint32_t compute_all_sub_xcc(CPUSPARCState *env)
-{
-    uint32_t ret;
-
-    ret = get_NZ_xcc(CC_DST);
-    ret |= get_C_sub_xcc(CC_SRC, CC_SRC2);
-    ret |= get_V_sub_xcc(CC_DST, CC_SRC, CC_SRC2);
-    return ret;
-}
-
-static uint32_t compute_C_sub_xcc(CPUSPARCState *env)
-{
-    return get_C_sub_xcc(CC_SRC, CC_SRC2);
-}
-#endif
-
-static uint32_t compute_all_sub(CPUSPARCState *env)
-{
-    uint32_t ret;
-
-    ret = get_NZ_icc(CC_DST);
-    ret |= get_C_sub_icc(CC_SRC, CC_SRC2);
-    ret |= get_V_sub_icc(CC_DST, CC_SRC, CC_SRC2);
-    return ret;
-}
-
-static uint32_t compute_C_sub(CPUSPARCState *env)
-{
-    return get_C_sub_icc(CC_SRC, CC_SRC2);
-}
-
-#ifdef TARGET_SPARC64
-static uint32_t compute_all_subx_xcc(CPUSPARCState *env)
-{
-    uint32_t ret;
-
-    ret = get_NZ_xcc(CC_DST);
-    ret |= get_C_subx_xcc(CC_DST, CC_SRC, CC_SRC2);
-    ret |= get_V_sub_xcc(CC_DST, CC_SRC, CC_SRC2);
-    return ret;
-}
-
-static uint32_t compute_C_subx_xcc(CPUSPARCState *env)
-{
-    uint32_t ret;
-
-    ret = get_C_subx_xcc(CC_DST, CC_SRC, CC_SRC2);
-    return ret;
-}
-#endif
-
-static uint32_t compute_all_subx(CPUSPARCState *env)
-{
-    uint32_t ret;
-
-    ret = get_NZ_icc(CC_DST);
-    ret |= get_C_subx_icc(CC_DST, CC_SRC, CC_SRC2);
-    ret |= get_V_sub_icc(CC_DST, CC_SRC, CC_SRC2);
-    return ret;
-}
-
-static uint32_t compute_C_subx(CPUSPARCState *env)
-{
-    uint32_t ret;
-
-    ret = get_C_subx_icc(CC_DST, CC_SRC, CC_SRC2);
-    return ret;
-}
-
-static uint32_t compute_all_tsub(CPUSPARCState *env)
-{
-    uint32_t ret;
-
-    ret = get_NZ_icc(CC_DST);
-    ret |= get_C_sub_icc(CC_SRC, CC_SRC2);
-    ret |= get_V_sub_icc(CC_DST, CC_SRC, CC_SRC2);
-    ret |= get_V_tag_icc(CC_SRC, CC_SRC2);
-    return ret;
-}
-
-static uint32_t compute_all_tsubtv(CPUSPARCState *env)
-{
-    uint32_t ret;
-
-    ret = get_NZ_icc(CC_DST);
-    ret |= get_C_sub_icc(CC_SRC, CC_SRC2);
-    return ret;
-}
-
-static uint32_t compute_all_logic(CPUSPARCState *env)
-{
-    return get_NZ_icc(CC_DST);
-}
-
-static uint32_t compute_C_logic(CPUSPARCState *env)
-{
-    return 0;
-}
-
-#ifdef TARGET_SPARC64
-static uint32_t compute_all_logic_xcc(CPUSPARCState *env)
-{
-    return get_NZ_xcc(CC_DST);
-}
-#endif
-
-typedef struct CCTable {
-    uint32_t (*compute_all)(CPUSPARCState *env); /* return all the flags */
-    uint32_t (*compute_c)(CPUSPARCState *env);  /* return the C flag */
-} CCTable;
-
-static const CCTable icc_table[CC_OP_NB] = {
-    /* CC_OP_DYNAMIC should never happen */
-    [CC_OP_FLAGS] = { compute_all_flags, compute_C_flags },
-    [CC_OP_DIV] = { compute_all_div, compute_C_div },
-    [CC_OP_ADD] = { compute_all_add, compute_C_add },
-    [CC_OP_ADDX] = { compute_all_addx, compute_C_addx },
-    [CC_OP_TADD] = { compute_all_tadd, compute_C_add },
-    [CC_OP_TADDTV] = { compute_all_taddtv, compute_C_add },
-    [CC_OP_SUB] = { compute_all_sub, compute_C_sub },
-    [CC_OP_SUBX] = { compute_all_subx, compute_C_subx },
-    [CC_OP_TSUB] = { compute_all_tsub, compute_C_sub },
-    [CC_OP_TSUBTV] = { compute_all_tsubtv, compute_C_sub },
-    [CC_OP_LOGIC] = { compute_all_logic, compute_C_logic },
-};
-
-#ifdef TARGET_SPARC64
-static const CCTable xcc_table[CC_OP_NB] = {
-    /* CC_OP_DYNAMIC should never happen */
-    [CC_OP_FLAGS] = { compute_all_flags_xcc, compute_C_flags_xcc },
-    [CC_OP_DIV] = { compute_all_logic_xcc, compute_C_logic },
-    [CC_OP_ADD] = { compute_all_add_xcc, compute_C_add_xcc },
-    [CC_OP_ADDX] = { compute_all_addx_xcc, compute_C_addx_xcc },
-    [CC_OP_TADD] = { compute_all_add_xcc, compute_C_add_xcc },
-    [CC_OP_TADDTV] = { compute_all_add_xcc, compute_C_add_xcc },
-    [CC_OP_SUB] = { compute_all_sub_xcc, compute_C_sub_xcc },
-    [CC_OP_SUBX] = { compute_all_subx_xcc, compute_C_subx_xcc },
-    [CC_OP_TSUB] = { compute_all_sub_xcc, compute_C_sub_xcc },
-    [CC_OP_TSUBTV] = { compute_all_sub_xcc, compute_C_sub_xcc },
-    [CC_OP_LOGIC] = { compute_all_logic_xcc, compute_C_logic },
-};
-#endif
-
-uint32_t helper_compute_icc(CPUSPARCState *env)
-{
-    return icc_table[CC_OP].compute_all(env);
-}
-
 uint32_t cpu_get_icc(CPUSPARCState *env)
 {
-    return helper_compute_icc(env);
+    uint32_t res, n, z, v, c;
+
+    n = env->cc_n;
+    z = env->cc_z;
+    v = env->cc_v;
+    c = env->cc_ic;
+
+    res = 0;
+    res |= ((int32_t)n < 0 ? PSR_NEG : 0);
+    res |= (z == 0 ? PSR_ZERO : 0);
+    res |= ((int32_t)v < 0 ? PSR_OVF : 0);
+    res |= c * PSR_CARRY;
+    return res;
+}
+
+void cpu_put_icc(CPUSPARCState *env, uint32_t icc)
+{
+    uint32_t in, iz, iv, ic;
+
+    in = (icc & PSR_NEG ? -1 : 0);
+    iz = (icc & PSR_ZERO ? 0 : 1);
+    iv = (icc & PSR_OVF ? -1 : 0);
+    ic = (icc & PSR_CARRY ? 1 : 0);
+
+#ifdef TARGET_SPARC64
+    /* Don't clobber XCC.  */
+    env->cc_n = deposit64(env->cc_n, 0, 32, in);
+    env->cc_z = deposit64(env->cc_z, 0, 32, iz);
+    env->cc_v = deposit64(env->cc_v, 0, 32, iv);
+#else
+    env->cc_n = in;
+    env->cc_z = iz;
+    env->cc_v = iv;
+#endif
+    env->cc_ic = ic;
 }
 
 #ifdef TARGET_SPARC64
-uint32_t helper_compute_xcc(CPUSPARCState *env)
+static uint32_t cpu_get_xcc(CPUSPARCState *env)
 {
-    return xcc_table[CC_OP].compute_all(env);
+    target_ulong n, z, v, c;
+    uint32_t res;
+
+    n = env->cc_n;
+    z = env->cc_z;
+    v = env->cc_v;
+    c = env->cc_xc;
+
+    res = 0;
+    res |= ((target_long)n < 0 ? PSR_NEG : 0);
+    res |= (z == 0 ? PSR_ZERO : 0);
+    res |= ((target_long)v < 0 ? PSR_OVF : 0);
+    res |= c * PSR_CARRY;
+    return res;
 }
 
-uint32_t cpu_get_xcc(CPUSPARCState *env)
+uint64_t cpu_get_ccr(CPUSPARCState *env)
 {
-    return helper_compute_xcc(env);
+    uint32_t icc = cpu_get_icc(env);
+    uint32_t xcc = cpu_get_xcc(env);
+    return ((xcc >> 20) << 4) | (icc >> 20);
+}
+
+void cpu_put_ccr(CPUSPARCState *env, uint32_t val)
+{
+    uint32_t xcc, xn, xz, xv, xc;
+    uint32_t icc, in, iz, iv, ic;
+
+    xcc = val << (20 - 4);
+    xn = (xcc & PSR_NEG ? -1 : 0);
+    xz = (xcc & PSR_ZERO ? 0 : 1);
+    xv = (xcc & PSR_OVF ? -1 : 0);
+    xc = (xcc & PSR_CARRY ? 1 : 0);
+
+    icc = val << 20;
+    in = (icc & PSR_NEG ? -1 : 0);
+    iz = (icc & PSR_ZERO ? 0 : 1);
+    iv = (icc & PSR_OVF ? -1 : 0);
+    ic = (icc & PSR_CARRY ? 1 : 0);
+
+    env->cc_n = ((uint64_t)xn << 32) | in;
+    env->cc_z = ((uint64_t)xz << 32) | iz;
+    env->cc_v = ((uint64_t)xv << 32) | iv;
+    env->cc_ic = ic;
+    env->cc_xc = xc;
 }
 #endif
-
-uint32_t helper_compute_C_icc(CPUSPARCState *env)
-{
-    return icc_table[CC_OP].compute_c(env) >> PSR_CARRY_SHIFT;
-}

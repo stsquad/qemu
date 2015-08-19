@@ -43,9 +43,7 @@
 
 /* global register indexes */
 static TCGv_ptr cpu_env, cpu_regwptr;
-static TCGv cpu_cc_src, cpu_cc_src2, cpu_cc_dst;
-static TCGv_i32 cpu_cc_op;
-static TCGv_i32 cpu_icc;
+static TCGv cpu_cc_n, cpu_cc_z, cpu_cc_v, cpu_cc_ic;
 static TCGv cpu_fsr, cpu_pc, cpu_npc;
 static TCGv cpu_regs[32];
 static TCGv cpu_y;
@@ -54,17 +52,32 @@ static TCGv cpu_tbr;
 #endif
 static TCGv cpu_cond;
 #ifdef TARGET_SPARC64
-static TCGv_i32 cpu_xcc, cpu_asi, cpu_fprs;
+static TCGv_i32 cpu_asi, cpu_fprs;
 static TCGv cpu_gsr;
 static TCGv cpu_tick_cmpr, cpu_stick_cmpr, cpu_hstick_cmpr;
 static TCGv cpu_hintp, cpu_htba, cpu_hver, cpu_ssr, cpu_ver;
 #else
 static TCGv cpu_wim;
 #endif
+
+/* Allow syntactic access to XC from Sparc32 mode, to reduce ifdefs.  */
+#ifdef TARGET_SPARC64
+static TCGv cpu_cc_xc;
+#else
+#define cpu_cc_xc  (abort(), MAKE_TCGV_I32(-1))
+#endif
+/* The carry flag for the native word size.  */
+#ifdef TARGET_SPARC64
+#define cpu_cc_wc cpu_cc_xc
+#else
+#define cpu_cc_wc cpu_cc_ic
+#endif
+
 /* Floating point registers */
 static TCGv_i64 cpu_fpr[TARGET_DPREGS];
 
 static target_ulong gen_opc_npc[OPC_BUF_SIZE];
+static bool gen_opc_cc_sub[OPC_BUF_SIZE];
 static target_ulong gen_opc_jump_pc[2];
 
 #include "exec/gen-icount.h"
@@ -73,12 +86,12 @@ typedef struct DisasContext {
     target_ulong pc;    /* current Program Counter: integer or DYNAMIC_PC */
     target_ulong npc;   /* next PC: integer or DYNAMIC_PC or JUMP_PC */
     target_ulong jump_pc[2]; /* used when JUMP_PC pc value is used */
+    bool is_cc_sub;
     int is_br;
     int mem_idx;
     int fpu_enabled;
     int address_mask_32bit;
     int singlestep;
-    uint32_t cc_op;  /* current CC operation */
     struct TranslationBlock *tb;
     sparc_def_t *def;
     TCGv_i32 t32[3];
@@ -329,289 +342,194 @@ static inline void gen_goto_tb(DisasContext *s, int tb_num,
     }
 }
 
-// XXX suboptimal
-static inline void gen_mov_reg_N(TCGv reg, TCGv_i32 src)
+/* Compute N, Z, V, and C for logic operations.  */
+static void gen_logic_cc(TCGv dst)
 {
-    tcg_gen_extu_i32_tl(reg, src);
-    tcg_gen_shri_tl(reg, reg, PSR_NEG_SHIFT);
-    tcg_gen_andi_tl(reg, reg, 0x1);
+    tcg_gen_mov_tl(cpu_cc_n, dst);
+    tcg_gen_mov_tl(cpu_cc_z, dst);
+    tcg_gen_movi_tl(cpu_cc_v, 0);
+    tcg_gen_movi_tl(cpu_cc_ic, 0);
+    if (TARGET_LONG_BITS == 64) {
+        tcg_gen_movi_tl(cpu_cc_xc, 0);
+    }
 }
 
-static inline void gen_mov_reg_Z(TCGv reg, TCGv_i32 src)
+/* Compute N, Z, V, and for Sparc64 IC for addition.  We assume that
+   IC for Sparc32 or XC for Sparc64 have been computed by other means.  */
+static void gen_add_cc(TCGv dst, TCGv src1, TCGv src2)
 {
-    tcg_gen_extu_i32_tl(reg, src);
-    tcg_gen_shri_tl(reg, reg, PSR_ZERO_SHIFT);
-    tcg_gen_andi_tl(reg, reg, 0x1);
+    if (TARGET_LONG_BITS == 64) {
+        /* Carry out of bit 31 may be seen as a change in bit 32
+           compared to both sources.  */
+        tcg_gen_xor_tl(cpu_cc_ic, src1, src2);
+        tcg_gen_xor_tl(cpu_cc_ic, cpu_cc_ic, dst);
+        tcg_gen_shri_tl(cpu_cc_ic, cpu_cc_ic, 32);
+        tcg_gen_andi_tl(cpu_cc_ic, cpu_cc_ic, 1);
+    }
+
+    tcg_gen_xor_tl(cpu_cc_v, dst, src1);
+    tcg_gen_xor_tl(cpu_cc_n, src1, src2);
+    tcg_gen_andc_tl(cpu_cc_v, cpu_cc_v, cpu_cc_n);
+    tcg_gen_mov_tl(cpu_cc_n, dst);
+    tcg_gen_mov_tl(cpu_cc_z, dst);
 }
 
-static inline void gen_mov_reg_V(TCGv reg, TCGv_i32 src)
+/* Compute V for tagged addition or subtraction.  Assume that V has
+   already been computed for normal arithmetic overflow; simply update
+   for the tags.  */
+static void gen_op_tag_cc(TCGv src1, TCGv src2)
 {
-    tcg_gen_extu_i32_tl(reg, src);
-    tcg_gen_shri_tl(reg, reg, PSR_OVF_SHIFT);
-    tcg_gen_andi_tl(reg, reg, 0x1);
+    TCGv tag = tcg_temp_new();
+
+    /* Tag overflow if bit 0 or bit 1 set in either SRC1 or SRC2.
+       Cause carry into bit 2 if this happens, then shift bit 2
+       into bit 31 of V so that icc.v is set.  */
+    tcg_gen_or_tl(tag, src1, src2);
+    tcg_gen_andi_tl(tag, tag, 3);
+    tcg_gen_addi_tl(tag, tag, 3);
+    tcg_gen_shli_tl(tag, tag, 31 - 3);
+    tcg_gen_or_tl(cpu_cc_v, cpu_cc_v, tag);
+    tcg_temp_free(tag);
 }
 
-static inline void gen_mov_reg_C(TCGv reg, TCGv_i32 src)
+
+static void gen_op_add_cc(TCGv dst, TCGv src1, TCGv src2)
 {
-    tcg_gen_extu_i32_tl(reg, src);
-    tcg_gen_shri_tl(reg, reg, PSR_CARRY_SHIFT);
-    tcg_gen_andi_tl(reg, reg, 0x1);
+    TCGv z = tcg_const_tl(0);
+    tcg_gen_add2_tl(dst, cpu_cc_wc, src1, z, src2, z);
+    tcg_temp_free(z);
+    gen_add_cc(dst, src1, src2);
 }
 
-static inline void gen_op_add_cc(TCGv dst, TCGv src1, TCGv src2)
+static void save_icc_carry(DisasContext *dc)
 {
-    tcg_gen_mov_tl(cpu_cc_src, src1);
-    tcg_gen_mov_tl(cpu_cc_src2, src2);
-    tcg_gen_add_tl(cpu_cc_dst, cpu_cc_src, cpu_cc_src2);
-    tcg_gen_mov_tl(dst, cpu_cc_dst);
-}
-
-static TCGv_i32 gen_add32_carry32(void)
-{
-    TCGv_i32 carry_32, cc_src1_32, cc_src2_32;
-
-    /* Carry is computed from a previous add: (dst < src)  */
-#if TARGET_LONG_BITS == 64
-    cc_src1_32 = tcg_temp_new_i32();
-    cc_src2_32 = tcg_temp_new_i32();
-    tcg_gen_extrl_i64_i32(cc_src1_32, cpu_cc_dst);
-    tcg_gen_extrl_i64_i32(cc_src2_32, cpu_cc_src);
-#else
-    cc_src1_32 = cpu_cc_dst;
-    cc_src2_32 = cpu_cc_src;
-#endif
-
-    carry_32 = tcg_temp_new_i32();
-    tcg_gen_setcond_i32(TCG_COND_LTU, carry_32, cc_src1_32, cc_src2_32);
-
-#if TARGET_LONG_BITS == 64
-    tcg_temp_free_i32(cc_src1_32);
-    tcg_temp_free_i32(cc_src2_32);
-#endif
-
-    return carry_32;
-}
-
-static TCGv_i32 gen_sub32_carry32(void)
-{
-    TCGv_i32 carry_32, cc_src1_32, cc_src2_32;
-
-    /* Carry is computed from a previous borrow: (src1 < src2)  */
-#if TARGET_LONG_BITS == 64
-    cc_src1_32 = tcg_temp_new_i32();
-    cc_src2_32 = tcg_temp_new_i32();
-    tcg_gen_extrl_i64_i32(cc_src1_32, cpu_cc_src);
-    tcg_gen_extrl_i64_i32(cc_src2_32, cpu_cc_src2);
-#else
-    cc_src1_32 = cpu_cc_src;
-    cc_src2_32 = cpu_cc_src2;
-#endif
-
-    carry_32 = tcg_temp_new_i32();
-    tcg_gen_setcond_i32(TCG_COND_LTU, carry_32, cc_src1_32, cc_src2_32);
-
-#if TARGET_LONG_BITS == 64
-    tcg_temp_free_i32(cc_src1_32);
-    tcg_temp_free_i32(cc_src2_32);
-#endif
-
-    return carry_32;
+    if (dc->is_cc_sub) {
+        dc->is_cc_sub = false;
+        tcg_gen_ext32u_tl(cpu_cc_z, cpu_cc_z);
+        tcg_gen_ext32u_tl(cpu_cc_v, cpu_cc_v);
+        tcg_gen_setcond_tl(TCG_COND_LTU, cpu_cc_ic, cpu_cc_z, cpu_cc_v);
+    }
 }
 
 static void gen_op_addx_int(DisasContext *dc, TCGv dst, TCGv src1,
                             TCGv src2, int update_cc)
 {
-    TCGv_i32 carry_32;
-    TCGv carry;
-
-    switch (dc->cc_op) {
-    case CC_OP_DIV:
-    case CC_OP_LOGIC:
-        /* Carry is known to be zero.  Fall back to plain ADD.  */
-        if (update_cc) {
-            gen_op_add_cc(dst, src1, src2);
-        } else {
-            tcg_gen_add_tl(dst, src1, src2);
-        }
-        return;
-
-    case CC_OP_ADD:
-    case CC_OP_TADD:
-    case CC_OP_TADDTV:
-        if (TARGET_LONG_BITS == 32) {
-            /* We can re-use the host's hardware carry generation by using
-               an ADD2 opcode.  We discard the low part of the output.
-               Ideally we'd combine this operation with the add that
-               generated the carry in the first place.  */
-            carry = tcg_temp_new();
-            tcg_gen_add2_tl(carry, dst, cpu_cc_src, src1, cpu_cc_src2, src2);
-            tcg_temp_free(carry);
-            goto add_done;
-        }
-        carry_32 = gen_add32_carry32();
-        break;
-
-    case CC_OP_SUB:
-    case CC_OP_TSUB:
-    case CC_OP_TSUBTV:
-        carry_32 = gen_sub32_carry32();
-        break;
-
-    default:
-        /* We need external help to produce the carry.  */
-        carry_32 = tcg_temp_new_i32();
-        gen_helper_compute_C_icc(carry_32, cpu_env);
-        break;
-    }
-
-#if TARGET_LONG_BITS == 64
-    carry = tcg_temp_new();
-    tcg_gen_extu_i32_i64(carry, carry_32);
-#else
-    carry = carry_32;
-#endif
-
-    tcg_gen_add_tl(dst, src1, src2);
-    tcg_gen_add_tl(dst, dst, carry);
-
-    tcg_temp_free_i32(carry_32);
-#if TARGET_LONG_BITS == 64
-    tcg_temp_free(carry);
-#endif
-
- add_done:
+    save_icc_carry(dc);
     if (update_cc) {
-        tcg_gen_mov_tl(cpu_cc_src, src1);
-        tcg_gen_mov_tl(cpu_cc_src2, src2);
-        tcg_gen_mov_tl(cpu_cc_dst, dst);
-        tcg_gen_movi_i32(cpu_cc_op, CC_OP_ADDX);
-        dc->cc_op = CC_OP_ADDX;
+        TCGv z = tcg_const_tl(0);
+        tcg_gen_add2_tl(dst, cpu_cc_wc, src1, z, cpu_cc_ic, z);
+        tcg_gen_add2_tl(dst, cpu_cc_wc, dst, cpu_cc_wc, src2, z);
+        tcg_temp_free(z);
+        gen_add_cc(dst, src1, src2);
+    } else {
+        tcg_gen_add_tl(dst, src1, src2);
+        tcg_gen_add_tl(dst, dst, cpu_cc_ic);
     }
 }
 
-static inline void gen_op_sub_cc(TCGv dst, TCGv src1, TCGv src2)
+/* Compute N, Z, V, and for Sparc64 IC for subtraction.  We assume that
+   IC for Sparc32 or XC for Sparc64 have been computed by other means.  */
+static void gen_sub_cc(TCGv dst, TCGv src1, TCGv src2)
 {
-    tcg_gen_mov_tl(cpu_cc_src, src1);
-    tcg_gen_mov_tl(cpu_cc_src2, src2);
-    tcg_gen_sub_tl(cpu_cc_dst, cpu_cc_src, cpu_cc_src2);
-    tcg_gen_mov_tl(dst, cpu_cc_dst);
+    TCGv tmp;
+
+    if (TARGET_LONG_BITS == 64) {
+        /* Borrow out of bit 31 may be seen as the inverse of change
+           in bit 32 compared to both sources.  */
+        tcg_gen_xor_tl(cpu_cc_ic, src1, src2);
+        tcg_gen_eqv_tl(cpu_cc_ic, cpu_cc_ic, dst);
+        tcg_gen_shri_tl(cpu_cc_ic, cpu_cc_ic, 32);
+        tcg_gen_andi_tl(cpu_cc_ic, cpu_cc_ic, 1);
+    }
+
+    tmp = tcg_temp_new();
+    tcg_gen_xor_tl(tmp, src1, src2);
+    tcg_gen_xor_tl(cpu_cc_v, dst, src1);
+    tcg_gen_and_tl(cpu_cc_v, cpu_cc_v, tmp);
+    tcg_temp_free(tmp);
+    tcg_gen_mov_tl(cpu_cc_n, dst);
+    tcg_gen_mov_tl(cpu_cc_z, dst);
+}
+
+static void save_flags(DisasContext *dc)
+{
+    /* When CC_SUB, the source operands to the subtract have been
+       saved in CC_Z and CC_V, and the result has been saved in CC_N.  */
+    if (dc->is_cc_sub) {
+        dc->is_cc_sub = false;
+        tcg_gen_setcond_tl(TCG_COND_LTU, cpu_cc_wc, cpu_cc_z, cpu_cc_v);
+        gen_sub_cc(cpu_cc_n, cpu_cc_z, cpu_cc_v);
+    }
+}
+
+static void gen_op_sub_cc(TCGv dst, TCGv src1, TCGv src2)
+{
+    tcg_gen_sub_tl(dst, src1, src2);
+    tcg_gen_mov_tl(cpu_cc_n, dst);
+    tcg_gen_mov_tl(cpu_cc_z, src1);
+    tcg_gen_mov_tl(cpu_cc_v, src2);
+    tcg_gen_discard_tl(cpu_cc_ic);
+    if (TARGET_LONG_BITS == 64) {
+        tcg_gen_discard_tl(cpu_cc_xc);
+    }
 }
 
 static void gen_op_subx_int(DisasContext *dc, TCGv dst, TCGv src1,
                             TCGv src2, int update_cc)
 {
-    TCGv_i32 carry_32;
-    TCGv carry;
-
-    switch (dc->cc_op) {
-    case CC_OP_DIV:
-    case CC_OP_LOGIC:
-        /* Carry is known to be zero.  Fall back to plain SUB.  */
-        if (update_cc) {
-            gen_op_sub_cc(dst, src1, src2);
-        } else {
-            tcg_gen_sub_tl(dst, src1, src2);
-        }
-        return;
-
-    case CC_OP_ADD:
-    case CC_OP_TADD:
-    case CC_OP_TADDTV:
-        carry_32 = gen_add32_carry32();
-        break;
-
-    case CC_OP_SUB:
-    case CC_OP_TSUB:
-    case CC_OP_TSUBTV:
-        if (TARGET_LONG_BITS == 32) {
-            /* We can re-use the host's hardware carry generation by using
-               a SUB2 opcode.  We discard the low part of the output.
-               Ideally we'd combine this operation with the add that
-               generated the carry in the first place.  */
-            carry = tcg_temp_new();
-            tcg_gen_sub2_tl(carry, dst, cpu_cc_src, src1, cpu_cc_src2, src2);
-            tcg_temp_free(carry);
-            goto sub_done;
-        }
-        carry_32 = gen_sub32_carry32();
-        break;
-
-    default:
-        /* We need external help to produce the carry.  */
-        carry_32 = tcg_temp_new_i32();
-        gen_helper_compute_C_icc(carry_32, cpu_env);
-        break;
-    }
-
-#if TARGET_LONG_BITS == 64
-    carry = tcg_temp_new();
-    tcg_gen_extu_i32_i64(carry, carry_32);
-#else
-    carry = carry_32;
-#endif
-
-    tcg_gen_sub_tl(dst, src1, src2);
-    tcg_gen_sub_tl(dst, dst, carry);
-
-    tcg_temp_free_i32(carry_32);
-#if TARGET_LONG_BITS == 64
-    tcg_temp_free(carry);
-#endif
-
- sub_done:
+    save_icc_carry(dc);
     if (update_cc) {
-        tcg_gen_mov_tl(cpu_cc_src, src1);
-        tcg_gen_mov_tl(cpu_cc_src2, src2);
-        tcg_gen_mov_tl(cpu_cc_dst, dst);
-        tcg_gen_movi_i32(cpu_cc_op, CC_OP_SUBX);
-        dc->cc_op = CC_OP_SUBX;
+        TCGv z = tcg_const_tl(0);
+        tcg_gen_add2_tl(dst, cpu_cc_wc, src2, z, cpu_cc_ic, z);
+        tcg_gen_sub2_tl(dst, cpu_cc_wc, src1, z, dst, cpu_cc_wc);
+        tcg_temp_free(z);
+        tcg_gen_andi_tl(cpu_cc_wc, cpu_cc_wc, 1);
+        gen_sub_cc(dst, src1, src2);
+    } else {
+        tcg_gen_sub_tl(dst, src1, src2);
+        tcg_gen_sub_tl(dst, dst, cpu_cc_ic);
     }
 }
 
-static inline void gen_op_mulscc(TCGv dst, TCGv src1, TCGv src2)
+static void gen_op_mulscc(DisasContext *dc, TCGv dst, TCGv src1, TCGv src2)
 {
-    TCGv r_temp, zero, t0;
+    TCGv tmp, nsrc1;
 
-    r_temp = tcg_temp_new();
-    t0 = tcg_temp_new();
+    save_flags(dc);
 
-    /* old op:
-    if (!(env->y & 1))
-        T1 = 0;
-    */
-    zero = tcg_const_tl(0);
-    tcg_gen_andi_tl(cpu_cc_src, src1, 0xffffffff);
-    tcg_gen_andi_tl(r_temp, cpu_y, 0x1);
-    tcg_gen_andi_tl(cpu_cc_src2, src2, 0xffffffff);
-    tcg_gen_movcond_tl(TCG_COND_EQ, cpu_cc_src2, r_temp, zero,
-                       zero, cpu_cc_src2);
-    tcg_temp_free(zero);
+    tmp = tcg_temp_new();
+    nsrc1 = tcg_temp_new();
 
-    // b2 = T0 & 1;
-    // env->y = (b2 << 31) | (env->y >> 1);
-    tcg_gen_andi_tl(r_temp, cpu_cc_src, 0x1);
-    tcg_gen_shli_tl(r_temp, r_temp, 31);
-    tcg_gen_shri_tl(t0, cpu_y, 1);
-    tcg_gen_andi_tl(t0, t0, 0x7fffffff);
-    tcg_gen_or_tl(t0, t0, r_temp);
-    tcg_gen_andi_tl(cpu_y, t0, 0xffffffff);
+    /* NSRC1 is computed by shifting SRC1 right by one bit with
+       icc.n ^ icc.v replacing bit 31.  */
+    tcg_gen_xor_tl(tmp, cpu_cc_n, cpu_cc_v);
+    tcg_gen_ext32u_tl(nsrc1, src1);
+    tcg_gen_shri_tl(nsrc1, nsrc1, 1);
+    tcg_gen_andi_tl(tmp, tmp, 0x80000000);
+    tcg_gen_or_tl(nsrc1, nsrc1, tmp);
 
-    // b1 = N ^ V;
-    gen_mov_reg_N(t0, cpu_icc);
-    gen_mov_reg_V(r_temp, cpu_icc);
-    tcg_gen_xor_tl(t0, t0, r_temp);
-    tcg_temp_free(r_temp);
+    /* If the lsb of Y is 1, NSRC1 and SRC2 are added.
+       If the lsb of Y is 0, then NSRC1 and 0 are added.
+       ICC is updated according to the addition; XCC is undefined.  */
+    tcg_gen_andi_tl(tmp, cpu_y, 1);
+    tcg_gen_neg_tl(tmp, tmp);
+    tcg_gen_and_tl(tmp, tmp, src2);
+    if (TARGET_LONG_BITS == 32) {
+        TCGv z = tcg_const_tl(0);
+        tcg_gen_add2_tl(dst, cpu_cc_ic, nsrc1, z, tmp, z);
+        tcg_temp_free(z);
+    } else {
+        tcg_gen_add_tl(dst, nsrc1, tmp);
+    }
+    gen_add_cc(dst, nsrc1, tmp);
+    tcg_temp_free(nsrc1);
 
-    // T0 = (b1 << 31) | (T0 >> 1);
-    // src1 = T0;
-    tcg_gen_shli_tl(t0, t0, 31);
-    tcg_gen_shri_tl(cpu_cc_src, cpu_cc_src, 1);
-    tcg_gen_or_tl(cpu_cc_src, cpu_cc_src, t0);
-    tcg_temp_free(t0);
-
-    tcg_gen_add_tl(cpu_cc_dst, cpu_cc_src, cpu_cc_src2);
-
-    tcg_gen_mov_tl(dst, cpu_cc_dst);
+    /* The Y register is shifted right by one bit with the lsb of SRC1
+       replacing bit 31.  */
+    tcg_gen_shli_tl(tmp, src1, 31);
+    tcg_gen_shri_tl(cpu_y, cpu_y, 1);
+    tcg_gen_or_tl(cpu_y, cpu_y, tmp);
+    tcg_temp_free(tmp);
 }
 
 static inline void gen_op_multiply(TCGv dst, TCGv src1, TCGv src2, int sign_ext)
@@ -652,123 +570,6 @@ static inline void gen_op_smul(TCGv dst, TCGv src1, TCGv src2)
 {
     /* sign-extend truncated operands before multiplication */
     gen_op_multiply(dst, src1, src2, 1);
-}
-
-// 1
-static inline void gen_op_eval_ba(TCGv dst)
-{
-    tcg_gen_movi_tl(dst, 1);
-}
-
-// Z
-static inline void gen_op_eval_be(TCGv dst, TCGv_i32 src)
-{
-    gen_mov_reg_Z(dst, src);
-}
-
-// Z | (N ^ V)
-static inline void gen_op_eval_ble(TCGv dst, TCGv_i32 src)
-{
-    TCGv t0 = tcg_temp_new();
-    gen_mov_reg_N(t0, src);
-    gen_mov_reg_V(dst, src);
-    tcg_gen_xor_tl(dst, dst, t0);
-    gen_mov_reg_Z(t0, src);
-    tcg_gen_or_tl(dst, dst, t0);
-    tcg_temp_free(t0);
-}
-
-// N ^ V
-static inline void gen_op_eval_bl(TCGv dst, TCGv_i32 src)
-{
-    TCGv t0 = tcg_temp_new();
-    gen_mov_reg_V(t0, src);
-    gen_mov_reg_N(dst, src);
-    tcg_gen_xor_tl(dst, dst, t0);
-    tcg_temp_free(t0);
-}
-
-// C | Z
-static inline void gen_op_eval_bleu(TCGv dst, TCGv_i32 src)
-{
-    TCGv t0 = tcg_temp_new();
-    gen_mov_reg_Z(t0, src);
-    gen_mov_reg_C(dst, src);
-    tcg_gen_or_tl(dst, dst, t0);
-    tcg_temp_free(t0);
-}
-
-// C
-static inline void gen_op_eval_bcs(TCGv dst, TCGv_i32 src)
-{
-    gen_mov_reg_C(dst, src);
-}
-
-// V
-static inline void gen_op_eval_bvs(TCGv dst, TCGv_i32 src)
-{
-    gen_mov_reg_V(dst, src);
-}
-
-// 0
-static inline void gen_op_eval_bn(TCGv dst)
-{
-    tcg_gen_movi_tl(dst, 0);
-}
-
-// N
-static inline void gen_op_eval_bneg(TCGv dst, TCGv_i32 src)
-{
-    gen_mov_reg_N(dst, src);
-}
-
-// !Z
-static inline void gen_op_eval_bne(TCGv dst, TCGv_i32 src)
-{
-    gen_mov_reg_Z(dst, src);
-    tcg_gen_xori_tl(dst, dst, 0x1);
-}
-
-// !(Z | (N ^ V))
-static inline void gen_op_eval_bg(TCGv dst, TCGv_i32 src)
-{
-    gen_op_eval_ble(dst, src);
-    tcg_gen_xori_tl(dst, dst, 0x1);
-}
-
-// !(N ^ V)
-static inline void gen_op_eval_bge(TCGv dst, TCGv_i32 src)
-{
-    gen_op_eval_bl(dst, src);
-    tcg_gen_xori_tl(dst, dst, 0x1);
-}
-
-// !(C | Z)
-static inline void gen_op_eval_bgu(TCGv dst, TCGv_i32 src)
-{
-    gen_op_eval_bleu(dst, src);
-    tcg_gen_xori_tl(dst, dst, 0x1);
-}
-
-// !C
-static inline void gen_op_eval_bcc(TCGv dst, TCGv_i32 src)
-{
-    gen_mov_reg_C(dst, src);
-    tcg_gen_xori_tl(dst, dst, 0x1);
-}
-
-// !N
-static inline void gen_op_eval_bpos(TCGv dst, TCGv_i32 src)
-{
-    gen_mov_reg_N(dst, src);
-    tcg_gen_xori_tl(dst, dst, 0x1);
-}
-
-// !V
-static inline void gen_op_eval_bvc(TCGv dst, TCGv_i32 src)
-{
-    gen_mov_reg_V(dst, src);
-    tcg_gen_xori_tl(dst, dst, 0x1);
 }
 
 /*
@@ -986,7 +787,7 @@ static inline void flush_cond(DisasContext *dc)
     }
 }
 
-static inline void save_npc(DisasContext *dc)
+static void save_npc(DisasContext *dc)
 {
     if (dc->npc == JUMP_PC) {
         gen_generic_branch(dc);
@@ -996,20 +797,9 @@ static inline void save_npc(DisasContext *dc)
     }
 }
 
-static void update_flags(DisasContext *dc)
+static void save_state(DisasContext *dc)
 {
-    if (dc->cc_op != CC_OP_FLAGS) {
-        gen_helper_compute_icc(cpu_icc, cpu_env);
-#ifdef TARGET_SPARC64
-        gen_helper_compute_xcc(cpu_xcc, cpu_env);
-#endif
-        tcg_gen_movi_i32(cpu_cc_op, CC_OP_FLAGS);
-        dc->cc_op = CC_OP_FLAGS;
-    }
-}
-
-static inline void save_state(DisasContext *dc)
-{
+    save_flags(dc);
     tcg_gen_movi_tl(cpu_pc, dc->pc);
     save_npc(dc);
 }
@@ -1047,174 +837,132 @@ static void free_compare(DisasCompare *cmp)
 static void gen_compare(DisasCompare *cmp, bool xcc, unsigned int cond,
                         DisasContext *dc)
 {
-    static int subcc_cond[16] = {
-        TCG_COND_NEVER,
-        TCG_COND_EQ,
-        TCG_COND_LE,
-        TCG_COND_LT,
-        TCG_COND_LEU,
-        TCG_COND_LTU,
-        -1, /* neg */
-        -1, /* overflow */
-        TCG_COND_ALWAYS,
-        TCG_COND_NE,
-        TCG_COND_GT,
-        TCG_COND_GE,
-        TCG_COND_GTU,
-        TCG_COND_GEU,
-        -1, /* pos */
-        -1, /* no overflow */
-    };
+    TCGCond tcond;
+    TCGv c1, c2;
 
-    static int logic_cond[16] = {
-        TCG_COND_NEVER,
-        TCG_COND_EQ,     /* eq:  Z */
-        TCG_COND_LE,     /* le:  Z | (N ^ V) -> Z | N */
-        TCG_COND_LT,     /* lt:  N ^ V -> N */
-        TCG_COND_EQ,     /* leu: C | Z -> Z */
-        TCG_COND_NEVER,  /* ltu: C -> 0 */
-        TCG_COND_LT,     /* neg: N */
-        TCG_COND_NEVER,  /* vs:  V -> 0 */
-        TCG_COND_ALWAYS,
-        TCG_COND_NE,     /* ne:  !Z */
-        TCG_COND_GT,     /* gt:  !(Z | (N ^ V)) -> !(Z | N) */
-        TCG_COND_GE,     /* ge:  !(N ^ V) -> !N */
-        TCG_COND_NE,     /* gtu: !(C | Z) -> !Z */
-        TCG_COND_ALWAYS, /* geu: !C -> 1 */
-        TCG_COND_GE,     /* pos: !N */
-        TCG_COND_ALWAYS, /* vc:  !V -> 1 */
-    };
-
-    TCGv_i32 r_src;
-    TCGv r_dst;
-
-#ifdef TARGET_SPARC64
-    if (xcc) {
-        r_src = cpu_xcc;
-    } else {
-        r_src = cpu_icc;
-    }
-#else
-    r_src = cpu_icc;
-#endif
-
-    switch (dc->cc_op) {
-    case CC_OP_LOGIC:
-        cmp->cond = logic_cond[cond];
-    do_compare_dst_0:
-        cmp->is_bool = false;
-        cmp->g2 = false;
-        cmp->c2 = tcg_const_tl(0);
-#ifdef TARGET_SPARC64
-        if (!xcc) {
-            cmp->g1 = false;
-            cmp->c1 = tcg_temp_new();
-            tcg_gen_ext32s_tl(cmp->c1, cpu_cc_dst);
-            break;
-        }
-#endif
-        cmp->g1 = true;
-        cmp->c1 = cpu_cc_dst;
-        break;
-
-    case CC_OP_SUB:
-        switch (cond) {
-        case 6:  /* neg */
-        case 14: /* pos */
-            cmp->cond = (cond == 6 ? TCG_COND_LT : TCG_COND_GE);
-            goto do_compare_dst_0;
-
-        case 7: /* overflow */
-        case 15: /* !overflow */
-            goto do_dynamic;
-
-        default:
-            cmp->cond = subcc_cond[cond];
+    /* For subtraction, we can often compose the comparison directly.  */
+    if (dc->is_cc_sub) {
+        static const int sub_cond[16] = {
+            TCG_COND_NEVER,  /* BN */
+            TCG_COND_EQ,     /* BE */
+            TCG_COND_LE,     /* BLE */
+            TCG_COND_LT,     /* BL */
+            TCG_COND_LEU,    /* BLEU */
+            TCG_COND_LTU,    /* BCS */
+            -1,              /* BNEG */
+            -1,              /* BVS */
+            TCG_COND_ALWAYS, /* BA */
+            TCG_COND_NE,     /* BNE */
+            TCG_COND_GT,     /* BG */
+            TCG_COND_GE,     /* BGE */
+            TCG_COND_GTU,    /* BGU */
+            TCG_COND_GEU,    /* BCC */
+            -1,              /* BPOS */
+            -1,              /* BVC */
+        };
+        if (sub_cond[cond] != -1) {
+            cmp->cond = sub_cond[cond];
             cmp->is_bool = false;
-#ifdef TARGET_SPARC64
-            if (!xcc) {
-                /* Note that sign-extension works for unsigned compares as
-                   long as both operands are sign-extended.  */
-                cmp->g1 = cmp->g2 = false;
-                cmp->c1 = tcg_temp_new();
-                cmp->c2 = tcg_temp_new();
-                tcg_gen_ext32s_tl(cmp->c1, cpu_cc_src);
-                tcg_gen_ext32s_tl(cmp->c2, cpu_cc_src2);
-                break;
-            }
-#endif
             cmp->g1 = cmp->g2 = true;
-            cmp->c1 = cpu_cc_src;
-            cmp->c2 = cpu_cc_src2;
-            break;
+            cmp->c1 = cpu_cc_z;
+            cmp->c2 = cpu_cc_v;
+            return;
         }
+        save_flags(dc);
+    }
+
+    cmp->is_bool = cmp->g1 = cmp->g2 = false;
+    cmp->c1 = c1 = tcg_temp_new();
+    cmp->c2 = c2 = tcg_const_tl(0);
+
+    switch (cond) {
+    case 0x0: /* BN */
+    case 0x8: /* BA */
+        tcg_gen_movi_tl(c1, 0);
+        tcond = TCG_COND_NEVER;
         break;
 
-    default:
-    do_dynamic:
-        update_flags(dc);
-        /* FALLTHRU */
-
-    case CC_OP_FLAGS:
-        /* We're going to generate a boolean result.  */
-        cmp->cond = TCG_COND_NE;
-        cmp->is_bool = true;
-        cmp->g1 = cmp->g2 = false;
-        cmp->c1 = r_dst = tcg_temp_new();
-        cmp->c2 = tcg_const_tl(0);
-
-        switch (cond) {
-        case 0x0:
-            gen_op_eval_bn(r_dst);
-            break;
-        case 0x1:
-            gen_op_eval_be(r_dst, r_src);
-            break;
-        case 0x2:
-            gen_op_eval_ble(r_dst, r_src);
-            break;
-        case 0x3:
-            gen_op_eval_bl(r_dst, r_src);
-            break;
-        case 0x4:
-            gen_op_eval_bleu(r_dst, r_src);
-            break;
-        case 0x5:
-            gen_op_eval_bcs(r_dst, r_src);
-            break;
-        case 0x6:
-            gen_op_eval_bneg(r_dst, r_src);
-            break;
-        case 0x7:
-            gen_op_eval_bvs(r_dst, r_src);
-            break;
-        case 0x8:
-            gen_op_eval_ba(r_dst);
-            break;
-        case 0x9:
-            gen_op_eval_bne(r_dst, r_src);
-            break;
-        case 0xa:
-            gen_op_eval_bg(r_dst, r_src);
-            break;
-        case 0xb:
-            gen_op_eval_bge(r_dst, r_src);
-            break;
-        case 0xc:
-            gen_op_eval_bgu(r_dst, r_src);
-            break;
-        case 0xd:
-            gen_op_eval_bcc(r_dst, r_src);
-            break;
-        case 0xe:
-            gen_op_eval_bpos(r_dst, r_src);
-            break;
-        case 0xf:
-            gen_op_eval_bvc(r_dst, r_src);
-            break;
+    case 0x1: /* BE  : Z  */
+    case 0x9: /* BNE : !Z */
+        if (xcc) {
+            tcg_gen_mov_tl(c1, cpu_cc_z);
+        } else {
+            tcg_gen_ext32u_tl(c1, cpu_cc_z);
         }
+        tcond = TCG_COND_EQ;
+        break;
+
+    case 0x2: /* BLE : Z | (N ^ V) */
+    case 0xa: /* BG  : !(Z | (N ^ V)) */
+        if (xcc) {
+            tcg_gen_setcond_tl(TCG_COND_EQ, c1, cpu_cc_z, c2);
+        } else {
+            tcg_gen_ext32u_tl(c1, cpu_cc_z);
+            tcg_gen_setcond_tl(TCG_COND_EQ, c1, c1, c2);
+        }
+        tcg_gen_neg_tl(c1, c1);
+        tcg_gen_xor_tl(c2, cpu_cc_v, cpu_cc_n);
+        if (!xcc) {
+            tcg_gen_ext32s_tl(c2, c2);
+        }
+        tcg_gen_or_tl(c1, c1, c2);
+        tcg_gen_movi_tl(c2, 0);
+        tcond = TCG_COND_LT;
+        break;
+
+    case 0x3: /* BL  : N ^ V */
+    case 0xb: /* BGE : !(N ^ V) */
+        tcg_gen_xor_tl(c1, cpu_cc_v, cpu_cc_n);
+        if (!xcc) {
+            tcg_gen_ext32s_tl(c1, c1);
+        }
+        tcond = TCG_COND_LT;
+
+    case 0x4: /* BLEU : C | Z */
+    case 0xc: /* BGU  : !(C | Z) */
+        if (xcc) {
+            tcg_gen_setcond_tl(TCG_COND_EQ, c1, cpu_cc_z, c2);
+            tcg_gen_or_tl(c1, c1, cpu_cc_xc);
+        } else {
+            tcg_gen_ext32u_tl(c1, cpu_cc_z);
+            tcg_gen_setcond_tl(TCG_COND_EQ, c1, c1, c2);
+            tcg_gen_or_tl(c1, c1, cpu_cc_ic);
+        }
+        cmp->is_bool = 1;
+        tcond = TCG_COND_NE;
+        break;
+
+    case 0x5: /* BCS : C */
+    case 0xd: /* BCC : !C */
+        tcg_gen_mov_tl(c1, xcc ? cpu_cc_xc : cpu_cc_ic);
+        cmp->is_bool = 1;
+        tcond = TCG_COND_NE;
+        break;
+
+    case 0x6: /* BNEG : N */
+    case 0xe: /* BPOS : !N */
+        if (xcc) {
+            tcg_gen_mov_tl(c1, cpu_cc_n);
+        } else  {
+            tcg_gen_ext32s_tl(c1, cpu_cc_n);
+        }
+        tcond = TCG_COND_LT;
+        break;
+
+    case 0x7: /* BVS : V */
+    case 0xf: /* BVC : !V */
+        if (xcc) {
+            tcg_gen_mov_tl(c1, cpu_cc_v);
+        } else  {
+            tcg_gen_ext32s_tl(c1, cpu_cc_v);
+        }
+        tcond = TCG_COND_LT;
         break;
     }
+    if (cond & 8) {
+        tcond = tcg_invert_cond(tcond);
+    }
+    cmp->cond = tcond;
 }
 
 static void gen_fcompare(DisasCompare *cmp, unsigned int cc, unsigned int cond)
@@ -1247,7 +995,8 @@ static void gen_fcompare(DisasCompare *cmp, unsigned int cc, unsigned int cond)
 
     switch (cond) {
     case 0x0:
-        gen_op_eval_bn(r_dst);
+        cmp->cond = TCG_COND_NEVER;
+        tcg_gen_movi_tl(r_dst, 0);
         break;
     case 0x1:
         gen_op_eval_fbne(r_dst, cpu_fsr, offset);
@@ -1271,7 +1020,8 @@ static void gen_fcompare(DisasCompare *cmp, unsigned int cc, unsigned int cond)
         gen_op_eval_fbu(r_dst, cpu_fsr, offset);
         break;
     case 0x8:
-        gen_op_eval_ba(r_dst);
+        cmp->cond = TCG_COND_ALWAYS;
+        tcg_gen_movi_tl(r_dst, 1);
         break;
     case 0x9:
         gen_op_eval_fbe(r_dst, cpu_fsr, offset);
@@ -2329,11 +2079,7 @@ static void gen_edge(DisasContext *dc, TCGv dst, TCGv s1, TCGv s2,
     int shift, imask, omask;
 
     if (cc) {
-        tcg_gen_mov_tl(cpu_cc_src, s1);
-        tcg_gen_mov_tl(cpu_cc_src2, s2);
-        tcg_gen_sub_tl(cpu_cc_dst, s1, s2);
-        tcg_gen_movi_i32(cpu_cc_op, CC_OP_SUB);
-        dc->cc_op = CC_OP_SUB;
+        gen_op_sub_cc(cpu_cc_z, s1, s2);
     }
 
     /* Theory of operation: there are two tables, left and right (not to
@@ -2702,7 +2448,6 @@ static void disas_sparc_insn(DisasContext * dc, unsigned int insn)
                     break;
 #ifdef TARGET_SPARC64
                 case 0x2: /* V9 rdccr */
-                    update_flags(dc);
                     gen_helper_rdccr(cpu_dst, cpu_env);
                     gen_store_gpr(dc, rd, cpu_dst);
                     break;
@@ -2783,7 +2528,6 @@ static void disas_sparc_insn(DisasContext * dc, unsigned int insn)
                 if (!supervisor(dc)) {
                     goto priv_insn;
                 }
-                update_flags(dc);
                 gen_helper_rdpsr(cpu_dst, cpu_env);
 #else
                 CHECK_IU_FEATURE(dc, HYPV);
@@ -3392,8 +3136,6 @@ static void disas_sparc_insn(DisasContext * dc, unsigned int insn)
                     case 0x0: /* add */
                         if (xop & 0x10) {
                             gen_op_add_cc(cpu_dst, cpu_src1, cpu_src2);
-                            tcg_gen_movi_i32(cpu_cc_op, CC_OP_ADD);
-                            dc->cc_op = CC_OP_ADD;
                         } else {
                             tcg_gen_add_tl(cpu_dst, cpu_src1, cpu_src2);
                         }
@@ -3401,32 +3143,24 @@ static void disas_sparc_insn(DisasContext * dc, unsigned int insn)
                     case 0x1: /* and */
                         tcg_gen_and_tl(cpu_dst, cpu_src1, cpu_src2);
                         if (xop & 0x10) {
-                            tcg_gen_mov_tl(cpu_cc_dst, cpu_dst);
-                            tcg_gen_movi_i32(cpu_cc_op, CC_OP_LOGIC);
-                            dc->cc_op = CC_OP_LOGIC;
+                            gen_logic_cc(cpu_dst);
                         }
                         break;
                     case 0x2: /* or */
                         tcg_gen_or_tl(cpu_dst, cpu_src1, cpu_src2);
                         if (xop & 0x10) {
-                            tcg_gen_mov_tl(cpu_cc_dst, cpu_dst);
-                            tcg_gen_movi_i32(cpu_cc_op, CC_OP_LOGIC);
-                            dc->cc_op = CC_OP_LOGIC;
+                            gen_logic_cc(cpu_dst);
                         }
                         break;
                     case 0x3: /* xor */
                         tcg_gen_xor_tl(cpu_dst, cpu_src1, cpu_src2);
                         if (xop & 0x10) {
-                            tcg_gen_mov_tl(cpu_cc_dst, cpu_dst);
-                            tcg_gen_movi_i32(cpu_cc_op, CC_OP_LOGIC);
-                            dc->cc_op = CC_OP_LOGIC;
+                            gen_logic_cc(cpu_dst);
                         }
                         break;
                     case 0x4: /* sub */
                         if (xop & 0x10) {
                             gen_op_sub_cc(cpu_dst, cpu_src1, cpu_src2);
-                            tcg_gen_movi_i32(cpu_cc_op, CC_OP_SUB);
-                            dc->cc_op = CC_OP_SUB;
                         } else {
                             tcg_gen_sub_tl(cpu_dst, cpu_src1, cpu_src2);
                         }
@@ -3434,25 +3168,19 @@ static void disas_sparc_insn(DisasContext * dc, unsigned int insn)
                     case 0x5: /* andn */
                         tcg_gen_andc_tl(cpu_dst, cpu_src1, cpu_src2);
                         if (xop & 0x10) {
-                            tcg_gen_mov_tl(cpu_cc_dst, cpu_dst);
-                            tcg_gen_movi_i32(cpu_cc_op, CC_OP_LOGIC);
-                            dc->cc_op = CC_OP_LOGIC;
+                            gen_logic_cc(cpu_dst);
                         }
                         break;
                     case 0x6: /* orn */
                         tcg_gen_orc_tl(cpu_dst, cpu_src1, cpu_src2);
                         if (xop & 0x10) {
-                            tcg_gen_mov_tl(cpu_cc_dst, cpu_dst);
-                            tcg_gen_movi_i32(cpu_cc_op, CC_OP_LOGIC);
-                            dc->cc_op = CC_OP_LOGIC;
+                            gen_logic_cc(cpu_dst);
                         }
                         break;
                     case 0x7: /* xorn */
                         tcg_gen_eqv_tl(cpu_dst, cpu_src1, cpu_src2);
                         if (xop & 0x10) {
-                            tcg_gen_mov_tl(cpu_cc_dst, cpu_dst);
-                            tcg_gen_movi_i32(cpu_cc_op, CC_OP_LOGIC);
-                            dc->cc_op = CC_OP_LOGIC;
+                            gen_logic_cc(cpu_dst);
                         }
                         break;
                     case 0x8: /* addx, V9 addc */
@@ -3468,18 +3196,14 @@ static void disas_sparc_insn(DisasContext * dc, unsigned int insn)
                         CHECK_IU_FEATURE(dc, MUL);
                         gen_op_umul(cpu_dst, cpu_src1, cpu_src2);
                         if (xop & 0x10) {
-                            tcg_gen_mov_tl(cpu_cc_dst, cpu_dst);
-                            tcg_gen_movi_i32(cpu_cc_op, CC_OP_LOGIC);
-                            dc->cc_op = CC_OP_LOGIC;
+                            gen_logic_cc(cpu_dst);
                         }
                         break;
                     case 0xb: /* smul */
                         CHECK_IU_FEATURE(dc, MUL);
                         gen_op_smul(cpu_dst, cpu_src1, cpu_src2);
                         if (xop & 0x10) {
-                            tcg_gen_mov_tl(cpu_cc_dst, cpu_dst);
-                            tcg_gen_movi_i32(cpu_cc_op, CC_OP_LOGIC);
-                            dc->cc_op = CC_OP_LOGIC;
+                            gen_logic_cc(cpu_dst);
                         }
                         break;
                     case 0xc: /* subx, V9 subc */
@@ -3496,7 +3220,6 @@ static void disas_sparc_insn(DisasContext * dc, unsigned int insn)
                         if (xop & 0x10) {
                             gen_helper_udiv_cc(cpu_dst, cpu_env, cpu_src1,
                                                cpu_src2);
-                            dc->cc_op = CC_OP_DIV;
                         } else {
                             gen_helper_udiv(cpu_dst, cpu_env, cpu_src1,
                                             cpu_src2);
@@ -3507,7 +3230,6 @@ static void disas_sparc_insn(DisasContext * dc, unsigned int insn)
                         if (xop & 0x10) {
                             gen_helper_sdiv_cc(cpu_dst, cpu_env, cpu_src1,
                                                cpu_src2);
-                            dc->cc_op = CC_OP_DIV;
                         } else {
                             gen_helper_sdiv(cpu_dst, cpu_env, cpu_src1,
                                             cpu_src2);
@@ -3523,34 +3245,27 @@ static void disas_sparc_insn(DisasContext * dc, unsigned int insn)
                     switch (xop) {
                     case 0x20: /* taddcc */
                         gen_op_add_cc(cpu_dst, cpu_src1, cpu_src2);
+                        gen_op_tag_cc(cpu_src1, cpu_src2);
                         gen_store_gpr(dc, rd, cpu_dst);
-                        tcg_gen_movi_i32(cpu_cc_op, CC_OP_TADD);
-                        dc->cc_op = CC_OP_TADD;
                         break;
                     case 0x21: /* tsubcc */
                         gen_op_sub_cc(cpu_dst, cpu_src1, cpu_src2);
+                        gen_op_tag_cc(cpu_src1, cpu_src2);
                         gen_store_gpr(dc, rd, cpu_dst);
-                        tcg_gen_movi_i32(cpu_cc_op, CC_OP_TSUB);
-                        dc->cc_op = CC_OP_TSUB;
                         break;
                     case 0x22: /* taddcctv */
                         gen_helper_taddcctv(cpu_dst, cpu_env,
                                             cpu_src1, cpu_src2);
                         gen_store_gpr(dc, rd, cpu_dst);
-                        dc->cc_op = CC_OP_TADDTV;
                         break;
                     case 0x23: /* tsubcctv */
                         gen_helper_tsubcctv(cpu_dst, cpu_env,
                                             cpu_src1, cpu_src2);
                         gen_store_gpr(dc, rd, cpu_dst);
-                        dc->cc_op = CC_OP_TSUBTV;
                         break;
                     case 0x24: /* mulscc */
-                        update_flags(dc);
-                        gen_op_mulscc(cpu_dst, cpu_src1, cpu_src2);
+                        gen_op_mulscc(dc, cpu_dst, cpu_src1, cpu_src2);
                         gen_store_gpr(dc, rd, cpu_dst);
-                        tcg_gen_movi_i32(cpu_cc_op, CC_OP_ADD);
-                        dc->cc_op = CC_OP_ADD;
                         break;
 #ifndef TARGET_SPARC64
                     case 0x25:  /* sll */
@@ -3615,8 +3330,6 @@ static void disas_sparc_insn(DisasContext * dc, unsigned int insn)
                             case 0x2: /* V9 wrccr */
                                 tcg_gen_xor_tl(cpu_tmp0, cpu_src1, cpu_src2);
                                 gen_helper_wrccr(cpu_env, cpu_tmp0);
-                                tcg_gen_movi_i32(cpu_cc_op, CC_OP_FLAGS);
-                                dc->cc_op = CC_OP_FLAGS;
                                 break;
                             case 0x3: /* V9 wrasi */
                                 tcg_gen_xor_tl(cpu_tmp0, cpu_src1, cpu_src2);
@@ -3752,8 +3465,6 @@ static void disas_sparc_insn(DisasContext * dc, unsigned int insn)
                             cpu_tmp0 = get_temp_tl(dc);
                             tcg_gen_xor_tl(cpu_tmp0, cpu_src1, cpu_src2);
                             gen_helper_wrpsr(cpu_env, cpu_tmp0);
-                            tcg_gen_movi_i32(cpu_cc_op, CC_OP_FLAGS);
-                            dc->cc_op = CC_OP_FLAGS;
                             save_state(dc);
                             gen_op_next_insn();
                             tcg_gen_exit_tb(0);
@@ -5232,7 +4943,6 @@ static inline void gen_intermediate_code_internal(SPARCCPU *cpu,
     dc->pc = pc_start;
     last_pc = dc->pc;
     dc->npc = (target_ulong) tb->cs_base;
-    dc->cc_op = CC_OP_DYNAMIC;
     dc->mem_idx = cpu_mmu_index(env);
     dc->def = env->def;
     dc->fpu_enabled = tb_fpu_enabled(tb->flags);
@@ -5367,14 +5077,11 @@ void gen_intermediate_code_init(CPUSPARCState *env)
 
     static const struct { TCGv_i32 *ptr; int off; const char *name; } r32[] = {
 #ifdef TARGET_SPARC64
-        { &cpu_xcc, offsetof(CPUSPARCState, xcc), "xcc" },
         { &cpu_asi, offsetof(CPUSPARCState, asi), "asi" },
         { &cpu_fprs, offsetof(CPUSPARCState, fprs), "fprs" },
 #else
         { &cpu_wim, offsetof(CPUSPARCState, wim), "wim" },
 #endif
-        { &cpu_cc_op, offsetof(CPUSPARCState, cc_op), "cc_op" },
-        { &cpu_icc, offsetof(CPUSPARCState, icc), "icc" },
     };
 
     static const struct { TCGv *ptr; int off; const char *name; } rtl[] = {
@@ -5389,11 +5096,13 @@ void gen_intermediate_code_init(CPUSPARCState *env)
         { &cpu_hver, offsetof(CPUSPARCState, hver), "hver" },
         { &cpu_ssr, offsetof(CPUSPARCState, ssr), "ssr" },
         { &cpu_ver, offsetof(CPUSPARCState, version), "ver" },
+        { &cpu_cc_xc, offsetof(CPUSPARCState, cc_xc), "cc_xc" },
 #endif
         { &cpu_cond, offsetof(CPUSPARCState, cond), "cond" },
-        { &cpu_cc_src, offsetof(CPUSPARCState, cc_src), "cc_src" },
-        { &cpu_cc_src2, offsetof(CPUSPARCState, cc_src2), "cc_src2" },
-        { &cpu_cc_dst, offsetof(CPUSPARCState, cc_dst), "cc_dst" },
+        { &cpu_cc_n, offsetof(CPUSPARCState, cc_n), "cc_n" },
+        { &cpu_cc_z, offsetof(CPUSPARCState, cc_z), "cc_z" },
+        { &cpu_cc_v, offsetof(CPUSPARCState, cc_v), "cc_v" },
+        { &cpu_cc_ic, offsetof(CPUSPARCState, cc_ic), "cc_ic" },
         { &cpu_fsr, offsetof(CPUSPARCState, fsr), "fsr" },
         { &cpu_pc, offsetof(CPUSPARCState, pc), "pc" },
         { &cpu_npc, offsetof(CPUSPARCState, npc), "npc" },

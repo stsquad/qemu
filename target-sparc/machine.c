@@ -73,7 +73,8 @@ void cpu_save(QEMUFile *f, void *opaque)
         qemu_put_be64s(f, &env->ts[i].tstate);
         qemu_put_be32s(f, &env->ts[i].tt);
     }
-    qemu_put_be32s(f, &env->xcc);
+    tmp = cpu_get_ccr(env);
+    qemu_put_be32s(f, &tmp);
     qemu_put_be32s(f, &env->asi);
     qemu_put_be32s(f, &env->pstate);
     qemu_put_be32s(f, &env->tl);
@@ -179,7 +180,8 @@ int cpu_load(QEMUFile *f, void *opaque, int version_id)
         qemu_get_be64s(f, &env->ts[i].tstate);
         qemu_get_be32s(f, &env->ts[i].tt);
     }
-    qemu_get_be32s(f, &env->xcc);
+    tmp = qemu_get_be32(f);
+    cpu_put_ccr(env, tmp);
     qemu_get_be32s(f, &env->asi);
     qemu_get_be32s(f, &env->pstate);
     qemu_get_be32s(f, &env->tl);

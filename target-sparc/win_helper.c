@@ -66,7 +66,7 @@ target_ulong cpu_get_psr(CPUSPARCState *env)
 
 void cpu_put_psr(CPUSPARCState *env, target_ulong val)
 {
-    env->icc = val & PSR_ICC;
+    cpu_put_icc(env, val);
 #if !defined(TARGET_SPARC64)
     env->psref = (val & PSR_EF) ? 1 : 0;
     env->psrpil = (val & PSR_PIL) >> 8;
@@ -80,7 +80,6 @@ void cpu_put_psr(CPUSPARCState *env, target_ulong val)
     env->psret = (val & PSR_ET) ? 1 : 0;
     cpu_set_cwp(env, val & PSR_CWP);
 #endif
-    env->cc_op = CC_OP_FLAGS;
 }
 
 int cpu_cwp_inc(CPUSPARCState *env, int cwp)
@@ -228,20 +227,6 @@ void helper_restored(CPUSPARCState *env)
     } else {
         env->otherwin--;
     }
-}
-
-target_ulong cpu_get_ccr(CPUSPARCState *env)
-{
-    uint32_t icc = cpu_get_icc(env);
-    uint32_t xcc = cpu_get_xcc(env);
-    return ((xcc >> 20) << 4) | (icc >> 20);
-}
-
-void cpu_put_ccr(CPUSPARCState *env, target_ulong val)
-{
-    env->xcc = (val >> 4) << 20;
-    env->icc = (val & 0xf) << 20;
-    CC_OP = CC_OP_FLAGS;
 }
 
 target_ulong cpu_get_cwp64(CPUSPARCState *env)
