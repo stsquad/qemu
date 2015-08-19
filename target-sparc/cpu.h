@@ -539,6 +539,10 @@ void gen_intermediate_code_init(CPUSPARCState *env);
 /* cpu-exec.c */
 int cpu_sparc_exec(CPUState *cpu);
 
+/* cc_helper.c */
+uint32_t cpu_get_icc(CPUSPARCState *env1);
+uint32_t cpu_get_xcc(CPUSPARCState *env1);
+
 /* win_helper.c */
 target_ulong cpu_get_psr(CPUSPARCState *env1);
 void cpu_put_psr(CPUSPARCState *env1, target_ulong val);

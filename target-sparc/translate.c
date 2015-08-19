@@ -996,11 +996,15 @@ static inline void save_npc(DisasContext *dc)
     }
 }
 
-static inline void update_psr(DisasContext *dc)
+static void update_flags(DisasContext *dc)
 {
     if (dc->cc_op != CC_OP_FLAGS) {
+        gen_helper_compute_icc(cpu_icc, cpu_env);
+#ifdef TARGET_SPARC64
+        gen_helper_compute_xcc(cpu_xcc, cpu_env);
+#endif
+        tcg_gen_movi_i32(cpu_cc_op, CC_OP_FLAGS);
         dc->cc_op = CC_OP_FLAGS;
-        gen_helper_compute_psr(cpu_env);
     }
 }
 
@@ -1148,8 +1152,7 @@ static void gen_compare(DisasCompare *cmp, bool xcc, unsigned int cond,
 
     default:
     do_dynamic:
-        gen_helper_compute_psr(cpu_env);
-        dc->cc_op = CC_OP_FLAGS;
+        update_flags(dc);
         /* FALLTHRU */
 
     case CC_OP_FLAGS:
@@ -2699,7 +2702,7 @@ static void disas_sparc_insn(DisasContext * dc, unsigned int insn)
                     break;
 #ifdef TARGET_SPARC64
                 case 0x2: /* V9 rdccr */
-                    update_psr(dc);
+                    update_flags(dc);
                     gen_helper_rdccr(cpu_dst, cpu_env);
                     gen_store_gpr(dc, rd, cpu_dst);
                     break;
@@ -2780,7 +2783,7 @@ static void disas_sparc_insn(DisasContext * dc, unsigned int insn)
                 if (!supervisor(dc)) {
                     goto priv_insn;
                 }
-                update_psr(dc);
+                update_flags(dc);
                 gen_helper_rdpsr(cpu_dst, cpu_env);
 #else
                 CHECK_IU_FEATURE(dc, HYPV);
@@ -3543,7 +3546,7 @@ static void disas_sparc_insn(DisasContext * dc, unsigned int insn)
                         dc->cc_op = CC_OP_TSUBTV;
                         break;
                     case 0x24: /* mulscc */
-                        update_psr(dc);
+                        update_flags(dc);
                         gen_op_mulscc(cpu_dst, cpu_src1, cpu_src2);
                         gen_store_gpr(dc, rd, cpu_dst);
                         tcg_gen_movi_i32(cpu_cc_op, CC_OP_ADD);

@@ -463,19 +463,29 @@ static const CCTable xcc_table[CC_OP_NB] = {
 };
 #endif
 
-void helper_compute_psr(CPUSPARCState *env)
+uint32_t helper_compute_icc(CPUSPARCState *env)
 {
-    env->icc = icc_table[CC_OP].compute_all(env); 
-#ifdef TARGET_SPARC64
-    env->xcc = xcc_table[CC_OP].compute_all(env);
-#endif
-    CC_OP = CC_OP_FLAGS;
+    return icc_table[CC_OP].compute_all(env);
 }
+
+uint32_t cpu_get_icc(CPUSPARCState *env)
+{
+    return helper_compute_icc(env);
+}
+
+#ifdef TARGET_SPARC64
+uint32_t helper_compute_xcc(CPUSPARCState *env)
+{
+    return xcc_table[CC_OP].compute_all(env);
+}
+
+uint32_t cpu_get_xcc(CPUSPARCState *env)
+{
+    return helper_compute_xcc(env);
+}
+#endif
 
 uint32_t helper_compute_C_icc(CPUSPARCState *env)
 {
-    uint32_t ret;
-
-    ret = icc_table[CC_OP].compute_c(env) >> PSR_CARRY_SHIFT;
-    return ret;
+    return icc_table[CC_OP].compute_c(env) >> PSR_CARRY_SHIFT;
 }

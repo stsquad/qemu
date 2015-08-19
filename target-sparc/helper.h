@@ -1,7 +1,7 @@
 #ifndef TARGET_SPARC64
 DEF_HELPER_1(rett, void, env)
 DEF_HELPER_2(wrpsr, void, env, tl)
-DEF_HELPER_1(rdpsr, tl, env)
+DEF_HELPER_FLAGS_1(rdpsr, TCG_CALL_NO_RWG_SE, tl, env)
 DEF_HELPER_1(power_down, void, env)
 #else
 DEF_HELPER_FLAGS_2(wrpil, TCG_CALL_NO_RWG, void, env, tl)
@@ -11,7 +11,7 @@ DEF_HELPER_1(retry, void, env)
 DEF_HELPER_FLAGS_1(flushw, TCG_CALL_NO_WG, void, env)
 DEF_HELPER_FLAGS_1(saved, TCG_CALL_NO_RWG, void, env)
 DEF_HELPER_FLAGS_1(restored, TCG_CALL_NO_RWG, void, env)
-DEF_HELPER_1(rdccr, tl, env)
+DEF_HELPER_FLAGS_1(rdccr, TCG_CALL_NO_RWG_SE, tl, env)
 DEF_HELPER_2(wrccr, void, env, tl)
 DEF_HELPER_1(rdcwp, tl, env)
 DEF_HELPER_2(wrcwp, void, env, tl)
@@ -171,5 +171,8 @@ VIS_CMPHELPER(cmpne)
 #undef F_HELPER_0_1
 #undef VIS_HELPER
 #undef VIS_CMPHELPER
-DEF_HELPER_1(compute_psr, void, env)
+DEF_HELPER_FLAGS_1(compute_icc, TCG_CALL_NO_WG_SE, i32, env)
 DEF_HELPER_FLAGS_1(compute_C_icc, TCG_CALL_NO_WG_SE, i32, env)
+#ifdef TARGET_SPARC64
+DEF_HELPER_FLAGS_1(compute_xcc, TCG_CALL_NO_WG_SE, i32, env)
+#endif

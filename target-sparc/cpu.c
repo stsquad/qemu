@@ -710,6 +710,7 @@ void sparc_cpu_dump_state(CPUState *cs, FILE *f, fprintf_function cpu_fprintf,
     SPARCCPU *cpu = SPARC_CPU(cs);
     CPUSPARCState *env = &cpu->env;
     int i, x;
+    target_ulong cc;
 
     cpu_fprintf(f, "pc: " TARGET_FMT_lx "  npc: " TARGET_FMT_lx "\n", env->pc,
                 env->npc);
@@ -747,11 +748,11 @@ void sparc_cpu_dump_state(CPUState *cs, FILE *f, fprintf_function cpu_fprintf,
         }
     }
 #ifdef TARGET_SPARC64
-    cpu_fprintf(f, "pstate: %08x ccr: %02x (icc: ", env->pstate,
-                (unsigned)cpu_get_ccr(env));
-    cpu_print_cc(f, cpu_fprintf, cpu_get_ccr(env) << PSR_CARRY_SHIFT);
+    cc = cpu_get_ccr(env);
+    cpu_fprintf(f, "pstate: %08x ccr: %02x (icc: ", env->pstate, (unsigned)cc);
+    cpu_print_cc(f, cpu_fprintf, cc << PSR_CARRY_SHIFT);
     cpu_fprintf(f, " xcc: ");
-    cpu_print_cc(f, cpu_fprintf, cpu_get_ccr(env) << (PSR_CARRY_SHIFT - 4));
+    cpu_print_cc(f, cpu_fprintf, cc << (PSR_CARRY_SHIFT - 4));
     cpu_fprintf(f, ") asi: %02x tl: %d pil: %x\n", env->asi, env->tl,
                 env->psrpil);
     cpu_fprintf(f, "cansave: %d canrestore: %d otherwin: %d wstate: %d "
@@ -761,8 +762,9 @@ void sparc_cpu_dump_state(CPUState *cs, FILE *f, fprintf_function cpu_fprintf,
     cpu_fprintf(f, "fsr: " TARGET_FMT_lx " y: " TARGET_FMT_lx " fprs: "
                 TARGET_FMT_lx "\n", env->fsr, env->y, env->fprs);
 #else
-    cpu_fprintf(f, "psr: %08x (icc: ", cpu_get_psr(env));
-    cpu_print_cc(f, cpu_fprintf, cpu_get_psr(env));
+    cc = cpu_get_psr(env);
+    cpu_fprintf(f, "psr: %08x (icc: ", cc);
+    cpu_print_cc(f, cpu_fprintf, cc);
     cpu_fprintf(f, " SPE: %c%c%c) wim: %08x\n", env->psrs ? 'S' : '-',
                 env->psrps ? 'P' : '-', env->psret ? 'E' : '-',
                 env->wim);
