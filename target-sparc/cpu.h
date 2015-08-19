@@ -398,9 +398,9 @@ struct CPUSPARCState {
     target_ulong cond; /* conditional branch result (XXX: save it in a
                           temporary register when possible) */
 
-    uint32_t psr;      /* processor state register */
     target_ulong fsr;      /* FPU state register */
     CPU_DoubleU fpr[TARGET_DPREGS];  /* floating point registers */
+    uint32_t icc;      /* 32-bit carry state from the PSR */
     uint32_t cwp;      /* index of current register window (extracted
                           from PSR) */
 #if !defined(TARGET_SPARC64) || defined(TARGET_ABI32)

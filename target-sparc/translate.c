@@ -45,7 +45,7 @@
 static TCGv_ptr cpu_env, cpu_regwptr;
 static TCGv cpu_cc_src, cpu_cc_src2, cpu_cc_dst;
 static TCGv_i32 cpu_cc_op;
-static TCGv_i32 cpu_psr;
+static TCGv_i32 cpu_icc;
 static TCGv cpu_fsr, cpu_pc, cpu_npc;
 static TCGv cpu_regs[32];
 static TCGv cpu_y;
@@ -597,8 +597,8 @@ static inline void gen_op_mulscc(TCGv dst, TCGv src1, TCGv src2)
     tcg_gen_andi_tl(cpu_y, t0, 0xffffffff);
 
     // b1 = N ^ V;
-    gen_mov_reg_N(t0, cpu_psr);
-    gen_mov_reg_V(r_temp, cpu_psr);
+    gen_mov_reg_N(t0, cpu_icc);
+    gen_mov_reg_V(r_temp, cpu_icc);
     tcg_gen_xor_tl(t0, t0, r_temp);
     tcg_temp_free(r_temp);
 
@@ -1088,10 +1088,10 @@ static void gen_compare(DisasCompare *cmp, bool xcc, unsigned int cond,
     if (xcc) {
         r_src = cpu_xcc;
     } else {
-        r_src = cpu_psr;
+        r_src = cpu_icc;
     }
 #else
-    r_src = cpu_psr;
+    r_src = cpu_icc;
 #endif
 
     switch (dc->cc_op) {
@@ -5371,7 +5371,7 @@ void gen_intermediate_code_init(CPUSPARCState *env)
         { &cpu_wim, offsetof(CPUSPARCState, wim), "wim" },
 #endif
         { &cpu_cc_op, offsetof(CPUSPARCState, cc_op), "cc_op" },
-        { &cpu_psr, offsetof(CPUSPARCState, psr), "psr" },
+        { &cpu_icc, offsetof(CPUSPARCState, icc), "icc" },
     };
 
     static const struct { TCGv *ptr; int off; const char *name; } rtl[] = {

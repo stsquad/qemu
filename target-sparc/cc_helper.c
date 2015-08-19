@@ -22,12 +22,12 @@
 
 static uint32_t compute_all_flags(CPUSPARCState *env)
 {
-    return env->psr & PSR_ICC;
+    return env->icc & PSR_ICC;
 }
 
 static uint32_t compute_C_flags(CPUSPARCState *env)
 {
-    return env->psr & PSR_CARRY;
+    return env->icc & PSR_CARRY;
 }
 
 static inline uint32_t get_NZ_icc(int32_t dst)
@@ -465,13 +465,9 @@ static const CCTable xcc_table[CC_OP_NB] = {
 
 void helper_compute_psr(CPUSPARCState *env)
 {
-    uint32_t new_psr;
-
-    new_psr = icc_table[CC_OP].compute_all(env);
-    env->psr = new_psr;
+    env->icc = icc_table[CC_OP].compute_all(env); 
 #ifdef TARGET_SPARC64
-    new_psr = xcc_table[CC_OP].compute_all(env);
-    env->xcc = new_psr;
+    env->xcc = xcc_table[CC_OP].compute_all(env);
 #endif
     CC_OP = CC_OP_FLAGS;
 }

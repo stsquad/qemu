@@ -53,20 +53,20 @@ target_ulong cpu_get_psr(CPUSPARCState *env)
     helper_compute_psr(env);
 
 #if !defined(TARGET_SPARC64)
-    return env->version | (env->psr & PSR_ICC) |
+    return env->version | env->icc |
         (env->psref ? PSR_EF : 0) |
         (env->psrpil << 8) |
         (env->psrs ? PSR_S : 0) |
         (env->psrps ? PSR_PS : 0) |
         (env->psret ? PSR_ET : 0) | env->cwp;
 #else
-    return env->psr & PSR_ICC;
+    return env->icc;
 #endif
 }
 
 void cpu_put_psr(CPUSPARCState *env, target_ulong val)
 {
-    env->psr = val & PSR_ICC;
+    env->icc = val & PSR_ICC;
 #if !defined(TARGET_SPARC64)
     env->psref = (val & PSR_EF) ? 1 : 0;
     env->psrpil = (val & PSR_PIL) >> 8;
@@ -242,7 +242,7 @@ target_ulong cpu_get_ccr(CPUSPARCState *env)
 void cpu_put_ccr(CPUSPARCState *env, target_ulong val)
 {
     env->xcc = (val >> 4) << 20;
-    env->psr = (val & 0xf) << 20;
+    env->icc = (val & 0xf) << 20;
     CC_OP = CC_OP_FLAGS;
 }
 

@@ -552,13 +552,13 @@ void cpu_loop(CPUSPARCState *env)
 #if defined(TARGET_SPARC64) && !defined(TARGET_ABI32)
                 env->xcc |= PSR_CARRY;
 #else
-                env->psr |= PSR_CARRY;
+                env->icc |= PSR_CARRY;
 #endif
             } else {
 #if defined(TARGET_SPARC64) && !defined(TARGET_ABI32)
                 env->xcc &= ~PSR_CARRY;
 #else
-                env->psr &= ~PSR_CARRY;
+                env->icc &= ~PSR_CARRY;
 #endif
             }
             env->regwptr[0] = ret;

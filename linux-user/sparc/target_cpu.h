@@ -32,7 +32,7 @@ static inline void cpu_clone_regs(CPUSPARCState *env, target_ulong newsp)
 #if defined(TARGET_SPARC64) && !defined(TARGET_ABI32)
     env->xcc &= ~PSR_CARRY;
 #else
-    env->psr &= ~PSR_CARRY;
+    env->icc &= ~PSR_CARRY;
 #endif
 }
 

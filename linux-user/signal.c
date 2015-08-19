@@ -2238,7 +2238,7 @@ setup___siginfo(__siginfo_t *si, CPUSPARCState *env, abi_ulong mask)
 {
 	int err = 0, i;
 
-    __put_user(env->psr, &si->si_regs.psr);
+    __put_user(env->icc, &si->si_regs.psr);
     __put_user(env->pc, &si->si_regs.pc);
     __put_user(env->npc, &si->si_regs.npc);
     __put_user(env->y, &si->si_regs.y);
@@ -2263,7 +2263,7 @@ setup_sigcontext(struct target_sigcontext *sc, /*struct _fpstate *fpstate,*/
     __put_user(env->regwptr[UREG_SP], &sc->sigc_sp);
     __put_user(env->pc, &sc->sigc_pc);
     __put_user(env->npc, &sc->sigc_npc);
-    __put_user(env->psr, &sc->sigc_psr);
+    __put_user(env->icc, &sc->sigc_psr);
     __put_user(env->gregs[1], &sc->sigc_g1);
     __put_user(env->regwptr[UREG_O0], &sc->sigc_o0);
 
@@ -2402,8 +2402,10 @@ long do_sigreturn(CPUSPARCState *env)
         __get_user(up_psr, &sf->info.si_regs.psr);
 
         /* User can only change condition codes and FPU enabling in %psr. */
-        env->psr = (up_psr & (PSR_ICC /* | PSR_EF */))
-                  | (env->psr & ~(PSR_ICC /* | PSR_EF */));
+        env->icc = up_psr & PSR_ICC;
+#ifndef TARGET_SPARC64
+        env->psref = (up_psr & PSR_EF ? 1 : 0);
+#endif
 
 	env->pc = pc;
 	env->npc = npc;

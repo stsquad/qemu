@@ -275,7 +275,7 @@ static inline void init_thread(struct target_pt_regs *regs, struct image_info *i
 
 static inline void init_thread(struct target_pt_regs *regs, struct image_info *infop)
 {
-    regs->psr = 0;
+    regs->icc = 0;
     regs->pc = infop->entry;
     regs->npc = regs->pc + 4;
     regs->y = 0;
