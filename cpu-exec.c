@@ -463,12 +463,14 @@ int cpu_exec(CPUState *cpu)
                         interrupt_request &= ~CPU_INTERRUPT_SSTEP_MASK;
                     }
                     if (interrupt_request & CPU_INTERRUPT_DEBUG) {
-                        cpu->interrupt_request &= ~CPU_INTERRUPT_DEBUG;
+                        atomic_and(&cpu->interrupt_request,
+                                   ~CPU_INTERRUPT_DEBUG);
                         cpu->exception_index = EXCP_DEBUG;
                         cpu_loop_exit(cpu);
                     }
                     if (interrupt_request & CPU_INTERRUPT_HALT) {
-                        cpu->interrupt_request &= ~CPU_INTERRUPT_HALT;
+                        atomic_and(&cpu->interrupt_request,
+                                   ~CPU_INTERRUPT_HALT);
                         cpu->halted = 1;
                         cpu->exception_index = EXCP_HLT;
                         cpu_loop_exit(cpu);
@@ -495,7 +497,8 @@ int cpu_exec(CPUState *cpu)
                     /* Don't use the cached interrupt_request value,
                        do_interrupt may have updated the EXITTB flag. */
                     if (cpu->interrupt_request & CPU_INTERRUPT_EXITTB) {
-                        cpu->interrupt_request &= ~CPU_INTERRUPT_EXITTB;
+                        atomic_and(&cpu->interrupt_request,
+                                   ~CPU_INTERRUPT_EXITTB);
                         /* ensure that no TB jump will be modified as
                            the program flow was changed */
                         next_tb = 0;

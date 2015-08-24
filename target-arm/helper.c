@@ -4980,7 +4980,7 @@ void arm_cpu_do_interrupt(CPUState *cs)
     }
     env->regs[14] = env->regs[15] + offset;
     env->regs[15] = addr;
-    cs->interrupt_request |= CPU_INTERRUPT_EXITTB;
+    atomic_or(&cs->interrupt_request, CPU_INTERRUPT_EXITTB);
 }
 
 

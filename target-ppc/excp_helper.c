@@ -139,7 +139,7 @@ static inline void powerpc_excp(PowerPCCPU *cpu, int excp_model, int excp)
                         "Entering checkstop state\n");
             }
             cs->halted = 1;
-            cs->interrupt_request |= CPU_INTERRUPT_EXITTB;
+            atomic_or(&cs->interrupt_request, CPU_INTERRUPT_EXITTB);
         }
         if (0) {
             /* XXX: find a suitable condition to enable the hypervisor mode */
@@ -828,7 +828,7 @@ bool ppc_cpu_exec_interrupt(CPUState *cs, int interrupt_request)
     if (interrupt_request & CPU_INTERRUPT_HARD) {
         ppc_hw_interrupt(env);
         if (env->pending_interrupts == 0) {
-            cs->interrupt_request &= ~CPU_INTERRUPT_HARD;
+            atomic_and(&cs->interrupt_request, ~CPU_INTERRUPT_HARD);
         }
         return true;
     }
@@ -872,7 +872,7 @@ void helper_store_msr(CPUPPCState *env, target_ulong val)
     val = hreg_store_msr(env, val, 0);
     if (val != 0) {
         cs = CPU(ppc_env_get_cpu(env));
-        cs->interrupt_request |= CPU_INTERRUPT_EXITTB;
+        atomic_or(&cs->interrupt_request, CPU_INTERRUPT_EXITTB);
         helper_raise_exception(env, val);
     }
 }
@@ -906,7 +906,7 @@ static inline void do_rfi(CPUPPCState *env, target_ulong nip, target_ulong msr,
     /* No need to raise an exception here,
      * as rfi is always the last insn of a TB
      */
-    cs->interrupt_request |= CPU_INTERRUPT_EXITTB;
+    atomic_or(&cs->interrupt_request, CPU_INTERRUPT_EXITTB);
 }
 
 void helper_rfi(CPUPPCState *env)

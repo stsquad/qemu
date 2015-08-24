@@ -108,7 +108,7 @@ static void cpu_common_get_memory_mapping(CPUState *cpu,
 
 void cpu_reset_interrupt(CPUState *cpu, int mask)
 {
-    cpu->interrupt_request &= ~mask;
+    atomic_and(&cpu->interrupt_request, ~mask);
 }
 
 void cpu_exit(CPUState *cpu)
@@ -242,7 +242,7 @@ static void cpu_common_reset(CPUState *cpu)
         log_cpu_state(cpu, cc->reset_dump_flags);
     }
 
-    cpu->interrupt_request = 0;
+    atomic_set(&cpu->interrupt_request, 0);
     cpu->current_tb = NULL;
     cpu->halted = 0;
     cpu->mem_io_pc = 0;

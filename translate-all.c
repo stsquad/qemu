@@ -1596,7 +1596,7 @@ static void tcg_handle_interrupt(CPUState *cpu, int mask)
     int old_mask;
 
     old_mask = cpu->interrupt_request;
-    cpu->interrupt_request |= mask;
+    atomic_or(&cpu->interrupt_request, mask);
 
     /*
      * If called from iothread context, wake the target cpu in
@@ -1790,7 +1790,7 @@ void dump_opcount_info(FILE *f, fprintf_function cpu_fprintf)
 
 void cpu_interrupt(CPUState *cpu, int mask)
 {
-    cpu->interrupt_request |= mask;
+    atomic_or(&cpu->interrupt_request, mask);
     cpu->tcg_exit_req = 1;
 }
 

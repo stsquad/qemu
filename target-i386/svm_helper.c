@@ -296,7 +296,7 @@ void helper_vmrun(CPUX86State *env, int aflag, int next_eip_addend)
     if (int_ctl & V_IRQ_MASK) {
         CPUState *cs = CPU(x86_env_get_cpu(env));
 
-        cs->interrupt_request |= CPU_INTERRUPT_VIRQ;
+        atomic_or(&cs->interrupt_request, CPU_INTERRUPT_VIRQ);
     }
 
     /* maybe we need to inject an event */
@@ -665,7 +665,7 @@ void helper_vmexit(CPUX86State *env, uint32_t exit_code, uint64_t exit_info_1)
     env->hflags &= ~HF_SVMI_MASK;
     env->intercept = 0;
     env->intercept_exceptions = 0;
-    cs->interrupt_request &= ~CPU_INTERRUPT_VIRQ;
+    atomic_and(&cs->interrupt_request, ~CPU_INTERRUPT_VIRQ);
     env->tsc_offset = 0;
 
     env->gdt.base  = x86_ldq_phys(cs, env->vm_hsave + offsetof(struct vmcb,

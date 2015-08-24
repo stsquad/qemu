@@ -541,6 +541,6 @@ void aarch64_cpu_do_interrupt(CPUState *cs)
     aarch64_restore_sp(env, new_el);
 
     env->pc = addr;
-    cs->interrupt_request |= CPU_INTERRUPT_EXITTB;
+    atomic_or(&cs->interrupt_request, CPU_INTERRUPT_EXITTB);
 }
 #endif

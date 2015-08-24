@@ -1232,7 +1232,7 @@ void do_cpu_init(X86CPU *cpu)
     *save = *env;
 
     cpu_reset(cs);
-    cs->interrupt_request = sipi;
+    atomic_set(&cs->interrupt_request, sipi);
     memcpy(&env->start_init_save, &save->start_init_save,
            offsetof(CPUX86State, end_init_save) -
            offsetof(CPUX86State, start_init_save));

@@ -148,7 +148,7 @@ void HELPER(mtspr)(CPUOpenRISCState *env,
                 env->ttmr = (rb & ~TTMR_IP) | ip;
             } else {    /* Clear IP bit.  */
                 env->ttmr = rb & ~TTMR_IP;
-                cs->interrupt_request &= ~CPU_INTERRUPT_TIMER;
+                atomic_and(&cs->interrupt_request, ~CPU_INTERRUPT_TIMER);
             }
 
             cpu_openrisc_timer_update(cpu);

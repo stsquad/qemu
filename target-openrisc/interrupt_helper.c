@@ -54,5 +54,5 @@ void HELPER(rfe)(CPUOpenRISCState *env)
         tlb_flush(cs, 1);
     }
 #endif
-    cs->interrupt_request |= CPU_INTERRUPT_EXITTB;
+    atomic_or(&cs->interrupt_request, CPU_INTERRUPT_EXITTB);
 }

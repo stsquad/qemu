@@ -563,7 +563,7 @@ void s390_cpu_do_interrupt(CPUState *cs)
     cs->exception_index = -1;
 
     if (!env->pending_int) {
-        cs->interrupt_request &= ~CPU_INTERRUPT_HARD;
+        atomic_and(&cs->interrupt_request, ~CPU_INTERRUPT_HARD);
     }
 }
 

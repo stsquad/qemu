@@ -85,7 +85,7 @@ static inline int hreg_store_msr(CPUPPCState *env, target_ulong value,
         /* Flush all tlb when changing translation mode */
         tlb_flush(cs, 1);
         excp = POWERPC_EXCP_NONE;
-        cs->interrupt_request |= CPU_INTERRUPT_EXITTB;
+        atomic_or(&cs->interrupt_request, CPU_INTERRUPT_EXITTB);
     }
     if (unlikely((env->flags & POWERPC_FLAG_TGPR) &&
                  ((value ^ env->msr) & (1 << MSR_TGPR)))) {
