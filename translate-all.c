@@ -869,30 +869,24 @@ static void page_flush_tb(void)
     }
 }
 
-#ifdef CONFIG_USER_ONLY
-void tb_flush_safe(CPUState *cpu)
+static void tb_flush_work(void *arg)
 {
-    tb_flush(cpu);
-}
-#else
-static void tb_flush_work(void *opaque)
-{
-    CPUState *cpu = opaque;
-    tb_flush(cpu);
-}
+    CPUState *cpu = arg;
 
-void tb_flush_safe(CPUState *cpu)
-{
+    /*
+     * Really no need to acquire tb_lock since all other threads are
+     * asleep; let's just acquire it to pass the assertion in
+     * tb_flush and for the wmb when unlocking.
+     */
+    tb_lock_nocheck();
     tb_flush(cpu);
-    async_run_safe_work_on_cpu(cpu, tb_flush_work, cpu);
+    tb_unlock();
 }
-#endif
 
 /* flush all the translation blocks */
-/* XXX: tb_flush is currently not thread safe */
 void tb_flush(CPUState *cpu)
 {
-    tb_lock();
+    assert(have_tb_lock);
 
 #if defined(DEBUG_FLUSH)
     printf("qemu: flush code_size=%ld nb_tbs=%d avg_tb_size=%ld\n",
@@ -919,8 +913,6 @@ void tb_flush(CPUState *cpu)
     /* XXX: flush processor icache at this point if cache flush is
        expensive */
     tcg_ctx.tb_ctx.tb_flush_count++;
-
-    tb_unlock();
 }
 
 #ifdef DEBUG_TB_CHECK
@@ -1164,17 +1156,7 @@ TranslationBlock *tb_gen_code(CPUState *cpu,
     tb = tb_alloc(pc);
     if (!tb) {
         /* flush must be done */
-#ifdef CONFIG_USER_ONLY
-        /* FIXME: kick all other CPUs out also for user-mode emulation.  */
-        tb_flush(cpu);
-        mmap_unlock();
-#else
-        tb_flush_safe(cpu);
-#endif
-        cpu_loop_exit(cpu);
-        tb_flush(cpu);
-        /* cannot fail at this point */
-        tb = tb_alloc(pc);
+        cpu_tcg_sched_work(cpu, tb_flush_work, cpu);
     }
 
     tb->tc_ptr = tcg_ctx.code_gen_ptr;
