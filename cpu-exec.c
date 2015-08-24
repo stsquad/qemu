@@ -386,6 +386,8 @@ int cpu_exec(CPUState *cpu)
     uintptr_t next_tb;
     SyncClocks sc;
 
+    current_cpu = cpu;
+
 #ifndef CONFIG_USER_ONLY
     /* FIXME: user-mode emulation probably needs a similar mechanism as well,
      * for example for tb_flush.

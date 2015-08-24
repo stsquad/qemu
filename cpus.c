@@ -1079,7 +1079,6 @@ static void *qemu_tcg_cpu_thread_fn(void *arg)
     cpu->thread_id = qemu_get_thread_id();
     cpu->created = true;
     cpu->can_do_io = 1;
-    current_cpu = cpu;
 
     qemu_cond_signal(&qemu_cpu_cond);
 
