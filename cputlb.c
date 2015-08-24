@@ -73,43 +73,24 @@ void tlb_flush(CPUState *cpu, int flush_global)
     tlb_flush_count++;
 }
 
-struct TLBFlushParams {
-    CPUState *cpu;
-    int flush_global;
-};
-
-static void tlb_flush_async_work(void *opaque)
+static void __tlb_flush_all(void *arg)
 {
-    struct TLBFlushParams *params = opaque;
+    CPUState *cpu;
+    int flush_global = *(int *)arg;
 
-    tlb_flush(params->cpu, params->flush_global);
-    g_free(params);
+    CPU_FOREACH(cpu) {
+        tlb_flush(cpu, flush_global);
+    }
+    g_free(arg);
 }
 
 void tlb_flush_all(int flush_global)
 {
-    CPUState *cpu;
-    struct TLBFlushParams *params;
+    int *arg = g_malloc(sizeof(*arg));
 
-#if 0 /* MTTCG */
-    CPU_FOREACH(cpu) {
-        tlb_flush(cpu, flush_global);
-    }
-#else
-    CPU_FOREACH(cpu) {
-        if (qemu_cpu_is_self(cpu)) {
-            /* async_run_on_cpu handle this case but this just avoid a malloc
-             * here.
-             */
-            tlb_flush(cpu, flush_global);
-        } else {
-            params = g_malloc(sizeof(struct TLBFlushParams));
-            params->cpu = cpu;
-            params->flush_global = flush_global;
-            async_run_on_cpu(cpu, tlb_flush_async_work, params);
-        }
-    }
-#endif /* MTTCG */
+    *arg = flush_global;
+    tb_lock();
+    cpu_tcg_sched_work(current_cpu, __tlb_flush_all, arg);
 }
 
 static inline void tlb_flush_entry(CPUTLBEntry *tlb_entry, target_ulong addr)
