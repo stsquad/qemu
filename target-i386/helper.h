@@ -1,8 +1,8 @@
 DEF_HELPER_FLAGS_4(cc_compute_all, TCG_CALL_NO_RWG_SE, tl, tl, tl, tl, int)
 DEF_HELPER_FLAGS_4(cc_compute_c, TCG_CALL_NO_RWG_SE, tl, tl, tl, tl, int)
 
-DEF_HELPER_0(lock, void)
-DEF_HELPER_0(unlock, void)
+DEF_HELPER_1(lock_enable, void, env)
+DEF_HELPER_1(lock_disable, void, env)
 DEF_HELPER_3(write_eflags, void, env, tl, i32)
 DEF_HELPER_1(read_eflags, tl, env)
 DEF_HELPER_2(divb_AL, void, env, tl)
@@ -217,3 +217,5 @@ DEF_HELPER_3(rcrl, tl, env, tl, tl)
 DEF_HELPER_3(rclq, tl, env, tl, tl)
 DEF_HELPER_3(rcrq, tl, env, tl, tl)
 #endif
+
+#include "qemu/aie-helper.h"

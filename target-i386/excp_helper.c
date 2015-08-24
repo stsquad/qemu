@@ -96,6 +96,13 @@ static void QEMU_NORETURN raise_interrupt2(CPUX86State *env, int intno,
 {
     CPUState *cs = CPU(x86_env_get_cpu(env));
 
+    if (unlikely(env->aie_locked)) {
+        helper_aie_unlock__done(env);
+    }
+    if (unlikely(env->aie_lock_enabled)) {
+        env->aie_lock_enabled = false;
+    }
+
     if (!is_int) {
         cpu_svm_check_intercept_param(env, SVM_EXIT_EXCP_BASE + intno,
                                       error_code);

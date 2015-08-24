@@ -279,9 +279,9 @@ void cpu_loop(CPUX86State *env)
     target_siginfo_t info;
 
     for(;;) {
-        cpu_exec_start(cs);
+        cs->running = true;
         trapnr = cpu_x86_exec(cs);
-        cpu_exec_end(cs);
+        cs->running = false;
         switch(trapnr) {
         case 0x80:
             /* linux syscall from int $0x80 */

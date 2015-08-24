@@ -21,38 +21,21 @@
 #include "exec/helper-proto.h"
 #include "exec/cpu_ldst.h"
 
-/* broken thread support */
+#include "aie-helper.c"
 
-#if defined(CONFIG_USER_ONLY)
-QemuMutex global_cpu_lock;
-
-void helper_lock(void)
+void helper_lock_enable(CPUX86State *env)
 {
-    qemu_mutex_lock(&global_cpu_lock);
+    env->aie_lock_enabled = true;
 }
 
-void helper_unlock(void)
+void helper_lock_disable(CPUX86State *env)
 {
-    qemu_mutex_unlock(&global_cpu_lock);
+    assert(env->aie_lock_enabled);
+    if (env->aie_locked) {
+        h_aie_unlock__done(env);
+    }
+    env->aie_lock_enabled = false;
 }
-
-void helper_lock_init(void)
-{
-    qemu_mutex_init(&global_cpu_lock);
-}
-#else
-void helper_lock(void)
-{
-}
-
-void helper_unlock(void)
-{
-}
-
-void helper_lock_init(void)
-{
-}
-#endif
 
 void helper_cmpxchg8b(CPUX86State *env, target_ulong a0)
 {
@@ -60,6 +43,7 @@ void helper_cmpxchg8b(CPUX86State *env, target_ulong a0)
     int eflags;
 
     eflags = cpu_cc_compute_all(env, CC_OP);
+    aie_ld_lock_ret(env, a0, GETRA());
     d = cpu_ldq_data(env, a0);
     if (d == (((uint64_t)env->regs[R_EDX] << 32) | (uint32_t)env->regs[R_EAX])) {
         cpu_stq_data(env, a0, ((uint64_t)env->regs[R_ECX] << 32) | (uint32_t)env->regs[R_EBX]);
@@ -71,6 +55,7 @@ void helper_cmpxchg8b(CPUX86State *env, target_ulong a0)
         env->regs[R_EAX] = (uint32_t)d;
         eflags &= ~CC_Z;
     }
+    helper_aie_unlock__done(env);
     CC_SRC = eflags;
 }
 
@@ -84,6 +69,7 @@ void helper_cmpxchg16b(CPUX86State *env, target_ulong a0)
         raise_exception(env, EXCP0D_GPF);
     }
     eflags = cpu_cc_compute_all(env, CC_OP);
+    aie_ld_lock_ret(env, a0, GETRA());
     d0 = cpu_ldq_data(env, a0);
     d1 = cpu_ldq_data(env, a0 + 8);
     if (d0 == env->regs[R_EAX] && d1 == env->regs[R_EDX]) {
@@ -98,6 +84,7 @@ void helper_cmpxchg16b(CPUX86State *env, target_ulong a0)
         env->regs[R_EAX] = d0;
         eflags &= ~CC_Z;
     }
+    helper_aie_unlock__done(env);
     CC_SRC = eflags;
 }
 #endif

@@ -82,7 +82,8 @@ void HELPER(aie_unlock__done)(CPUArchState *env)
 
 void HELPER(aie_ld_pre)(CPUArchState *env, target_ulong vaddr)
 {
-    if (likely(!env->aie_lock_enabled) || env->aie_locked) {
+    assert(env->aie_lock_enabled);
+    if (env->aie_locked) {
         return;
     }
     aie_ld_lock_ret(env, vaddr, GETRA());
