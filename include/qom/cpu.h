@@ -27,6 +27,7 @@
 #include "exec/hwaddr.h"
 #include "exec/memattrs.h"
 #include "qemu/queue.h"
+#include "qemu/seqlock.h"
 #include "qemu/thread.h"
 #include "qemu/typedefs.h"
 
@@ -287,6 +288,13 @@ struct CPUState {
 
     void *env_ptr; /* CPUArchState */
     struct TranslationBlock *current_tb;
+    /*
+     * The seqlock here is needed because not all updates are to a single
+     * entry; sometimes we want to atomically clear all entries that belong to
+     * a given page, e.g. when flushing said page.
+     */
+    QemuMutex tb_jmp_cache_lock;
+    QemuSeqLock tb_jmp_cache_sequence;
     struct TranslationBlock *tb_jmp_cache[TB_JMP_CACHE_SIZE];
 
     struct GDBRegisterState *gdb_regs;
@@ -341,6 +349,13 @@ extern struct CPUTailQ cpus;
 #define first_cpu QTAILQ_FIRST(&cpus)
 
 extern __thread CPUState *current_cpu;
+
+static inline void cpu_tb_jmp_cache_clear(CPUState *cpu)
+{
+    seqlock_write_lock(&cpu->tb_jmp_cache_sequence);
+    memset(cpu->tb_jmp_cache, 0, TB_JMP_CACHE_SIZE * sizeof(void *));
+    seqlock_write_unlock(&cpu->tb_jmp_cache_sequence);
+}
 
 /**
  * cpu_paging_enabled:

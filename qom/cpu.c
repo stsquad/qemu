@@ -251,7 +251,7 @@ static void cpu_common_reset(CPUState *cpu)
     cpu->icount_decr.u32 = 0;
     cpu->can_do_io = 1;
     cpu->exception_index = -1;
-    memset(cpu->tb_jmp_cache, 0, TB_JMP_CACHE_SIZE * sizeof(void *));
+    cpu_tb_jmp_cache_clear(cpu);
 }
 
 static bool cpu_common_has_work(CPUState *cs)
