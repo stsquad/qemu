@@ -87,7 +87,7 @@ static MemoryRegion io_mem_unassigned;
 
 #endif
 
-struct CPUTailQ cpus = QTAILQ_HEAD_INITIALIZER(cpus);
+struct CPUTailQ cpus = QLIST_HEAD_INITIALIZER(cpus);
 /* current CPU in the current thread. It is only valid inside
    cpu_exec() */
 __thread CPUState *current_cpu;
@@ -596,7 +596,19 @@ void cpu_exec_init(CPUState *cpu, Error **errp)
 #endif
         return;
     }
-    QTAILQ_INSERT_TAIL(&cpus, cpu, node);
+    /* poor man's QLIST_INSERT_TAIL_RCU */
+    if (QLIST_EMPTY_RCU(&cpus)) {
+        QLIST_INSERT_HEAD_RCU(&cpus, cpu, node);
+    } else {
+        CPUState *some_cpu;
+
+        CPU_FOREACH(some_cpu) {
+            if (QLIST_NEXT_RCU(some_cpu, node) == NULL) {
+                QLIST_INSERT_AFTER_RCU(some_cpu, cpu, node);
+                break;
+            }
+        }
+    }
 #if defined(CONFIG_USER_ONLY)
     cpu_list_unlock();
 #endif

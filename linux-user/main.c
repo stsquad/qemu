@@ -121,7 +121,7 @@ void fork_end(int child)
            Discard information about the parent threads.  */
         CPU_FOREACH_SAFE(cpu, next_cpu) {
             if (cpu != thread_cpu) {
-                QTAILQ_REMOVE(&cpus, thread_cpu, node);
+                QLIST_REMOVE_RCU(thread_cpu, node);
             }
         }
         pending_cpus = 0;

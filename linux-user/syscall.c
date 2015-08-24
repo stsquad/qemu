@@ -5604,7 +5604,7 @@ abi_long do_syscall(void *cpu_env, int num, abi_long arg1,
 
             cpu_list_lock();
             /* Remove the CPU from the list.  */
-            QTAILQ_REMOVE(&cpus, cpu, node);
+            QLIST_REMOVE(cpu, node);
             cpu_list_unlock();
             ts = cpu->opaque;
             if (ts->child_tidptr) {
