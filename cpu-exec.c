@@ -499,16 +499,6 @@ int cpu_exec(CPUState *cpu)
     }
     qemu_mutex_unlock(cpu->tcg_work_lock);
 
-#ifndef CONFIG_USER_ONLY
-    /* FIXME: user-mode emulation probably needs a similar mechanism as well,
-     * for example for tb_flush.
-     */
-    if (async_safe_work_pending()) {
-        cpu->exit_request = 1;
-        return 0;
-    }
-#endif
-
     if (cpu->halted) {
         if (!cpu_has_work(cpu)) {
             return EXCP_HALTED;
