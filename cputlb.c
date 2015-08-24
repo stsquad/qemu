@@ -409,6 +409,7 @@ void tlb_set_page_with_attrs(CPUState *cpu, target_ulong vaddr,
     } else {
         te->addr_write = -1;
     }
+    te->addr_phys = paddr;
 }
 
 /* Add a new TLB entry, but without specifying the memory
