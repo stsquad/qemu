@@ -145,41 +145,24 @@ void tlb_flush_page(CPUState *cpu, target_ulong addr)
     tb_flush_jmp_cache(cpu, addr);
 }
 
-struct TLBFlushPageParams {
-    CPUState *cpu;
-    target_ulong addr;
-};
-
-static void tlb_flush_page_async_work(void *opaque)
+static void __tlb_flush_page_all(void *arg)
 {
-    struct TLBFlushPageParams *params = opaque;
+    target_ulong addr = *(target_ulong *)arg;
+    CPUState *cpu;
 
-    tlb_flush_page(params->cpu, params->addr);
-    g_free(params);
+    CPU_FOREACH(cpu) {
+        tlb_flush_page(cpu, addr);
+    }
+    g_free(arg);
 }
 
 void tlb_flush_page_all(target_ulong addr)
 {
-    CPUState *cpu;
-    struct TLBFlushPageParams *params;
+    target_ulong *arg = g_malloc(sizeof(*arg));
 
-    CPU_FOREACH(cpu) {
-#if 0 /* !MTTCG */
-        tlb_flush_page(cpu, addr);
-#else
-        if (qemu_cpu_is_self(cpu)) {
-            /* async_run_on_cpu handle this case but this just avoid a malloc
-             * here.
-             */
-            tlb_flush_page(cpu, addr);
-        } else {
-            params = g_malloc(sizeof(struct TLBFlushPageParams));
-            params->cpu = cpu;
-            params->addr = addr;
-            async_run_on_cpu(cpu, tlb_flush_page_async_work, params);
-        }
-#endif /* MTTCG */
-    }
+    *arg = addr;
+    tb_lock();
+    cpu_tcg_sched_work(current_cpu, __tlb_flush_page_all, arg);
 }
 
 /* update the TLBs so that writes to code in the virtual page 'addr'
