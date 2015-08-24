@@ -339,6 +339,57 @@ static void cpu_handle_debug_exception(CPUState *cpu)
     cc->debug_excp_handler(cpu);
 }
 
+static inline void cpu_sleep_other(CPUState *cpu, CPUState *curr)
+{
+    assert(cpu->tcg_sleep_owner == NULL);
+    qemu_mutex_lock(cpu->tcg_work_lock);
+    cpu->tcg_sleep_requests++;
+    cpu->tcg_sleep_owner = curr;
+    qemu_mutex_unlock(cpu->tcg_work_lock);
+#ifdef CONFIG_SOFTMMU
+    cpu_exit(cpu);
+#else
+    /* cannot call cpu_exit(); cpu->exit_request is not for usermode */
+    smp_wmb();
+    cpu->tcg_exit_req = 1;
+#endif
+}
+
+/* call with no locks held */
+static inline void cpu_sleep_others(CPUState *curr)
+{
+    CPUState *cpu;
+
+    CPU_FOREACH(cpu) {
+        if (cpu == curr) {
+            continue;
+        }
+        cpu_sleep_other(cpu, curr);
+    }
+    /* wait until all other threads are out of the execution loop */
+    synchronize_rcu();
+}
+
+static inline void cpu_wake_others(CPUState *curr)
+{
+    CPUState *cpu;
+
+    CPU_FOREACH(cpu) {
+        if (cpu == curr) {
+            continue;
+        }
+        if (cpu->tcg_sleep_owner != curr) {
+            assert(!cpu->inited);
+            continue;
+        }
+        qemu_mutex_lock(cpu->tcg_work_lock);
+        cpu->tcg_sleep_requests--;
+        cpu->tcg_sleep_owner = NULL;
+        qemu_cond_signal(cpu->tcg_work_cond);
+        qemu_mutex_unlock(cpu->tcg_work_lock);
+    }
+}
+
 /* main execution loop */
 
 int cpu_exec(CPUState *cpu)
@@ -354,9 +405,43 @@ int cpu_exec(CPUState *cpu)
     SyncClocks sc;
 
     /*
-     * This happen when somebody doesn't want this CPU to start
-     * In case of MTTCG.
+     * Prevent threads that were created during a TCG work critical section
+     * (and that therefore didn't have cpu->tcg_work_owner set) from executing.
+     * What we do is then to not let them run by sending them out of the CPU
+     * loop until the tcg_work_pending flag goes down.
      */
+    if (unlikely(!cpu->inited)) {
+        tb_lock();
+        tb_unlock();
+        cpu->inited = true;
+    }
+
+    if (cpu->tcg_work_func) {
+        cpu_sleep_others(cpu);
+        /*
+         * At this point all existing threads are sleeping.
+         * With the check above we make sure that threads that might be
+         * concurrently added at this point won't execute until the end of the
+         * work window, so we can safely call the work function.
+         */
+        cpu->tcg_work_func(cpu->tcg_work_arg);
+        cpu->tcg_work_func = NULL;
+        cpu->tcg_work_arg = NULL;
+
+        /* mark the end of the TCG work critical section */
+        tb_lock_nocheck();
+        tcg_ctx.tb_ctx.work_pending = false;
+        tb_unlock();
+        cpu_wake_others(cpu);
+    }
+
+    qemu_mutex_lock(cpu->tcg_work_lock);
+    assert(cpu->tcg_sleep_requests >= 0);
+    while (unlikely(cpu->tcg_sleep_requests)) {
+        qemu_cond_wait(cpu->tcg_work_cond, cpu->tcg_work_lock);
+    }
+    qemu_mutex_unlock(cpu->tcg_work_lock);
+
 #ifdef CONFIG_SOFTMMU
     if (async_safe_work_pending() || !tcg_cpu_try_start_execution(cpu)) {
         cpu->exit_request = 1;

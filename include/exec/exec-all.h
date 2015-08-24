@@ -288,6 +288,11 @@ struct TBContext {
     int nb_tbs;
     /* any access to the tbs or the page table must use this lock */
     QemuMutex tb_lock;
+    /*
+     * This ensures that only one thread can perform safe work at a time.
+     * Protected by tb_lock; check the flag right after acquiring the lock.
+     */
+    bool work_pending;
 
     /* statistics */
     int tb_flush_count;

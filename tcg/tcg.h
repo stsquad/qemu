@@ -615,6 +615,7 @@ void tcg_pool_delete(TCGContext *s);
 
 void assert_tb_lock(void);
 void tb_lock(void);
+void tb_lock_nocheck(void);
 void tb_unlock(void);
 void tb_lock_reset(void);
 

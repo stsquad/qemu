@@ -128,11 +128,22 @@ void assert_tb_lock(void)
     g_assert(have_tb_lock);
 }
 
-void tb_lock(void)
+/* acquire tb_lock without checking for pending work */
+void tb_lock_nocheck(void)
 {
     assert(!have_tb_lock);
     qemu_mutex_lock(&tcg_ctx.tb_ctx.tb_lock);
     have_tb_lock++;
+}
+
+void tb_lock(void)
+{
+    tb_lock_nocheck();
+    if (unlikely(tcg_ctx.tb_ctx.work_pending)) {
+        assert(current_cpu);
+        current_cpu->exception_index = EXCP_INTERRUPT;
+        cpu_loop_exit(current_cpu);
+    }
 }
 
 void tb_unlock(void)
@@ -927,6 +938,16 @@ static inline void tb_hash_remove(TranslationBlock **ptb, TranslationBlock *tb)
         }
         ptb = &tb1->phys_hash_next;
     }
+}
+
+void cpu_tcg_sched_work(CPUState *cpu, void (*func)(void *arg), void *arg)
+{
+    assert(have_tb_lock);
+    tcg_ctx.tb_ctx.work_pending = true;
+    cpu->tcg_work_func = func;
+    cpu->tcg_work_arg = arg;
+    cpu->exception_index = EXCP_INTERRUPT;
+    cpu_loop_exit(cpu);
 }
 
 static inline void tb_page_remove(TranslationBlock **ptb, TranslationBlock *tb)

@@ -296,6 +296,15 @@ struct CPUState {
     bool crash_occurred;
     bool exit_request;
     bool tb_invalidated_flag;
+    bool inited;
+    /* tcg_work_* protected by tcg_work_lock */
+    QemuCond *tcg_work_cond;
+    QemuMutex *tcg_work_lock;
+    void (*tcg_work_func)(void *arg);
+    void *tcg_work_arg;
+    CPUState *tcg_sleep_owner;
+    int tcg_sleep_requests;
+
     uint32_t interrupt_request;
     int singlestep_enabled;
     int64_t icount_extra;
@@ -707,6 +716,16 @@ bool async_safe_work_pending(void);
  * @see async_run_safe_work_on_cpu
  */
 void flush_queued_safe_work(CPUState *cpu);
+
+/** cpu_tcg_sched_work:
+ * @cpu: CPU thread to schedule the work on
+ * @func: function to be called when all other CPU threads are asleep
+ * @arg: argument to be passed to @func
+ *
+ * Schedule work to be done while all other CPU threads are put to sleep.
+ * Call with tb_lock held.
+ */
+void cpu_tcg_sched_work(CPUState *cpu, void (*func)(void *arg), void *arg);
 
 /**
  * qemu_get_cpu:
