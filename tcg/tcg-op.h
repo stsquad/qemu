@@ -716,6 +716,16 @@ static inline void tcg_gen_fence_full(void)
     tcg_gen_op0(&tcg_ctx, INDEX_op_fence_full);
 }
 
+#if defined(__i386__) || defined(__x86_64__) || defined(__s390x__)
+static inline void tcg_gen_smp_rmb(void)
+{ }
+#else
+static inline void tcg_gen_smp_rmb(void)
+{
+    tcg_gen_fence_load();
+}
+#endif
+
 /* QEMU specific operations.  */
 
 #ifndef TARGET_LONG_BITS
