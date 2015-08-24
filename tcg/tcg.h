@@ -599,6 +599,7 @@ void tb_lock(void);
 void tb_unlock(void);
 bool tb_lock_recursive(void);
 void tb_lock_reset(void);
+extern __thread int have_tb_lock;
 
 /* Called with tb_lock held.  */
 static inline void *tcg_malloc(int size)
