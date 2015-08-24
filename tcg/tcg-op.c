@@ -57,6 +57,11 @@ static void tcg_emit_op(TCGContext *ctx, TCGOpcode opc, int args)
     };
 }
 
+void tcg_gen_op0(TCGContext *ctx, TCGOpcode opc)
+{
+    tcg_emit_op(ctx, opc, -1);
+}
+
 void tcg_gen_op1(TCGContext *ctx, TCGOpcode opc, TCGArg a1)
 {
     int pi = ctx->gen_next_parm_idx;

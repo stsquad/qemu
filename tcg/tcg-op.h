@@ -28,6 +28,7 @@
 
 /* Basic output routines.  Not for general consumption.  */
 
+void tcg_gen_op0(TCGContext *, TCGOpcode);
 void tcg_gen_op1(TCGContext *, TCGOpcode, TCGArg);
 void tcg_gen_op2(TCGContext *, TCGOpcode, TCGArg, TCGArg);
 void tcg_gen_op3(TCGContext *, TCGOpcode, TCGArg, TCGArg, TCGArg);
@@ -696,6 +697,23 @@ static inline void tcg_gen_concat32_i64(TCGv_i64 ret, TCGv_i64 lo, TCGv_i64 hi)
 static inline void tcg_gen_trunc_i64_i32(TCGv_i32 ret, TCGv_i64 arg)
 {
     tcg_gen_trunc_shr_i64_i32(ret, arg, 0);
+}
+
+/* fences */
+
+static inline void tcg_gen_fence_load(void)
+{
+    tcg_gen_op0(&tcg_ctx, INDEX_op_fence_load);
+}
+
+static inline void tcg_gen_fence_store(void)
+{
+    tcg_gen_op0(&tcg_ctx, INDEX_op_fence_store);
+}
+
+static inline void tcg_gen_fence_full(void)
+{
+    tcg_gen_op0(&tcg_ctx, INDEX_op_fence_full);
 }
 
 /* QEMU specific operations.  */

@@ -167,6 +167,11 @@ DEF(muls2_i64, 2, 2, 0, IMPL64 | IMPL(TCG_TARGET_HAS_muls2_i64))
 DEF(muluh_i64, 1, 2, 0, IMPL(TCG_TARGET_HAS_muluh_i64))
 DEF(mulsh_i64, 1, 2, 0, IMPL(TCG_TARGET_HAS_mulsh_i64))
 
+/* fences */
+DEF(fence_load, 0, 0, 0, 0)
+DEF(fence_store, 0, 0, 0, 0)
+DEF(fence_full, 0, 0, 0, 0)
+
 /* QEMU specific */
 #if TARGET_LONG_BITS > TCG_TARGET_REG_BITS
 DEF(debug_insn_start, 0, 0, 2, TCG_OPF_NOT_PRESENT)
