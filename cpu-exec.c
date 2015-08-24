@@ -330,6 +330,7 @@ static TranslationBlock *tb_find_slow(CPUState *cpu,
         if (!tb) {
             tb = tb_gen_code(cpu, pc, cs_base, flags, 0);
         }
+        mmap_unlock();
     }
 
     /* we add the TB in the virtual pc hash table */
