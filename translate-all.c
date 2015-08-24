@@ -1614,6 +1614,7 @@ static void tcg_handle_interrupt(CPUState *cpu, int mask)
             cpu_abort(cpu, "Raised interrupt while not in I/O function");
         }
     } else {
+        smp_wmb();
         cpu->tcg_exit_req = 1;
     }
 }
@@ -1791,6 +1792,7 @@ void dump_opcount_info(FILE *f, fprintf_function cpu_fprintf)
 void cpu_interrupt(CPUState *cpu, int mask)
 {
     atomic_or(&cpu->interrupt_request, mask);
+    smp_wmb();
     cpu->tcg_exit_req = 1;
 }
 
