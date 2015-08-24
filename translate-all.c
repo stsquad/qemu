@@ -62,6 +62,7 @@
 #include "translate-all.h"
 #include "qemu/bitmap.h"
 #include "qemu/timer.h"
+#include "qemu/aie.h"
 
 //#define DEBUG_TB_INVALIDATE
 //#define DEBUG_FLUSH
@@ -730,6 +731,7 @@ void tcg_exec_init(unsigned long tb_size)
     tcg_ctx.code_gen_ptr = tcg_ctx.code_gen_buffer;
     tcg_register_jit(tcg_ctx.code_gen_buffer, tcg_ctx.code_gen_buffer_size);
     page_init();
+    aie_init();
 #if !defined(CONFIG_USER_ONLY) || !defined(CONFIG_USE_GUEST_BASE)
     /* There's no guest base to take into account, so go ahead and
        initialize the prologue now.  */
