@@ -28,6 +28,7 @@
 #include "qemu/osdep.h"
 #include "qemu/queue.h"
 #include "tcg-target.h"
+#include "qemu/aie.h"
 #ifndef CONFIG_USER_ONLY
 #include "exec/hwaddr.h"
 #endif
@@ -152,5 +153,9 @@ typedef struct CPUIOTLBEntry {
 #define CPU_COMMON                                                      \
     /* soft mmu support */                                              \
     CPU_COMMON_TLB                                                      \
+    AIEEntry *aie_entry;                                                \
+    bool aie_locked;                                                    \
+    bool aie_lock_enabled;                                              \
+    bool aie_llsc_st_tracking;                                          \
 
 #endif
