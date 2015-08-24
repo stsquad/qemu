@@ -480,6 +480,54 @@ void helper_le_st_name(CPUArchState *env, target_ulong addr, DATA_TYPE val,
 #endif
 }
 
+#if DATA_SIZE == 1
+
+/* get a load's physical address */
+hwaddr helper_ret_get_ld_phys(CPUArchState *env, target_ulong addr,
+                              int mmu_idx, uintptr_t retaddr)
+{
+    int index = (addr >> TARGET_PAGE_BITS) & (CPU_TLB_SIZE - 1);
+    CPUTLBEntry *te = &env->tlb_table[mmu_idx][index];
+    target_ulong taddr;
+    target_ulong phys_addr;
+
+    retaddr -= GETPC_ADJ;
+    taddr = te->addr_read & (TARGET_PAGE_MASK | TLB_INVALID_MASK);
+    if (taddr != (addr & TARGET_PAGE_MASK)) {
+        if (!VICTIM_TLB_HIT(addr_read)) {
+            CPUState *cs = ENV_GET_CPU(env);
+
+            tlb_fill(cs, addr, MMU_DATA_LOAD, mmu_idx, retaddr);
+        }
+    }
+    phys_addr = te->addr_phys;
+    return phys_addr | (addr & ~TARGET_PAGE_MASK);
+}
+
+/* get a store's physical address */
+hwaddr helper_ret_get_st_phys(CPUArchState *env, target_ulong addr,
+                              int mmu_idx, uintptr_t retaddr)
+{
+    int index = (addr >> TARGET_PAGE_BITS) & (CPU_TLB_SIZE - 1);
+    CPUTLBEntry *te = &env->tlb_table[mmu_idx][index];
+    target_ulong taddr;
+    target_ulong phys_addr;
+
+    retaddr -= GETPC_ADJ;
+    taddr = te->addr_write & (TARGET_PAGE_MASK | TLB_INVALID_MASK);
+    if (taddr != (addr & TARGET_PAGE_MASK)) {
+        if (!VICTIM_TLB_HIT(addr_write)) {
+            CPUState *cs = ENV_GET_CPU(env);
+
+            tlb_fill(cs, addr, MMU_DATA_STORE, mmu_idx, retaddr);
+        }
+    }
+    phys_addr = te->addr_phys;
+    return phys_addr | (addr & ~TARGET_PAGE_MASK);
+}
+
+#endif /* DATA_SIZE == 1 */
+
 #if DATA_SIZE > 1
 void helper_be_st_name(CPUArchState *env, target_ulong addr, DATA_TYPE val,
                        TCGMemOpIdx oi, uintptr_t retaddr)
