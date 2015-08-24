@@ -178,6 +178,7 @@ struct TranslationBlock {
        jmp_first */
     struct TranslationBlock *jmp_next[2];
     struct TranslationBlock *jmp_first;
+    bool valid; /* protected by tb_lock */
 };
 
 #include "qemu/thread.h"
@@ -195,8 +196,6 @@ struct TBContext {
     /* statistics */
     int tb_flush_count;
     int tb_phys_invalidate_count;
-
-    int tb_invalidated_flag;
 };
 
 void tb_free(TranslationBlock *tb);

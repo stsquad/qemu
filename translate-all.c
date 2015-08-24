@@ -791,6 +791,17 @@ static inline void invalidate_page_bitmap(PageDesc *p)
 #endif
 }
 
+static void tb_invalidate_all(void)
+{
+    int i;
+
+    for (i = 0; i < tcg_ctx.tb_ctx.nb_tbs; i++) {
+        TranslationBlock *tb = &tcg_ctx.tb_ctx.tbs[i];
+
+        tb->valid = false;
+    }
+}
+
 /* Set to NULL all the 'first_tb' fields in all PageDescs. */
 static void page_flush_tb_1(int level, void **lp)
 {
@@ -866,6 +877,7 @@ void tb_flush(CPUState *cpu)
         cpu_tb_jmp_cache_clear(cpu);
     }
 
+    tb_invalidate_all();
     memset(tcg_ctx.tb_ctx.tb_phys_hash, 0, sizeof(tcg_ctx.tb_ctx.tb_phys_hash));
     page_flush_tb();
 
@@ -1021,11 +1033,6 @@ void tb_phys_invalidate(TranslationBlock *tb, tb_page_addr_t page_addr)
     tb_page_addr_t phys_pc;
     TranslationBlock *tb1, *tb2;
 
-    /* Set the invalidated_flag first, to block patching a
-     * jump to tb.  FIXME: invalidated_flag should be per TB.
-     */
-    atomic_mb_set(&tcg_ctx.tb_ctx.tb_invalidated_flag, 1);
-
     /* Now remove the TB from the hash list, so that tb_find_slow
      * cannot find it anymore.
      */
@@ -1044,8 +1051,6 @@ void tb_phys_invalidate(TranslationBlock *tb, tb_page_addr_t page_addr)
         tb_page_remove(&p->first_tb, tb);
         invalidate_page_bitmap(p);
     }
-
-    tcg_ctx.tb_ctx.tb_invalidated_flag = 1;
 
     /* remove the TB from the hash list */
     CPU_FOREACH(cpu) {
@@ -1070,33 +1075,7 @@ void tb_phys_invalidate(TranslationBlock *tb, tb_page_addr_t page_addr)
     }
     tb->jmp_first = (TranslationBlock *)((uintptr_t)tb | 2); /* fail safe */
 
-#if 0
-    /* TODO: I think this barrier is not necessary.  On the
-     * cpu_exec side, it is okay if the read from tb_jmp_cache
-     * comes after the read from tb_phys_hash.  This is because
-     * the read would be bleeding into the tb_lock critical
-     * section, hence there cannot be any concurrent tb_invalidate.
-     * And if you don't need a barrier there, you shouldn't need
-     * one here, either.
-     */
-     smp_wmb();
-#endif
-
-    /* Finally, remove the TB from the per-CPU cache that is
-     * accessed without tb_lock.  The tb can still be executed
-     * once after returning, if the cache was accessed before
-     * this point, but that's it.
-     *
-     * The cache cannot be filled with this tb anymore, because
-     * the lists are accessed with tb_lock held.
-     */
-    h = tb_jmp_cache_hash_func(tb->pc);
-    CPU_FOREACH(cpu) {
-        if (cpu->tb_jmp_cache[h] == tb) {
-            cpu->tb_jmp_cache[h] = NULL;
-        }
-    }
-
+    tb->valid = false;
     tcg_ctx.tb_ctx.tb_phys_invalidate_count++;
 }
 
@@ -1157,12 +1136,16 @@ TranslationBlock *tb_gen_code(CPUState *cpu,
         tb_flush_safe(cpu);
 #endif
         cpu_loop_exit(cpu);
+        tb_flush(cpu);
+        /* cannot fail at this point */
+        tb = tb_alloc(pc);
     }
 
     tb->tc_ptr = tcg_ctx.code_gen_ptr;
     tb->cs_base = cs_base;
     tb->flags = flags;
     tb->cflags = cflags;
+    tb->valid = true;
     cpu_gen_code(env, tb, &code_gen_size);
     tcg_ctx.code_gen_ptr = (void *)(((uintptr_t)tcg_ctx.code_gen_ptr +
             code_gen_size + CODE_GEN_ALIGN - 1) & ~(CODE_GEN_ALIGN - 1));

@@ -239,9 +239,7 @@ static void cpu_exec_nocache(CPUState *cpu, int max_cycles,
     tb_lock();
     tb = tb_gen_code(cpu, orig_tb->pc, orig_tb->cs_base, orig_tb->flags,
                      max_cycles | CF_NOCACHE);
-    tb->orig_tb = (atomic_mb_read(&tcg_ctx.tb_ctx.tb_invalidated_flag)
-                   ? NULL
-                   : orig_tb);
+    tb->orig_tb = orig_tb->valid ? orig_tb : NULL;
     cpu->current_tb = tb;
     tb_unlock();
 
@@ -267,8 +265,6 @@ static TranslationBlock *tb_find_physical(CPUState *cpu,
     unsigned int h;
     tb_page_addr_t phys_pc, phys_page1;
     target_ulong virt_page2;
-
-    atomic_mb_set(&tcg_ctx.tb_ctx.tb_invalidated_flag, 0);
 
     /* find translated block using physical mappings */
     phys_pc = get_page_addr_code(env, pc);
@@ -536,15 +532,6 @@ int cpu_exec(CPUState *cpu)
                     cpu_loop_exit(cpu);
                 }
                 tb = tb_find_fast(cpu);
-                /* Note: we do it here to avoid a gcc bug on Mac OS X when
-                   doing it in tb_find_slow */
-                if (atomic_mb_read(&tcg_ctx.tb_ctx.tb_invalidated_flag)) {
-                    /* as some TB could have been invalidated because
-                       of memory exceptions while generating the code, we
-                       must recompute the hash index here */
-                    next_tb = 0;
-                    atomic_mb_set(&tcg_ctx.tb_ctx.tb_invalidated_flag, 0);
-                }
                 if (qemu_loglevel_mask(CPU_LOG_EXEC)) {
                     qemu_log("Trace %p [" TARGET_FMT_lx "] %s\n",
                              tb->tc_ptr, tb->pc, lookup_symbol(tb->pc));
@@ -553,9 +540,13 @@ int cpu_exec(CPUState *cpu)
                    spans two pages, we cannot safely do a direct
                    jump. */
                 if (next_tb != 0 && tb->page_addr[1] == -1) {
+                    TranslationBlock *next;
+
                     tb_lock_recursive();
-                    tb_add_jump((TranslationBlock *)(next_tb & ~TB_EXIT_MASK),
-                                next_tb & TB_EXIT_MASK, tb);
+                    next = (TranslationBlock *)(next_tb & ~TB_EXIT_MASK);
+                    if (tb->valid && next->valid) {
+                        tb_add_jump(next, next_tb & TB_EXIT_MASK, tb);
+                    }
                 }
                 /* The lock may not be taken if we went through the
                  * fast lookup path and did not have to do any patching.
