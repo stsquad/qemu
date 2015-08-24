@@ -252,6 +252,8 @@ static int cpu_restore_state_from_tb(CPUState *cpu, TranslationBlock *tb,
     int64_t ti;
 #endif
 
+    assert(have_tb_lock);
+
 #ifdef CONFIG_PROFILER
     ti = profile_getclock();
 #endif
@@ -441,6 +443,10 @@ static PageDesc *page_find_alloc(tb_page_addr_t index, int alloc)
     PageDesc *pd;
     void **lp;
     int i;
+
+#ifdef CONFIG_SOFTMMU
+    assert(have_tb_lock);
+#endif
 
     /* Level 1.  Always allocated.  */
     lp = l1_map + ((index >> V_L1_SHIFT) & (V_L1_SIZE - 1));
@@ -767,6 +773,8 @@ static TranslationBlock *tb_alloc(target_ulong pc)
 {
     TranslationBlock *tb;
 
+    assert(have_tb_lock);
+
     if (tcg_ctx.tb_ctx.nb_tbs >= tcg_ctx.code_gen_max_blocks ||
         (tcg_ctx.code_gen_ptr - tcg_ctx.code_gen_buffer) >=
          tcg_ctx.code_gen_buffer_max_size) {
@@ -781,6 +789,8 @@ static TranslationBlock *tb_alloc(target_ulong pc)
 /* Called with tb_lock held.  */
 void tb_free(TranslationBlock *tb)
 {
+    assert(have_tb_lock);
+
     /* In practice this is mostly used for single use temporary TB
        Ignore the hard cases and just back up if this TB happens to
        be the last one generated.  */
@@ -933,6 +943,8 @@ static void tb_page_check(void)
     TranslationBlock *tb;
     int i, flags1, flags2;
 
+    assert(have_tb_lock);
+
     for (i = 0; i < CODE_GEN_PHYS_HASH_SIZE; i++) {
         TBPhysHashSlot *slot = &tcg_ctx.tb_ctx.tb_phys_hash[i];
 
@@ -1034,6 +1046,8 @@ void tb_phys_invalidate(TranslationBlock *tb, tb_page_addr_t page_addr)
     unsigned int n1;
     TranslationBlock *tb1, *tb2;
 
+    assert(have_tb_lock);
+
     /* Now remove the TB from the hash list, so that tb_find_slow
      * cannot find it anymore.
      */
@@ -1119,6 +1133,8 @@ TranslationBlock *tb_gen_code(CPUState *cpu,
     tb_page_addr_t phys_pc, phys_page2;
     target_ulong virt_page2;
     int code_gen_size;
+
+    assert(have_tb_lock);
 
     phys_pc = get_page_addr_code(env, pc);
     if (use_icount) {
@@ -1428,6 +1444,10 @@ static inline void tb_alloc_page(TranslationBlock *tb,
     bool page_already_protected;
 #endif
 
+#ifdef CONFIG_SOFTMMU
+    assert(have_tb_lock);
+#endif
+
     tb->page_addr[n] = page_addr;
     p = page_find_alloc(page_addr >> TARGET_PAGE_BITS, 1);
     tb->page_next[n] = p->first_tb;
@@ -1486,6 +1506,10 @@ static void tb_link_page(TranslationBlock *tb, tb_page_addr_t phys_pc,
     unsigned int h;
     TBPhysHashSlot *slot;
 
+#ifdef CONFIG_SOFTMMU
+    assert(have_tb_lock);
+#endif
+
     /* add in the physical hash table */
     h = tb_phys_hash_func(phys_pc);
     slot = &tcg_ctx.tb_ctx.tb_phys_hash[h];
@@ -1526,6 +1550,8 @@ static TranslationBlock *tb_find_pc(uintptr_t tc_ptr)
     int m_min, m_max, m;
     uintptr_t v;
     TranslationBlock *tb;
+
+    assert(have_tb_lock);
 
     if (tcg_ctx.tb_ctx.nb_tbs <= 0) {
         return NULL;
@@ -1578,6 +1604,8 @@ void tb_invalidate_phys_addr(AddressSpace *as, hwaddr addr)
 void tb_check_watchpoint(CPUState *cpu)
 {
     TranslationBlock *tb;
+
+    assert(have_tb_lock);
 
     tb = tb_find_pc(cpu->mem_io_pc);
     if (tb) {
