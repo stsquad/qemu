@@ -1203,8 +1203,9 @@ void tb_invalidate_phys_range(tb_page_addr_t start, tb_page_addr_t end)
  * Called with mmap_lock held for user-mode emulation
  * If called from generated code, iothread mutex must not be held.
  */
-void tb_invalidate_phys_page_range(tb_page_addr_t start, tb_page_addr_t end,
-                                   int is_cpu_write_access)
+static void
+tb_invalidate_phys_page_range_locked(tb_page_addr_t start, tb_page_addr_t end,
+                                     int is_cpu_write_access)
 {
     TranslationBlock *tb, *tb_next, *saved_tb;
     CPUState *cpu = current_cpu;
@@ -1236,7 +1237,6 @@ void tb_invalidate_phys_page_range(tb_page_addr_t start, tb_page_addr_t end,
     /* we remove all the TBs in the range [start, end[ */
     /* XXX: see if in some cases it could be faster to invalidate all
        the code */
-    tb_lock();
     tb = p->first_tb;
     while (tb != NULL) {
         n = (uintptr_t)tb & 3;
@@ -1310,14 +1310,19 @@ void tb_invalidate_phys_page_range(tb_page_addr_t start, tb_page_addr_t end,
         cpu_resume_from_signal(cpu, NULL);
     }
 #endif
+}
+
+void tb_invalidate_phys_page_range(tb_page_addr_t start, tb_page_addr_t end,
+                                   int is_cpu_write_access)
+{
+    tb_lock();
+    tb_invalidate_phys_page_range_locked(start, end, is_cpu_write_access);
     tb_unlock();
 }
 
 #ifdef CONFIG_SOFTMMU
-/* len must be <= 8 and start must be a multiple of len.
- * Called via softmmu_template.h, with iothread mutex not held.
- */
-void tb_invalidate_phys_page_fast(tb_page_addr_t start, int len)
+
+static void tb_invalidate_phys_page_fast_locked(tb_page_addr_t start, int len)
 {
     PageDesc *p;
 
@@ -1352,8 +1357,18 @@ void tb_invalidate_phys_page_fast(tb_page_addr_t start, int len)
         }
     } else {
     do_invalidate:
-        tb_invalidate_phys_page_range(start, start + len, 1);
+        tb_invalidate_phys_page_range_locked(start, start + len, 1);
     }
+}
+
+/* len must be <= 8 and start must be a multiple of len.
+ * Called via softmmu_template.h, with iothread mutex not held.
+ */
+void tb_invalidate_phys_page_fast(tb_page_addr_t start, int len)
+{
+    tb_lock();
+    tb_invalidate_phys_page_fast_locked(start, len);
+    tb_unlock();
 }
 #else
 /* Called with mmap_lock held.  */
