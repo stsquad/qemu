@@ -630,6 +630,7 @@ int cpu_exec(CPUState *cpu)
             env = &x86_cpu->env;
 #endif
             tb_lock_reset();
+            mmap_lock_reset();
             cpu_exit_loop_lock_reset(cpu);
         }
     } /* for(;;) */

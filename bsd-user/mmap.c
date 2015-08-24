@@ -48,6 +48,14 @@ void mmap_unlock(void)
     }
 }
 
+void mmap_lock_reset(void)
+{
+    while (mmap_lock_count) {
+        mmap_lock_count--;
+        pthread_mutex_unlock(&mmap_mutex);
+    }
+}
+
 /* Grab lock to make sure things are in a consistent state after fork().  */
 void mmap_fork_start(void)
 {
@@ -70,6 +78,10 @@ void mmap_lock(void)
 }
 
 void mmap_unlock(void)
+{
+}
+
+void mmap_lock_reset(void)
 {
 }
 #endif
