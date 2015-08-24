@@ -1123,6 +1123,13 @@ static void tcg_out_jmp(TCGContext *s, tcg_insn_unit *dest)
     tcg_out_branch(s, 0, dest);
 }
 
+static inline void tcg_out_fence(TCGContext *s, uint8_t op)
+{
+        tcg_out8(s, 0x0f);
+        tcg_out8(s, 0xae);
+        tcg_out8(s, op);
+}
+
 #if defined(CONFIG_SOFTMMU)
 /* helper signature: helper_ret_ld_mmu(CPUState *env, target_ulong addr,
  *                                     int mmu_idx, uintptr_t ra)
@@ -2088,6 +2095,16 @@ static inline void tcg_out_op(TCGContext *s, TCGOpcode opc,
         }
         break;
 
+    case INDEX_op_fence_load:
+        tcg_out_fence(s, 0xe8);
+        break;
+    case INDEX_op_fence_full:
+        tcg_out_fence(s, 0xf0);
+        break;
+    case INDEX_op_fence_store:
+        tcg_out_fence(s, 0xf8);
+        break;
+
     case INDEX_op_mov_i32:  /* Always emitted via tcg_out_mov.  */
     case INDEX_op_mov_i64:
     case INDEX_op_movi_i32: /* Always emitted via tcg_out_movi.  */
@@ -2226,6 +2243,9 @@ static const TCGTargetOpDef x86_op_defs[] = {
     { INDEX_op_qemu_ld_i64, { "r", "r", "L", "L" } },
     { INDEX_op_qemu_st_i64, { "L", "L", "L", "L" } },
 #endif
+    { INDEX_op_fence_load, { } },
+    { INDEX_op_fence_store, { } },
+    { INDEX_op_fence_full, { } },
     { -1 },
 };
 
