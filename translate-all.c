@@ -60,6 +60,7 @@
 #include "exec/cputlb.h"
 #include "exec/tb-hash.h"
 #include "translate-all.h"
+#include "qemu/rcu_queue.h"
 #include "qemu/bitmap.h"
 #include "qemu/timer.h"
 #include "qemu/aie.h"
@@ -721,6 +722,17 @@ static inline void code_gen_alloc(size_t tb_size)
     qemu_mutex_init(&tcg_ctx.tb_ctx.tb_lock);
 }
 
+static void tb_ctx_init(void)
+{
+    int i;
+
+    for (i = 0; i < CODE_GEN_PHYS_HASH_SIZE; i++) {
+        TBPhysHashSlot *slot = &tcg_ctx.tb_ctx.tb_phys_hash[i];
+
+        QLIST_INIT(&slot->list);
+    }
+}
+
 /* Must be called before using the QEMU cpus. 'tb_size' is the size
    (in bytes) allocated to the translation buffer. Zero means default
    size. */
@@ -731,6 +743,7 @@ void tcg_exec_init(unsigned long tb_size)
     tcg_ctx.code_gen_ptr = tcg_ctx.code_gen_buffer;
     tcg_register_jit(tcg_ctx.code_gen_buffer, tcg_ctx.code_gen_buffer_size);
     page_init();
+    tb_ctx_init();
     aie_init();
 #if !defined(CONFIG_USER_ONLY) || !defined(CONFIG_USE_GUEST_BASE)
     /* There's no guest base to take into account, so go ahead and
@@ -878,7 +891,7 @@ void tb_flush(CPUState *cpu)
     }
 
     tb_invalidate_all();
-    memset(tcg_ctx.tb_ctx.tb_phys_hash, 0, sizeof(tcg_ctx.tb_ctx.tb_phys_hash));
+    tb_ctx_init();
     page_flush_tb();
 
     tcg_ctx.code_gen_ptr = tcg_ctx.code_gen_buffer;
@@ -898,7 +911,9 @@ static void tb_invalidate_check(target_ulong address)
 
     address &= TARGET_PAGE_MASK;
     for (i = 0; i < CODE_GEN_PHYS_HASH_SIZE; i++) {
-        for (tb = tb_ctx.tb_phys_hash[i]; tb != NULL; tb = tb->phys_hash_next) {
+        TBPhysHashSlot *slot = &tcg_ctx.tb_ctx.tb_phys_hash[i];
+
+        QLIST_FOREACH_RCU(tb, &slot->list, slot_node) {
             if (!(address + TARGET_PAGE_SIZE <= tb->pc ||
                   address >= tb->pc + tb->size)) {
                 printf("ERROR invalidate: address=" TARGET_FMT_lx
@@ -919,8 +934,9 @@ static void tb_page_check(void)
     int i, flags1, flags2;
 
     for (i = 0; i < CODE_GEN_PHYS_HASH_SIZE; i++) {
-        for (tb = tcg_ctx.tb_ctx.tb_phys_hash[i]; tb != NULL;
-                tb = tb->phys_hash_next) {
+        TBPhysHashSlot *slot = &tcg_ctx.tb_ctx.tb_phys_hash[i];
+
+        QLIST_FOREACH_RCU(tb, &slot->list, slot_node) {
             flags1 = page_get_flags(tb->pc);
             flags2 = page_get_flags(tb->pc + tb->size - 1);
             if ((flags1 & PAGE_WRITE) || (flags2 & PAGE_WRITE)) {
@@ -932,20 +948,6 @@ static void tb_page_check(void)
 }
 
 #endif
-
-static inline void tb_hash_remove(TranslationBlock **ptb, TranslationBlock *tb)
-{
-    TranslationBlock *tb1;
-
-    for (;;) {
-        tb1 = *ptb;
-        if (tb1 == tb) {
-            *ptb = tb1->phys_hash_next;
-            break;
-        }
-        ptb = &tb1->phys_hash_next;
-    }
-}
 
 static inline void tb_page_remove(TranslationBlock **ptb, TranslationBlock *tb)
 {
@@ -1029,16 +1031,13 @@ void tb_phys_invalidate(TranslationBlock *tb, tb_page_addr_t page_addr)
 {
     CPUState *cpu;
     PageDesc *p;
-    unsigned int h, n1;
-    tb_page_addr_t phys_pc;
+    unsigned int n1;
     TranslationBlock *tb1, *tb2;
 
     /* Now remove the TB from the hash list, so that tb_find_slow
      * cannot find it anymore.
      */
-    phys_pc = tb->page_addr[0] + (tb->pc & ~TARGET_PAGE_MASK);
-    h = tb_phys_hash_func(phys_pc);
-    tb_hash_remove(&tcg_ctx.tb_ctx.tb_phys_hash[h], tb);
+    QLIST_REMOVE_RCU(tb, slot_node);
 
     /* remove the TB from the page list */
     if (tb->page_addr[0] != page_addr) {
@@ -1485,13 +1484,12 @@ static void tb_link_page(TranslationBlock *tb, tb_page_addr_t phys_pc,
                          tb_page_addr_t phys_page2)
 {
     unsigned int h;
-    TranslationBlock **ptb;
+    TBPhysHashSlot *slot;
 
     /* add in the physical hash table */
     h = tb_phys_hash_func(phys_pc);
-    ptb = &tcg_ctx.tb_ctx.tb_phys_hash[h];
-    tb->phys_hash_next = *ptb;
-    atomic_rcu_set(ptb, tb);
+    slot = &tcg_ctx.tb_ctx.tb_phys_hash[h];
+    QLIST_INSERT_HEAD_RCU(&slot->list, tb, slot_node);
 
     /* add in the page list */
     tb_alloc_page(tb, 0, phys_pc & TARGET_PAGE_MASK);

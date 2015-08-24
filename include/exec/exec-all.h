@@ -155,8 +155,8 @@ struct TranslationBlock {
 #define CF_USE_ICOUNT  0x20000
 
     void *tc_ptr;    /* pointer to the translated code */
-    /* next matching tb for physical address. */
-    struct TranslationBlock *phys_hash_next;
+    /* list node in slot of physically-indexed hash of translation blocks */
+    QLIST_ENTRY(TranslationBlock) slot_node;
     /* original tb when cflags has CF_NOCACHE */
     struct TranslationBlock *orig_tb;
     /* first and second physical page containing code. The lower bit
@@ -183,12 +183,18 @@ struct TranslationBlock {
 
 #include "qemu/thread.h"
 
+typedef struct TBPhysHashSlot TBPhysHashSlot;
+
+struct TBPhysHashSlot {
+    QLIST_HEAD(, TranslationBlock) list;
+};
+
 typedef struct TBContext TBContext;
 
 struct TBContext {
 
     TranslationBlock *tbs;
-    TranslationBlock *tb_phys_hash[CODE_GEN_PHYS_HASH_SIZE];
+    TBPhysHashSlot tb_phys_hash[CODE_GEN_PHYS_HASH_SIZE];
     int nb_tbs;
     /* any access to the tbs or the page table must use this lock */
     QemuMutex tb_lock;

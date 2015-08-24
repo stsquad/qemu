@@ -24,6 +24,7 @@
 #include "qemu/atomic.h"
 #include "qemu/timer.h"
 #include "exec/tb-hash.h"
+#include "qemu/rcu_queue.h"
 #include "qemu/rcu.h"
 
 #if !defined(CONFIG_USER_ONLY)
@@ -261,7 +262,8 @@ static TranslationBlock *tb_find_physical(CPUState *cpu,
                                           uint64_t flags)
 {
     CPUArchState *env = (CPUArchState *)cpu->env_ptr;
-    TranslationBlock *tb, **ptb1;
+    TBPhysHashSlot *slot;
+    TranslationBlock *tb;
     unsigned int h;
     tb_page_addr_t phys_pc, phys_page1;
     target_ulong virt_page2;
@@ -270,12 +272,9 @@ static TranslationBlock *tb_find_physical(CPUState *cpu,
     phys_pc = get_page_addr_code(env, pc);
     phys_page1 = phys_pc & TARGET_PAGE_MASK;
     h = tb_phys_hash_func(phys_pc);
-    ptb1 = &tcg_ctx.tb_ctx.tb_phys_hash[h];
-    for(;;) {
-        tb = atomic_rcu_read(ptb1);
-        if (!tb) {
-            return NULL;
-        }
+    slot = &tcg_ctx.tb_ctx.tb_phys_hash[h];
+
+    QLIST_FOREACH_RCU(tb, &slot->list, slot_node) {
         if (tb->pc == pc &&
             tb->page_addr[0] == phys_page1 &&
             tb->cs_base == cs_base &&
@@ -288,16 +287,14 @@ static TranslationBlock *tb_find_physical(CPUState *cpu,
                     TARGET_PAGE_SIZE;
                 phys_page2 = get_page_addr_code(env, virt_page2);
                 if (tb->page_addr[1] == phys_page2) {
-                    break;
+                    return tb;
                 }
             } else {
-                break;
+                return tb;
             }
         }
-        ptb1 = &tb->phys_hash_next;
     }
-
-    return tb;
+    return NULL;
 }
 
 static TranslationBlock *tb_find_slow(CPUState *cpu,
