@@ -862,7 +862,7 @@ void tb_flush(CPUState *cpu)
 
     CPU_FOREACH(cpu) {
         cpu->tb_invalidated_flag = 1;
-        memset(cpu->tb_jmp_cache, 0, sizeof(cpu->tb_jmp_cache));
+        cpu_tb_jmp_cache_clear(cpu);
     }
 
     memset(tcg_ctx.tb_ctx.tb_phys_hash, 0, sizeof(tcg_ctx.tb_ctx.tb_phys_hash));
@@ -982,6 +982,27 @@ static inline void tb_jmp_remove(TranslationBlock *tb, int n)
     }
 }
 
+static inline void tb_jmp_cache_entry_clear(CPUState *cpu, TranslationBlock *tb)
+{
+    unsigned int version;
+    unsigned int h;
+    bool hit = false;
+
+    h = tb_jmp_cache_hash_func(tb->pc);
+    do {
+        version = seqlock_read_begin(&cpu->tb_jmp_cache_sequence);
+        hit = cpu->tb_jmp_cache[h] == tb;
+    } while (seqlock_read_retry(&cpu->tb_jmp_cache_sequence, version));
+
+    if (hit) {
+        seqlock_write_lock(&cpu->tb_jmp_cache_sequence);
+        if (likely(cpu->tb_jmp_cache[h] == tb)) {
+            cpu->tb_jmp_cache[h] = NULL;
+        }
+        seqlock_write_unlock(&cpu->tb_jmp_cache_sequence);
+    }
+}
+
 /* invalidate one TB */
 void tb_phys_invalidate(TranslationBlock *tb, tb_page_addr_t page_addr)
 {
@@ -990,12 +1011,18 @@ void tb_phys_invalidate(TranslationBlock *tb, tb_page_addr_t page_addr)
     tb_page_addr_t pc;
     tb_page_addr_t phys_pc;
     TranslationBlock *tb1, *tb2;
+    CPUState *cpu;
 
     /* First invalidate the translation block.  CPUs will not use it anymore
      * from their local caches.
      */
     pc = tb->pc;
     tb->pc = -1;
+
+    /* remove the TB from the hash list */
+    CPU_FOREACH(cpu) {
+        tb_jmp_cache_entry_clear(cpu, tb);
+    }
 
     /* Then suppress this TB from the two jump lists.  CPUs will not jump
      * anymore into this translation block.
@@ -1678,12 +1705,14 @@ void tb_flush_jmp_cache(CPUState *cpu, target_ulong addr)
     /* Discard jump cache entries for any tb which might potentially
        overlap the flushed page.  */
     i = tb_jmp_cache_hash_page(addr - TARGET_PAGE_SIZE);
+    seqlock_write_lock(&cpu->tb_jmp_cache_sequence);
     memset(&cpu->tb_jmp_cache[i], 0,
            TB_JMP_PAGE_SIZE * sizeof(TranslationBlock *));
 
     i = tb_jmp_cache_hash_page(addr);
     memset(&cpu->tb_jmp_cache[i], 0,
            TB_JMP_PAGE_SIZE * sizeof(TranslationBlock *));
+    seqlock_write_unlock(&cpu->tb_jmp_cache_sequence);
 }
 
 void dump_exec_info(FILE *f, fprintf_function cpu_fprintf)

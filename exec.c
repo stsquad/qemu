@@ -626,6 +626,9 @@ void cpu_exec_init(CPUState *cpu, Error **errp)
     cpu->as = NULL;
     cpu->num_ases = 0;
 
+    qemu_mutex_init(&cpu->tb_jmp_cache_lock);
+    seqlock_init(&cpu->tb_jmp_cache_sequence, &cpu->tb_jmp_cache_lock);
+
 #ifndef CONFIG_USER_ONLY
     cpu->thread_id = qemu_get_thread_id();
 

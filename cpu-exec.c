@@ -296,7 +296,9 @@ static TranslationBlock *tb_find_slow(CPUState *cpu,
     mmap_unlock();
 found:
     /* we add the TB in the virtual pc hash table */
+    seqlock_write_lock(&cpu->tb_jmp_cache_sequence);
     cpu->tb_jmp_cache[tb_jmp_cache_hash_func(pc)] = tb;
+    seqlock_write_unlock(&cpu->tb_jmp_cache_sequence);
     return tb;
 }
 
@@ -305,13 +307,17 @@ static inline TranslationBlock *tb_find_fast(CPUState *cpu)
     CPUArchState *env = (CPUArchState *)cpu->env_ptr;
     TranslationBlock *tb;
     target_ulong cs_base, pc;
+    unsigned int version;
     int flags;
 
     /* we record a subset of the CPU state. It will
        always be the same before a given translated block
        is executed. */
     cpu_get_tb_cpu_state(env, &pc, &cs_base, &flags);
-    tb = cpu->tb_jmp_cache[tb_jmp_cache_hash_func(pc)];
+    do {
+        version = seqlock_read_begin(&cpu->tb_jmp_cache_sequence);
+        tb = cpu->tb_jmp_cache[tb_jmp_cache_hash_func(pc)];
+    } while (seqlock_read_retry(&cpu->tb_jmp_cache_sequence, version));
     if (unlikely(!tb || tb->pc != pc || tb->cs_base != cs_base ||
                  tb->flags != flags)) {
         tb = tb_find_slow(cpu, pc, cs_base, flags);

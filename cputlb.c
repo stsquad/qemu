@@ -76,7 +76,7 @@ static void tlb_flush_nocheck(CPUState *cpu, int flush_global)
 
     memset(env->tlb_table, -1, sizeof(env->tlb_table));
     memset(env->tlb_v_table, -1, sizeof(env->tlb_v_table));
-    memset(cpu->tb_jmp_cache, 0, sizeof(cpu->tb_jmp_cache));
+    cpu_tb_jmp_cache_clear(cpu);
 
     env->vtlb_index = 0;
     env->tlb_flush_addr = -1;
@@ -152,7 +152,7 @@ static void tlb_flush_by_mmuidx_async_work(void * opaque)
         }
     }
 
-    memset(cpu->tb_jmp_cache, 0, sizeof(cpu->tb_jmp_cache));
+    cpu_tb_jmp_cache_clear(cpu);
 }
 
 /* Helper function to slurp va_args list into a bitmap
