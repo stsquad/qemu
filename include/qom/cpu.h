@@ -273,6 +273,15 @@ struct CPUState {
     bool stop;
     bool stopped;
     bool cpu_loop_exit_locked;
+    bool inited;
+    /* tcg_work_* protected by tcg_work_lock */
+    QemuCond *tcg_work_cond;
+    QemuMutex *tcg_work_lock;
+    void (*tcg_work_func)(void *arg);
+    void *tcg_work_arg;
+    CPUState *tcg_sleep_owner;
+    int tcg_sleep_requests;
+
     volatile sig_atomic_t exit_request;
     uint32_t interrupt_request;
     int singlestep_enabled;
@@ -580,6 +589,17 @@ void async_run_safe_work_on_cpu(CPUState *cpu, void (*func)(void *data),
  * Returns: @true if a safe work is pending, @false otherwise.
  */
 bool async_safe_work_pending(void);
+
+/**
+ * cpu_tcg_sched_work:
+ * @cpu: CPU thread to schedule the work on
+ * @func: function to be called when all other CPU threads are asleep
+ * @arg: argument to be passed to @func
+ *
+ * Schedule work to be done while all other CPU threads are put to sleep.
+ * Call with tb_lock held.
+ */
+void cpu_tcg_sched_work(CPUState *cpu, void (*func)(void *arg), void *arg);
 
 /**
  * qemu_get_cpu:
