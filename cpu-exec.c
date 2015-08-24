@@ -371,6 +371,29 @@ static void cpu_handle_debug_exception(CPUState *cpu)
     cc->debug_excp_handler(cpu);
 }
 
+#ifdef CONFIG_SOFTMMU
+static inline void cpu_exit_loop_lock(CPUState *cpu)
+{
+    qemu_mutex_lock_iothread();
+    cpu->cpu_loop_exit_locked = true;
+}
+
+static inline void cpu_exit_loop_lock_reset(CPUState *cpu)
+{
+    if (cpu->cpu_loop_exit_locked) {
+        cpu->cpu_loop_exit_locked = false;
+        qemu_mutex_unlock_iothread();
+    }
+}
+
+#else
+static inline void cpu_exit_loop_lock(CPUState *cpu)
+{ }
+
+static inline void cpu_exit_loop_lock_reset(CPUState *cpu)
+{ }
+#endif
+
 /* main execution loop */
 
 int cpu_exec(CPUState *cpu)
@@ -452,12 +475,8 @@ int cpu_exec(CPUState *cpu)
             for(;;) {
                 interrupt_request = cpu->interrupt_request;
                 if (unlikely(interrupt_request)) {
-                    /* FIXME: this needs to take the iothread lock.
-                     * For this we need to find all places in
-                     * cc->cpu_exec_interrupt that can call cpu_loop_exit,
-                     * and call qemu_unlock_iothread_mutex() there.  Else,
-                     * add a flag telling cpu_loop_exit() to unlock it.
-                     */
+                    cpu_exit_loop_lock(cpu);
+
                     if (unlikely(cpu->singlestep_enabled & SSTEP_NOIRQ)) {
                         /* Mask out external interrupts for this step. */
                         interrupt_request &= ~CPU_INTERRUPT_SSTEP_MASK;
@@ -503,6 +522,8 @@ int cpu_exec(CPUState *cpu)
                            the program flow was changed */
                         next_tb = 0;
                     }
+
+                    cpu_exit_loop_lock_reset(cpu);
                 }
                 if (unlikely(cpu->exit_request)) {
                     cpu->exception_index = EXCP_INTERRUPT;
@@ -609,6 +630,7 @@ int cpu_exec(CPUState *cpu)
             env = &x86_cpu->env;
 #endif
             tb_lock_reset();
+            cpu_exit_loop_lock_reset(cpu);
         }
     } /* for(;;) */
 

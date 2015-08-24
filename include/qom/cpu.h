@@ -270,6 +270,7 @@ struct CPUState {
     bool created;
     bool stop;
     bool stopped;
+    bool cpu_loop_exit_locked;
     volatile sig_atomic_t exit_request;
     uint32_t interrupt_request;
     int singlestep_enabled;
