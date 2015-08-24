@@ -130,7 +130,7 @@ static void *l1_map[V_L1_SIZE];
 TCGContext tcg_ctx;
 
 /* translation block context */
-__thread volatile int have_tb_lock;
+__thread int have_tb_lock;
 
 void tb_lock(void)
 {
