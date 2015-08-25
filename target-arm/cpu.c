@@ -192,6 +192,35 @@ static void arm_cpu_reset(CPUState *s)
     hw_watchpoint_update_all(cpu);
 }
 
+uint8_t         qsim_irq_vec     = 0;
+int             qsim_irq_pending = 0;
+static pthread_mutex_t qsim_irq_lock    = PTHREAD_MUTEX_INITIALIZER;
+
+int interrupt(uint8_t vec) {
+  int rvec = 0;
+
+  pthread_mutex_lock(&qsim_irq_lock);
+  if (qsim_irq_pending == 1  && qsim_irq_vec < vec) {
+    rvec = qsim_irq_vec;
+    qsim_irq_vec = vec;
+  } else if (qsim_irq_pending == 0) {
+    rvec = -1;
+    qsim_irq_vec = vec;
+    qsim_irq_pending = 1;
+  } else {
+    rvec = vec;
+  }
+
+  // Re-notify the CPU no matter what.
+  cpu_interrupt(first_cpu, CPU_INTERRUPT_HARD);
+  //qemu_notify_event();
+  pthread_mutex_unlock(&qsim_irq_lock);
+
+  // Give the caller the vector number of an interrupt that _won't_ be
+  // processed and needs to be queued if it is to be handled, or -1.
+  return rvec;
+}
+
 bool arm_cpu_exec_interrupt(CPUState *cs, int interrupt_request)
 {
     CPUClass *cc = CPU_GET_CLASS(cs);

@@ -93,6 +93,8 @@
 #define ARM_CPU_VIRQ 2
 #define ARM_CPU_VFIQ 3
 
+int interrupt(uint8_t vec);
+
 typedef void ARMWriteCPFunc(void *opaque, int cp_info,
                             int srcreg, int operand, uint32_t value);
 typedef uint32_t ARMReadCPFunc(void *opaque, int cp_info,
