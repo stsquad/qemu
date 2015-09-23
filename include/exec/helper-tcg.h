@@ -38,6 +38,9 @@
 #include "helper.h"
 #include "trace/generated-helpers.h"
 #include "tcg-runtime.h"
+#ifdef CONFIG_SOFTMMU
+#include "tcg-llsc-gen-helper.h"
+#endif
 
 #undef DEF_HELPER_FLAGS_0
 #undef DEF_HELPER_FLAGS_1
