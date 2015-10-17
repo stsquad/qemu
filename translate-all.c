@@ -924,6 +924,14 @@ static inline void tb_page_remove(TranslationBlock **ptb, TranslationBlock *tb)
     }
 }
 
+/* reset the jump entry 'n' of a TB so that it is not chained to
+   another TB */
+static inline void tb_reset_jump(TranslationBlock *tb, int n)
+{
+    tb_set_jmp_target(tb, n, (uintptr_t)(tb->tc_ptr + tb->tb_next_offset[n]));
+    tb->jmp_next[n] = NULL;
+}
+
 static inline void tb_jmp_remove(TranslationBlock *tb, int n)
 {
     TranslationBlock *tb1, **ptb;
@@ -948,16 +956,8 @@ static inline void tb_jmp_remove(TranslationBlock *tb, int n)
         }
         /* now we can suppress tb(n) from the list */
         *ptb = tb->jmp_next[n];
-
-        tb->jmp_next[n] = NULL;
+        tb_reset_jump(tb, n);
     }
-}
-
-/* reset the jump entry 'n' of a TB so that it is not chained to
-   another TB */
-static inline void tb_reset_jump(TranslationBlock *tb, int n)
-{
-    tb_set_jmp_target(tb, n, (uintptr_t)(tb->tc_ptr + tb->tb_next_offset[n]));
 }
 
 /* invalidate one TB */
@@ -1010,7 +1010,6 @@ void tb_phys_invalidate(TranslationBlock *tb, tb_page_addr_t page_addr)
         tb1 = (TranslationBlock *)((uintptr_t)tb1 & ~3);
         tb2 = tb1->jmp_next[n1];
         tb_reset_jump(tb1, n1);
-        tb1->jmp_next[n1] = NULL;
         tb1 = tb2;
     }
     tb->jmp_first = (TranslationBlock *)((uintptr_t)tb | 2); /* fail safe */
