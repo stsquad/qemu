@@ -843,6 +843,7 @@ void tb_flush(CPUState *cpu)
     tcg_ctx.tb_ctx.nb_tbs = 0;
 
     CPU_FOREACH(cpu) {
+        cpu->tb_invalidated_flag = 1;
         memset(cpu->tb_jmp_cache, 0, sizeof(cpu->tb_jmp_cache));
     }
 
@@ -1079,8 +1080,6 @@ TranslationBlock *tb_gen_code(CPUState *cpu,
         /* cannot fail at this point */
         tb = tb_alloc(pc);
         assert(tb != NULL);
-        /* Don't forget to invalidate previous TB info.  */
-        tcg_ctx.tb_ctx.tb_invalidated_flag = 1;
     }
 
     gen_code_buf = tcg_ctx.code_gen_ptr;
