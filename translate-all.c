@@ -963,40 +963,21 @@ static inline void tb_jmp_remove(TranslationBlock *tb, int n)
 /* invalidate one TB */
 void tb_phys_invalidate(TranslationBlock *tb, tb_page_addr_t page_addr)
 {
-    CPUState *cpu;
     PageDesc *p;
     unsigned int h, n1;
+    tb_page_addr_t pc;
     tb_page_addr_t phys_pc;
     TranslationBlock *tb1, *tb2;
 
-    /* remove the TB from the hash list */
-    phys_pc = tb->page_addr[0] + (tb->pc & ~TARGET_PAGE_MASK);
-    h = tb_phys_hash_func(phys_pc);
-    tb_hash_remove(&tcg_ctx.tb_ctx.tb_phys_hash[h], tb);
+    /* First invalidate the translation block.  CPUs will not use it anymore
+     * from their local caches.
+     */
+    pc = tb->pc;
+    tb->pc = -1;
 
-    /* remove the TB from the page list */
-    if (tb->page_addr[0] != page_addr) {
-        p = page_find(tb->page_addr[0] >> TARGET_PAGE_BITS);
-        tb_page_remove(&p->first_tb, tb);
-        invalidate_page_bitmap(p);
-    }
-    if (tb->page_addr[1] != -1 && tb->page_addr[1] != page_addr) {
-        p = page_find(tb->page_addr[1] >> TARGET_PAGE_BITS);
-        tb_page_remove(&p->first_tb, tb);
-        invalidate_page_bitmap(p);
-    }
-
-    tcg_ctx.tb_ctx.tb_invalidated_flag = 1;
-
-    /* remove the TB from the hash list */
-    h = tb_jmp_cache_hash_func(tb->pc);
-    CPU_FOREACH(cpu) {
-        if (cpu->tb_jmp_cache[h] == tb) {
-            cpu->tb_jmp_cache[h] = NULL;
-        }
-    }
-
-    /* suppress this TB from the two jump lists */
+    /* Then suppress this TB from the two jump lists.  CPUs will not jump
+     * anymore into this translation block.
+     */
     tb_jmp_remove(tb, 0);
     tb_jmp_remove(tb, 1);
 
@@ -1013,6 +994,25 @@ void tb_phys_invalidate(TranslationBlock *tb, tb_page_addr_t page_addr)
         tb1 = tb2;
     }
     tb->jmp_first = (TranslationBlock *)((uintptr_t)tb | 2); /* fail safe */
+
+    /* Now remove the TB from the hash list, so that tb_find_slow
+     * cannot find it anymore.
+     */
+    phys_pc = tb->page_addr[0] + (pc & ~TARGET_PAGE_MASK);
+    h = tb_phys_hash_func(phys_pc);
+    tb_hash_remove(&tcg_ctx.tb_ctx.tb_phys_hash[h], tb);
+
+    /* remove the TB from the page list */
+    if (tb->page_addr[0] != page_addr) {
+        p = page_find(tb->page_addr[0] >> TARGET_PAGE_BITS);
+        tb_page_remove(&p->first_tb, tb);
+        invalidate_page_bitmap(p);
+    }
+    if (tb->page_addr[1] != -1 && tb->page_addr[1] != page_addr) {
+        p = page_find(tb->page_addr[1] >> TARGET_PAGE_BITS);
+        tb_page_remove(&p->first_tb, tb);
+        invalidate_page_bitmap(p);
+    }
 
     tcg_ctx.tb_ctx.tb_phys_invalidate_count++;
 }
