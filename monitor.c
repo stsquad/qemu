@@ -911,6 +911,7 @@ static mon_cmd_t * get_command_table(Monitor *mon, cmd_table_t cmds)
     }
 }
 
+#ifdef CONFIG_ANDROID
 static void android_console_help(Monitor *mon, const QDict *qdict)
 {
     const char *name = qdict_get_try_str(qdict, "helptext");
@@ -984,6 +985,7 @@ static void android_console_help(Monitor *mon, const QDict *qdict)
         cmds = sub_cmds;
     }
 }
+#endif
 
 static void do_trace_event_set_state(Monitor *mon, const QDict *qdict)
 {
@@ -3044,7 +3046,9 @@ static const mon_cmd_t qmp_cmds[] = {
     { /* NULL */ },
 };
 
+#ifdef CONFIG_ANDROID
 #include "android-commands.h"
+#endif
 
 /*******************************************************************/
 
@@ -5496,12 +5500,14 @@ Monitor * monitor_init(CharDriverState *chr, int flags)
         "QEMU " QEMU_VERSION " monitor - type 'help' for more information";
     mon->print_error = monitor_printf;
 
+#ifdef CONFIG_ANDROID
     if (flags & MONITOR_ANDROID_CONSOLE) {
         mon->cmds.static_table = android_cmds;
         mon->prompt = "";
         mon->banner = "Android Console: type 'help' for a list of commands";
         mon->print_error = android_monitor_print_error;
     }
+#endif
 
     if (flags & MONITOR_DYNAMIC_CMDS) {
         mon->cmds.dynamic_table = make_dynamic_table(mon->cmds.static_table);
