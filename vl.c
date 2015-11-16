@@ -4319,7 +4319,7 @@ int run_qemu_main(int argc, const char **argv)
         boot_strict = qemu_opt_get_bool(opts, "strict", false);
     }
 
-    current_machine->kernel_cmdline = kernel_cmdline ? (char *)kernel_cmdline : "";
+    current_machine->kernel_cmdline = (char *)(kernel_cmdline ? kernel_cmdline : "");
 
     linux_boot = (kernel_filename != NULL);
 
