@@ -270,7 +270,6 @@ static TranslationBlock *tb_find_slow(CPUState *cpu,
         goto found;
     }
 
-#ifdef CONFIG_USER_ONLY
     /* mmap_lock is needed by tb_gen_code, and mmap_lock must be
      * taken outside tb_lock.  Since we're momentarily dropping
      * tb_lock, there's a chance that our desired tb has been
@@ -284,15 +283,11 @@ static TranslationBlock *tb_find_slow(CPUState *cpu,
         mmap_unlock();
         goto found;
     }
-#endif
 
     /* if no translated code available, then translate it now */
     tb = tb_gen_code(cpu, pc, cs_base, flags, 0);
 
-#ifdef CONFIG_USER_ONLY
     mmap_unlock();
-#endif
-
 found:
     /* we add the TB in the virtual pc hash table */
     cpu->tb_jmp_cache[tb_jmp_cache_hash_func(pc)] = tb;
