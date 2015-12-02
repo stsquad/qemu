@@ -402,7 +402,7 @@ bool memory_region_is_unassigned(MemoryRegion *mr);
 extern int singlestep;
 
 /* cpu-exec.c, accessed with atomic_mb_read/atomic_mb_set */
-extern CPUState *tcg_current_cpu;
-extern bool exit_request;
+extern __thread CPUState *tcg_current_cpu;
+extern __thread bool exit_request;
 
 #endif
