@@ -915,8 +915,6 @@ static void qemu_kvm_init_cpu_signals(CPUState *cpu)
 #endif /* _WIN32 */
 
 static QemuMutex qemu_global_mutex;
-static QemuCond qemu_io_proceeded_cond;
-static unsigned iothread_requesting_mutex;
 
 static QemuThread io_thread;
 
@@ -932,7 +930,6 @@ void qemu_init_cpu_loop(void)
     qemu_cond_init(&qemu_cpu_cond);
     qemu_cond_init(&qemu_pause_cond);
     qemu_cond_init(&qemu_work_cond);
-    qemu_cond_init(&qemu_io_proceeded_cond);
     qemu_mutex_init(&qemu_global_mutex);
 
     qemu_thread_get_self(&io_thread);
@@ -1126,10 +1123,6 @@ static void qemu_tcg_wait_io_event(CPUState *cpu)
           are idle.  */
         qemu_clock_warp(QEMU_CLOCK_VIRTUAL);
         qemu_cond_wait(cpu->halt_cond, &qemu_global_mutex);
-    }
-
-    while (iothread_requesting_mutex) {
-        qemu_cond_wait(&qemu_io_proceeded_cond, &qemu_global_mutex);
     }
 
     CPU_FOREACH(cpu) {
@@ -1331,22 +1324,7 @@ bool qemu_mutex_iothread_locked(void)
 
 void qemu_mutex_lock_iothread(void)
 {
-    atomic_inc(&iothread_requesting_mutex);
-    /* In the simple case there is no need to bump the VCPU thread out of
-     * TCG code execution.
-     */
-    if (!tcg_enabled() || qemu_in_vcpu_thread() ||
-        !first_cpu || !first_cpu->created) {
-        qemu_mutex_lock(&qemu_global_mutex);
-        atomic_dec(&iothread_requesting_mutex);
-    } else {
-        if (qemu_mutex_trylock(&qemu_global_mutex)) {
-            qemu_cpu_kick_no_halt();
-            qemu_mutex_lock(&qemu_global_mutex);
-        }
-        atomic_dec(&iothread_requesting_mutex);
-        qemu_cond_broadcast(&qemu_io_proceeded_cond);
-    }
+    qemu_mutex_lock(&qemu_global_mutex);
     iothread_locked = true;
 }
 
@@ -1592,7 +1570,9 @@ static int tcg_cpu_exec(CPUState *cpu)
         cpu->icount_decr.u16.low = decr;
         cpu->icount_extra = count;
     }
+    qemu_mutex_unlock_iothread();
     ret = cpu_exec(cpu);
+    qemu_mutex_lock_iothread();
 #ifdef CONFIG_PROFILER
     tcg_time += profile_getclock() - ti;
 #endif
