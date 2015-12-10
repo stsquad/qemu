@@ -257,6 +257,7 @@
 #define atomic_fetch_and       __sync_fetch_and_and
 #define atomic_fetch_or        __sync_fetch_and_or
 #define atomic_cmpxchg         __sync_val_compare_and_swap
+#define atomic_bool_cmpxchg    __sync_bool_compare_and_swap
 
 /* And even shorter names that return void.  */
 #define atomic_inc(ptr)        ((void) __sync_fetch_and_add(ptr, 1))
