@@ -168,6 +168,7 @@ struct MemoryRegion {
     bool rom_device;
     bool flush_coalesced_mmio;
     bool global_locking;
+    bool pending_excl_access; /* A vCPU issued an exclusive access */
     uint8_t dirty_log_mask;
     RAMBlock *ram_block;
     Object *owner;

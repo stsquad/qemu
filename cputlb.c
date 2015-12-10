@@ -30,7 +30,6 @@
 #include "exec/memory-internal.h"
 #include "exec/ram_addr.h"
 #include "tcg/tcg.h"
-#include "hw/hw.h"
 
 /* DEBUG defines, enable DEBUG_TLB_LOG to log to the CPU_LOG_MMU target */
 /* #define DEBUG_TLB */
@@ -545,9 +544,10 @@ static inline void excl_history_put_addr(hwaddr addr)
 /* For every vCPU compare the exclusive address and reset it in case of a
  * match. Since only one vCPU is running at once, no lock has to be held to
  * guard this operation. */
-static inline void reset_other_cpus_colliding_ll_addr(hwaddr addr, hwaddr size)
+static inline bool reset_other_cpus_colliding_ll_addr(hwaddr addr, hwaddr size)
 {
     CPUState *cpu;
+    bool ret = false;
 
     CPU_FOREACH(cpu) {
         if (current_cpu != cpu &&
@@ -557,8 +557,11 @@ static inline void reset_other_cpus_colliding_ll_addr(hwaddr addr, hwaddr size)
                            cpu->excl_protected_range.begin,
                            addr, size)) {
             cpu->excl_protected_range.begin = EXCLUSIVE_RESET_ADDR;
+            ret = true;
         }
     }
+
+    return ret;
 }
 
 #define MMUSUFFIX _mmu

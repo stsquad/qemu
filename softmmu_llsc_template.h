@@ -83,14 +83,17 @@ WORD_TYPE helper_ldlink_name(CPUArchState *env, target_ulong addr,
                 }
             }
         }
+        /* For this vCPU, just update the TLB entry, no need to flush. */
+        env->tlb_table[mmu_idx][index].addr_write |= TLB_EXCL;
     } else {
-        hw_error("EXCL accesses to MMIO regions not supported yet.");
+        /* Set a pending exclusive access in the MemoryRegion */
+        MemoryRegion *mr = iotlb_to_region(this_cpu,
+                                           env->iotlb[mmu_idx][index].addr,
+                                           env->iotlb[mmu_idx][index].attrs);
+        mr->pending_excl_access = true;
     }
 
     cc->cpu_set_excl_protected_range(this_cpu, hw_addr, DATA_SIZE);
-
-    /* For this vCPU, just update the TLB entry, no need to flush. */
-    env->tlb_table[mmu_idx][index].addr_write |= TLB_EXCL;
 
     /* From now on we are in LL/SC context */
     this_cpu->ll_sc_context = true;

@@ -369,6 +369,28 @@ static inline void glue(io_write, SUFFIX)(CPUArchState *env,
     bool locked = false;
 
     physaddr = (physaddr & TARGET_PAGE_MASK) + addr;
+
+    /* While for normal RAM accesses we define exclusive memory at TLBEntry
+     * granularity, for MMIO memory we use a MemoryRegion granularity.
+     * The pending_excl_access flag is the analogous of TLB_EXCL. */
+    if (unlikely(mr->pending_excl_access)) {
+        if (cpu->excl_succeeded) {
+            /* This SC access finalizes the LL/SC pair, thus the MemoryRegion
+             * has no pending exclusive access anymore.
+             * N.B.: Here excl_succeeded == true means that this access
+             * comes from an exclusive instruction. */
+            MemoryRegion *mr = iotlb_to_region(cpu, iotlbentry->addr,
+                                               iotlbentry->attrs);
+            mr->pending_excl_access = false;
+        } else {
+            /* This is a normal MMIO write access. Check if it collides
+             * with an existing exclusive range. */
+            if (reset_other_cpus_colliding_ll_addr(physaddr, 1 << SHIFT)) {
+                mr->pending_excl_access = false;
+            }
+        }
+    }
+
     if (mr != &io_mem_rom && mr != &io_mem_notdirty && !cpu->can_do_io) {
         cpu_io_recompile(cpu, retaddr);
     }
