@@ -152,6 +152,11 @@ void tb_lock_reset(void)
     }
 }
 
+int tb_lock_locked(void)
+{
+  return have_tb_lock;
+}
+
 static void tb_link_page(TranslationBlock *tb, tb_page_addr_t phys_pc,
                          tb_page_addr_t phys_page2);
 static TranslationBlock *tb_find_pc(uintptr_t tc_ptr);
@@ -220,6 +225,8 @@ static int encode_search(TranslationBlock *tb, uint8_t *block)
     uint8_t *p = block;
     int i, j, n;
 
+    assert(have_tb_lock);
+
     tb->tc_search = block;
 
     for (i = 0, n = tb->icount; i < n; ++i) {
@@ -248,7 +255,10 @@ static int encode_search(TranslationBlock *tb, uint8_t *block)
     return p - block;
 }
 
-/* The cpu state corresponding to 'searched_pc' is restored.  */
+/*
+ * The cpu state corresponding to 'searched_pc' is restored.
+ * Called with tb_lock held.
+ */
 static int cpu_restore_state_from_tb(CPUState *cpu, TranslationBlock *tb,
                                      uintptr_t searched_pc)
 {
@@ -260,7 +270,7 @@ static int cpu_restore_state_from_tb(CPUState *cpu, TranslationBlock *tb,
 #ifdef CONFIG_PROFILER
     int64_t ti = profile_getclock();
 #endif
-
+    assert(have_tb_lock);
     if (searched_pc < host_pc) {
         return -1;
     }
@@ -300,6 +310,8 @@ bool cpu_restore_state(CPUState *cpu, uintptr_t retaddr)
 {
     TranslationBlock *tb;
 
+    tb_lock();
+
     tb = tb_find_pc(retaddr);
     if (tb) {
         cpu_restore_state_from_tb(cpu, tb, retaddr);
@@ -309,8 +321,10 @@ bool cpu_restore_state(CPUState *cpu, uintptr_t retaddr)
             tb_phys_invalidate(tb, -1);
             tb_free(tb);
         }
+        tb_unlock();
         return true;
     }
+    tb_unlock();
     return false;
 }
 
@@ -406,6 +420,8 @@ static PageDesc *page_find_alloc(tb_page_addr_t index, int alloc)
     PageDesc *pd;
     void **lp;
     int i;
+
+    assert(have_tb_lock);
 
     /* Level 1.  Always allocated.  */
     lp = l1_map + ((index >> V_L1_SHIFT) & (V_L1_SIZE - 1));
@@ -754,12 +770,16 @@ bool tcg_enabled(void)
     return tcg_ctx.code_gen_buffer != NULL;
 }
 
-/* Allocate a new translation block. Flush the translation buffer if
-   too many translation blocks or too much generated code. */
+/*
+ * Allocate a new translation block. Flush the translation buffer if
+ * too many translation blocks or too much generated code.
+ * Called with tb_lock held.
+ */
 static TranslationBlock *tb_alloc(target_ulong pc)
 {
     TranslationBlock *tb;
 
+    assert(have_tb_lock);
     if (tcg_ctx.tb_ctx.nb_tbs >= tcg_ctx.code_gen_max_blocks) {
         return NULL;
     }
@@ -774,15 +794,18 @@ void tb_free(TranslationBlock *tb)
     /* In practice this is mostly used for single use temporary TB
        Ignore the hard cases and just back up if this TB happens to
        be the last one generated.  */
+    tb_lock();
     if (tcg_ctx.tb_ctx.nb_tbs > 0 &&
             tb == &tcg_ctx.tb_ctx.tbs[tcg_ctx.tb_ctx.nb_tbs - 1]) {
         tcg_ctx.code_gen_ptr = tb->tc_ptr;
         tcg_ctx.tb_ctx.nb_tbs--;
     }
+    tb_unlock();
 }
 
 static inline void invalidate_page_bitmap(PageDesc *p)
 {
+    assert(have_tb_lock);
     g_free(p->code_bitmap);
     p->code_bitmap = NULL;
     p->code_write_count = 0;
@@ -792,6 +815,8 @@ static inline void invalidate_page_bitmap(PageDesc *p)
 static void page_flush_tb_1(int level, void **lp)
 {
     int i;
+
+    assert(have_tb_lock);
 
     if (*lp == NULL) {
         return;
@@ -840,6 +865,7 @@ void tb_flush_safe(CPUState *cpu)
 /* XXX: tb_flush is currently not thread safe */
 void tb_flush(CPUState *cpu)
 {
+    tb_lock();
 #if defined(DEBUG_FLUSH)
     printf("qemu: flush code_size=%ld nb_tbs=%d avg_tb_size=%ld\n",
            (unsigned long)(tcg_ctx.code_gen_ptr - tcg_ctx.code_gen_buffer),
@@ -864,6 +890,7 @@ void tb_flush(CPUState *cpu)
     /* XXX: flush processor icache at this point if cache flush is
        expensive */
     tcg_ctx.tb_ctx.tb_flush_count++;
+    tb_unlock();
 }
 
 #ifdef DEBUG_TB_CHECK
@@ -872,6 +899,8 @@ static void tb_invalidate_check(target_ulong address)
 {
     TranslationBlock *tb;
     int i;
+
+   tb_lock();
 
     address &= TARGET_PAGE_MASK;
     for (i = 0; i < CODE_GEN_PHYS_HASH_SIZE; i++) {
@@ -884,6 +913,8 @@ static void tb_invalidate_check(target_ulong address)
             }
         }
     }
+
+    tb_unlock();
 }
 
 /* verify that all the pages have correct rights for code */
@@ -891,6 +922,8 @@ static void tb_page_check(void)
 {
     TranslationBlock *tb;
     int i, flags1, flags2;
+
+    tb_lock();
 
     for (i = 0; i < CODE_GEN_PHYS_HASH_SIZE; i++) {
         for (tb = tcg_ctx.tb_ctx.tb_phys_hash[i]; tb != NULL;
@@ -903,6 +936,8 @@ static void tb_page_check(void)
             }
         }
     }
+
+    tb_unlock();
 }
 
 #endif
@@ -911,6 +946,7 @@ static inline void tb_hash_remove(TranslationBlock **ptb, TranslationBlock *tb)
 {
     TranslationBlock *tb1;
 
+    assert(have_tb_lock);
     for (;;) {
         tb1 = *ptb;
         if (tb1 == tb) {
@@ -926,6 +962,7 @@ static inline void tb_page_remove(TranslationBlock **ptb, TranslationBlock *tb)
     TranslationBlock *tb1;
     unsigned int n1;
 
+    assert(have_tb_lock);
     for (;;) {
         tb1 = *ptb;
         n1 = (uintptr_t)tb1 & 3;
@@ -942,6 +979,8 @@ static inline void tb_jmp_remove(TranslationBlock *tb, int n)
 {
     TranslationBlock *tb1, **ptb;
     unsigned int n1;
+
+    assert(have_tb_lock);
 
     ptb = &tb->jmp_next[n];
     tb1 = *ptb;
@@ -992,11 +1031,12 @@ static void cpu_discard_tb_from_jmp_cache(void *opaque)
     g_free(opaque);
 }
 
-static void tb_invalidate_jmp_remove(void *opaque)
+static void tb_invalidate_jmp_remove(TranslationBlock *tb)
 {
-    TranslationBlock *tb = opaque;
     TranslationBlock *tb1, *tb2;
     unsigned int n1;
+
+    assert(have_tb_lock);
 
     /* suppress this TB from the two jump lists */
     tb_jmp_remove(tb, 0);
@@ -1018,7 +1058,18 @@ static void tb_invalidate_jmp_remove(void *opaque)
     tb->jmp_first = (TranslationBlock *)((uintptr_t)tb | 2); /* fail safe */
 }
 
-/* invalidate one TB */
+static void tb_invalidate_jmp_remove_work(void *opaque)
+{
+    TranslationBlock *tb = opaque;
+    tb_lock();
+    tb_invalidate_jmp_remove(tb);
+    tb_unlock();
+}
+
+/*
+ * invalidate one TB
+ * Must be called with tb_lock held.
+ */
 void tb_phys_invalidate(TranslationBlock *tb, tb_page_addr_t page_addr)
 {
     CPUState *cpu;
@@ -1026,6 +1077,8 @@ void tb_phys_invalidate(TranslationBlock *tb, tb_page_addr_t page_addr)
     unsigned int h;
     tb_page_addr_t phys_pc;
     struct CPUDiscardTBParams *params;
+
+    assert(have_tb_lock);
 
     /* remove the TB from the hash list */
     phys_pc = tb->page_addr[0] + (tb->pc & ~TARGET_PAGE_MASK);
@@ -1082,7 +1135,7 @@ void tb_phys_invalidate(TranslationBlock *tb, tb_page_addr_t page_addr)
         params->tb = tb;
         async_run_on_cpu(cpu, cpu_discard_tb_from_jmp_cache, params);
     }
-    async_run_safe_work_on_cpu(first_cpu, tb_invalidate_jmp_remove, tb);
+    async_run_safe_work_on_cpu(first_cpu, tb_invalidate_jmp_remove_work, tb);
 #endif /* MTTCG */
 
     tcg_ctx.tb_ctx.tb_phys_invalidate_count++;
@@ -1092,6 +1145,7 @@ static void build_page_bitmap(PageDesc *p)
 {
     int n, tb_start, tb_end;
     TranslationBlock *tb;
+    assert(have_tb_lock);
 
     p->code_bitmap = bitmap_new(TARGET_PAGE_SIZE);
 
@@ -1117,7 +1171,10 @@ static void build_page_bitmap(PageDesc *p)
     }
 }
 
-/* Called with mmap_lock held for user mode emulation.  */
+/*
+ * Called with mmap_lock held for user mode emulation. 
+ * Called with tb_lock held for system mode emulation.
+ */
 TranslationBlock *tb_gen_code(CPUState *cpu,
                               target_ulong pc, target_ulong cs_base,
                               int flags, int cflags)
@@ -1131,6 +1188,8 @@ TranslationBlock *tb_gen_code(CPUState *cpu,
 #ifdef CONFIG_PROFILER
     int64_t ti;
 #endif
+
+    assert(have_tb_lock);
 
     phys_pc = get_page_addr_code(env, pc);
     if (use_icount && !(cflags & CF_IGNORE_ICOUNT)) {
@@ -1225,6 +1284,7 @@ TranslationBlock *tb_gen_code(CPUState *cpu,
         phys_page2 = get_page_addr_code(env, virt_page2);
     }
     tb_link_page(tb, phys_pc, phys_page2);
+
     return tb;
 }
 
@@ -1236,9 +1296,11 @@ TranslationBlock *tb_gen_code(CPUState *cpu,
  * this TB.
  *
  * Called with mmap_lock held for user-mode emulation
+ * Called with tb_lock held for system-mode emulation
  */
 void tb_invalidate_phys_range(tb_page_addr_t start, tb_page_addr_t end)
 {
+    assert(have_tb_lock);
     while (start < end) {
         tb_invalidate_phys_page_range(start, end, 0);
         start &= TARGET_PAGE_MASK;
@@ -1274,6 +1336,8 @@ void tb_invalidate_phys_page_range(tb_page_addr_t start, tb_page_addr_t end,
     target_ulong current_cs_base = 0;
     int current_flags = 0;
 #endif /* TARGET_HAS_PRECISE_SMC */
+
+    assert(have_tb_lock);
 
     p = page_find(start >> TARGET_PAGE_BITS);
     if (!p) {
@@ -1377,6 +1441,7 @@ void tb_invalidate_phys_page_fast(tb_page_addr_t start, int len)
                   (intptr_t)cpu_single_env->segs[R_CS].base);
     }
 #endif
+    tb_lock();
     p = page_find(start >> TARGET_PAGE_BITS);
     if (!p) {
         return;
@@ -1399,6 +1464,7 @@ void tb_invalidate_phys_page_fast(tb_page_addr_t start, int len)
     do_invalidate:
         tb_invalidate_phys_page_range(start, start + len, 1);
     }
+    tb_unlock();
 }
 
 #if !defined(CONFIG_SOFTMMU)
@@ -1419,6 +1485,8 @@ static void tb_invalidate_phys_page(tb_page_addr_t addr,
     target_ulong current_cs_base = 0;
     int current_flags = 0;
 #endif
+
+    assert(have_tb_lock);
 
     addr &= TARGET_PAGE_MASK;
     p = page_find(addr >> TARGET_PAGE_BITS);
@@ -1475,6 +1543,7 @@ static void tb_invalidate_phys_page(tb_page_addr_t addr,
 /* add the tb in the target page and protect it if necessary
  *
  * Called with mmap_lock held for user-mode emulation.
+ * Called with tb_lock held for system-mode emulation.
  */
 static inline void tb_alloc_page(TranslationBlock *tb,
                                  unsigned int n, tb_page_addr_t page_addr)
@@ -1483,6 +1552,8 @@ static inline void tb_alloc_page(TranslationBlock *tb,
 #ifndef CONFIG_USER_ONLY
     bool page_already_protected;
 #endif
+
+    assert(have_tb_lock);
 
     tb->page_addr[n] = page_addr;
     p = page_find_alloc(page_addr >> TARGET_PAGE_BITS, 1);
@@ -1534,12 +1605,15 @@ static inline void tb_alloc_page(TranslationBlock *tb,
  * (-1) to indicate that only one page contains the TB.
  *
  * Called with mmap_lock held for user-mode emulation.
+ * Called with tb_lock held.
  */
 static void tb_link_page(TranslationBlock *tb, tb_page_addr_t phys_pc,
                          tb_page_addr_t phys_page2)
 {
     unsigned int h;
     TranslationBlock **ptb;
+
+    assert(have_tb_lock);
 
     /* add in the physical hash table */
     h = tb_phys_hash_func(phys_pc);
@@ -1580,6 +1654,8 @@ static TranslationBlock *tb_find_pc(uintptr_t tc_ptr)
     uintptr_t v;
     TranslationBlock *tb;
 
+    assert(have_tb_lock);
+
     if (tcg_ctx.tb_ctx.nb_tbs <= 0) {
         return NULL;
     }
@@ -1595,6 +1671,7 @@ static TranslationBlock *tb_find_pc(uintptr_t tc_ptr)
         tb = &tcg_ctx.tb_ctx.tbs[m];
         v = (uintptr_t)tb->tc_ptr;
         if (v == tc_ptr) {
+            tb_unlock();
             return tb;
         } else if (tc_ptr < v) {
             m_max = m - 1;
@@ -1611,6 +1688,8 @@ void tb_invalidate_phys_addr(AddressSpace *as, hwaddr addr)
     ram_addr_t ram_addr;
     MemoryRegion *mr;
     hwaddr l = 1;
+
+    assert(have_tb_lock);
 
     rcu_read_lock();
     mr = address_space_translate(as, addr, &addr, &l, false);
@@ -1629,7 +1708,7 @@ void tb_invalidate_phys_addr(AddressSpace *as, hwaddr addr)
 void tb_check_watchpoint(CPUState *cpu)
 {
     TranslationBlock *tb;
-
+    assert(have_tb_lock);
     tb = tb_find_pc(cpu->mem_io_pc);
     if (tb) {
         /* We can use retranslation to find the PC.  */
@@ -1662,6 +1741,7 @@ void cpu_io_recompile(CPUState *cpu, uintptr_t retaddr)
     target_ulong pc, cs_base;
     uint64_t flags;
 
+    tb_lock();
     tb = tb_find_pc(retaddr);
     if (!tb) {
         cpu_abort(cpu, "cpu_io_recompile: could not find TB for pc=%p",
@@ -1719,6 +1799,7 @@ void cpu_io_recompile(CPUState *cpu, uintptr_t retaddr)
        Better would be to execute just this insn uncached, or generate a
        second new TB.  */
     cpu_resume_from_signal(cpu, NULL);
+    tb_unlock();
 }
 
 void tb_flush_jmp_cache(CPUState *cpu, target_ulong addr)
@@ -1741,6 +1822,8 @@ void dump_exec_info(FILE *f, fprintf_function cpu_fprintf)
     int i, target_code_size, max_target_code_size;
     int direct_jmp_count, direct_jmp2_count, cross_page;
     TranslationBlock *tb;
+
+    tb_lock();
 
     target_code_size = 0;
     max_target_code_size = 0;
@@ -1797,6 +1880,7 @@ void dump_exec_info(FILE *f, fprintf_function cpu_fprintf)
             tcg_ctx.tb_ctx.tb_phys_invalidate_count);
     cpu_fprintf(f, "TLB flush count     %d\n", tlb_flush_count);
     tcg_dump_info(f, cpu_fprintf);
+    tb_unlock();
 }
 
 void dump_opcount_info(FILE *f, fprintf_function cpu_fprintf)
@@ -1942,6 +2026,8 @@ void page_set_flags(target_ulong start, target_ulong end, int flags)
 {
     target_ulong addr, len;
 
+    assert(have_tb_lock);
+
     /* This function should never be called with addresses outside the
        guest address space.  If this assert fires, it probably indicates
        a missing call to h2g_valid.  */
@@ -1978,6 +2064,8 @@ int page_check_range(target_ulong start, target_ulong len, int flags)
     PageDesc *p;
     target_ulong end;
     target_ulong addr;
+
+    assert(have_tb_lock);
 
     /* This function should never be called with addresses outside the
        guest address space.  If this assert fires, it probably indicates
@@ -2035,6 +2123,8 @@ int page_unprotect(target_ulong address, uintptr_t pc, void *puc)
     unsigned int prot;
     PageDesc *p;
     target_ulong host_start, host_end, addr;
+
+    assert(have_tb_lock);
 
     /* Technically this isn't safe inside a signal handler.  However we
        know this only ever happens in a synchronous SEGV handler, so in

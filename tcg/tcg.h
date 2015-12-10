@@ -599,6 +599,7 @@ static inline bool tcg_op_buf_full(void)
 
 /* pool based memory allocation */
 
+/* tb_lock must be held for tcg_malloc_internal. */
 void *tcg_malloc_internal(TCGContext *s, int size);
 void tcg_pool_reset(TCGContext *s);
 void tcg_pool_delete(TCGContext *s);
@@ -606,16 +607,22 @@ void tcg_pool_delete(TCGContext *s);
 void tb_lock(void);
 void tb_unlock(void);
 void tb_lock_reset(void);
+int tb_lock_locked(void);
 
+/* tb_lock must be held. */
 static inline void *tcg_malloc(int size)
 {
     TCGContext *s = &tcg_ctx;
     uint8_t *ptr, *ptr_end;
+    void *ret;
+
+    assert(tb_lock_locked());
     size = (size + sizeof(long) - 1) & ~(sizeof(long) - 1);
     ptr = s->pool_cur;
     ptr_end = ptr + size;
     if (unlikely(ptr_end > s->pool_end)) {
-        return tcg_malloc_internal(&tcg_ctx, size);
+        ret = tcg_malloc_internal(&tcg_ctx, size);
+        return ret;
     } else {
         s->pool_cur = ptr_end;
         return ptr;

@@ -21,6 +21,7 @@
 #include "cpu.h"
 #include "sysemu/cpus.h"
 #include "exec/memory-internal.h"
+#include "tcg/tcg.h"
 
 __thread bool exit_request;
 __thread CPUState *tcg_current_cpu;
@@ -34,6 +35,8 @@ void cpu_resume_from_signal(CPUState *cpu, void *puc)
     /* XXX: restore cpu registers saved in host registers */
 
     cpu->exception_index = -1;
+    /* XXX: This shouldn't be necessary need to get rid of that. */
+    tb_lock_reset();
     siglongjmp(cpu->jmp_env, 1);
 }
 
@@ -69,6 +72,8 @@ void cpu_reloading_memory_map(void)
 void cpu_loop_exit(CPUState *cpu)
 {
     cpu->current_tb = NULL;
+    /* XXX: This shouldn't be necessary need to get rid of that. */
+    tb_lock_reset();
     siglongjmp(cpu->jmp_env, 1);
 }
 
@@ -78,5 +83,7 @@ void cpu_loop_exit_restore(CPUState *cpu, uintptr_t pc)
         cpu_restore_state(cpu, pc);
     }
     cpu->current_tb = NULL;
+    /* XXX: This shouldn't be necessary we need to get rid of that. */
+    tb_lock_reset();
     siglongjmp(cpu->jmp_env, 1);
 }
