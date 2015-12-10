@@ -159,6 +159,39 @@ static inline int smmu_helper(victim_tlb_hit) (const bool is_read, CPUArchState 
 }
 
 #ifndef SOFTMMU_CODE_ACCESS
+
+static inline void smmu_helper(do_unl_store)(CPUArchState *env,
+                                             bool little_endian,
+                                             DATA_TYPE val,
+                                             target_ulong addr,
+                                             TCGMemOpIdx oi,
+                                             unsigned mmu_idx,
+                                             uintptr_t retaddr)
+{
+    int i;
+
+    if ((get_memop(oi) & MO_AMASK) == MO_ALIGN) {
+        cpu_unaligned_access(ENV_GET_CPU(env), addr, MMU_DATA_STORE,
+                             mmu_idx, retaddr);
+    }
+    /* Note: relies on the fact that tlb_fill() does not remove the
+     * previous page from the TLB cache.  */
+    for (i = DATA_SIZE - 1; i >= 0; i--) {
+        uint8_t val8;
+        if (little_endian) {
+            /* Little-endian extract.  */
+            val8 = val >> (i * 8);
+        } else {
+            /* Big-endian extract.  */
+            val8 = val >> (((DATA_SIZE - 1) * 8) - (i * 8));
+        }
+        /* Note the adjustment at the beginning of the function.
+           Undo that for the recursion.  */
+        glue(helper_ret_stb, MMUSUFFIX)(env, addr + i, val8,
+                                        oi, retaddr + GETPC_ADJ);
+    }
+}
+
 static inline DATA_TYPE glue(io_read, SUFFIX)(CPUArchState *env,
                                               CPUIOTLBEntry *iotlbentry,
                                               target_ulong addr,
@@ -416,7 +449,8 @@ void helper_le_st_name(CPUArchState *env, target_ulong addr, DATA_TYPE val,
     if (unlikely(tlb_addr & ~TARGET_PAGE_MASK)) {
         CPUIOTLBEntry *iotlbentry;
         if ((addr & (DATA_SIZE - 1)) != 0) {
-            goto do_unaligned_access;
+            smmu_helper(do_unl_store)(env, true, val, addr, oi, mmu_idx, retaddr);
+            return;
         }
         iotlbentry = &env->iotlb[mmu_idx][index];
 
@@ -431,23 +465,7 @@ void helper_le_st_name(CPUArchState *env, target_ulong addr, DATA_TYPE val,
     if (DATA_SIZE > 1
         && unlikely((addr & ~TARGET_PAGE_MASK) + DATA_SIZE - 1
                      >= TARGET_PAGE_SIZE)) {
-        int i;
-    do_unaligned_access:
-        if ((get_memop(oi) & MO_AMASK) == MO_ALIGN) {
-            cpu_unaligned_access(ENV_GET_CPU(env), addr, MMU_DATA_STORE,
-                                 mmu_idx, retaddr);
-        }
-        /* XXX: not efficient, but simple */
-        /* Note: relies on the fact that tlb_fill() does not remove the
-         * previous page from the TLB cache.  */
-        for (i = DATA_SIZE - 1; i >= 0; i--) {
-            /* Little-endian extract.  */
-            uint8_t val8 = val >> (i * 8);
-            /* Note the adjustment at the beginning of the function.
-               Undo that for the recursion.  */
-            glue(helper_ret_stb, MMUSUFFIX)(env, addr + i, val8,
-                                            oi, retaddr + GETPC_ADJ);
-        }
+        smmu_helper(do_unl_store)(env, true, val, addr, oi, mmu_idx, retaddr);
         return;
     }
 
@@ -496,7 +514,8 @@ void helper_be_st_name(CPUArchState *env, target_ulong addr, DATA_TYPE val,
     if (unlikely(tlb_addr & ~TARGET_PAGE_MASK)) {
         CPUIOTLBEntry *iotlbentry;
         if ((addr & (DATA_SIZE - 1)) != 0) {
-            goto do_unaligned_access;
+            smmu_helper(do_unl_store)(env, false, val, addr, oi, mmu_idx, retaddr);
+            return;
         }
         iotlbentry = &env->iotlb[mmu_idx][index];
 
@@ -511,23 +530,7 @@ void helper_be_st_name(CPUArchState *env, target_ulong addr, DATA_TYPE val,
     if (DATA_SIZE > 1
         && unlikely((addr & ~TARGET_PAGE_MASK) + DATA_SIZE - 1
                      >= TARGET_PAGE_SIZE)) {
-        int i;
-    do_unaligned_access:
-        if ((get_memop(oi) & MO_AMASK) == MO_ALIGN) {
-            cpu_unaligned_access(ENV_GET_CPU(env), addr, MMU_DATA_STORE,
-                                 mmu_idx, retaddr);
-        }
-        /* XXX: not efficient, but simple */
-        /* Note: relies on the fact that tlb_fill() does not remove the
-         * previous page from the TLB cache.  */
-        for (i = DATA_SIZE - 1; i >= 0; i--) {
-            /* Big-endian extract.  */
-            uint8_t val8 = val >> (((DATA_SIZE - 1) * 8) - (i * 8));
-            /* Note the adjustment at the beginning of the function.
-               Undo that for the recursion.  */
-            glue(helper_ret_stb, MMUSUFFIX)(env, addr + i, val8,
-                                            oi, retaddr + GETPC_ADJ);
-        }
+        smmu_helper(do_unl_store)(env, false, val, addr, oi, mmu_idx, retaddr);
         return;
     }
 
