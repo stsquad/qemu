@@ -450,13 +450,48 @@ static inline void smmu_helper(do_mmio_store)(CPUArchState *env,
     glue(io_write, SUFFIX)(env, iotlbentry, val, addr, retaddr);
 }
 
+static inline void smmu_helper(do_ram_store)(CPUArchState *env,
+                                             bool little_endian, DATA_TYPE val,
+                                             target_ulong addr, TCGMemOpIdx oi,
+                                             unsigned mmu_idx, int index,
+                                             uintptr_t retaddr)
+{
+    uintptr_t haddr;
+
+    /* Handle slow unaligned access (it spans two pages or IO).  */
+    if (DATA_SIZE > 1
+        && unlikely((addr & ~TARGET_PAGE_MASK) + DATA_SIZE - 1
+                     >= TARGET_PAGE_SIZE)) {
+        smmu_helper(do_unl_store)(env, little_endian, val, addr, oi, mmu_idx,
+                                  retaddr);
+        return;
+    }
+
+    /* Handle aligned access or unaligned access in the same page.  */
+    if ((addr & (DATA_SIZE - 1)) != 0
+        && (get_memop(oi) & MO_AMASK) == MO_ALIGN) {
+        cpu_unaligned_access(ENV_GET_CPU(env), addr, MMU_DATA_STORE,
+                             mmu_idx, retaddr);
+    }
+
+    haddr = addr + env->tlb_table[mmu_idx][index].addend;
+#if DATA_SIZE == 1
+    glue(glue(st, SUFFIX), _p)((uint8_t *)haddr, val);
+#else
+    if (little_endian) {
+        glue(glue(st, SUFFIX), _le_p)((uint8_t *)haddr, val);
+    } else {
+        glue(glue(st, SUFFIX), _be_p)((uint8_t *)haddr, val);
+    }
+#endif
+}
+
 void helper_le_st_name(CPUArchState *env, target_ulong addr, DATA_TYPE val,
                        TCGMemOpIdx oi, uintptr_t retaddr)
 {
     unsigned mmu_idx = get_mmuidx(oi);
     int index = (addr >> TARGET_PAGE_BITS) & (CPU_TLB_SIZE - 1);
     target_ulong tlb_addr = env->tlb_table[mmu_idx][index].addr_write;
-    uintptr_t haddr;
 
     /* Adjust the given return address.  */
     retaddr -= GETPC_ADJ;
@@ -482,27 +517,8 @@ void helper_le_st_name(CPUArchState *env, target_ulong addr, DATA_TYPE val,
         return;
     }
 
-    /* Handle slow unaligned access (it spans two pages or IO).  */
-    if (DATA_SIZE > 1
-        && unlikely((addr & ~TARGET_PAGE_MASK) + DATA_SIZE - 1
-                     >= TARGET_PAGE_SIZE)) {
-        smmu_helper(do_unl_store)(env, true, val, addr, oi, mmu_idx, retaddr);
-        return;
-    }
-
-    /* Handle aligned access or unaligned access in the same page.  */
-    if ((addr & (DATA_SIZE - 1)) != 0
-        && (get_memop(oi) & MO_AMASK) == MO_ALIGN) {
-        cpu_unaligned_access(ENV_GET_CPU(env), addr, MMU_DATA_STORE,
-                             mmu_idx, retaddr);
-    }
-
-    haddr = addr + env->tlb_table[mmu_idx][index].addend;
-#if DATA_SIZE == 1
-    glue(glue(st, SUFFIX), _p)((uint8_t *)haddr, val);
-#else
-    glue(glue(st, SUFFIX), _le_p)((uint8_t *)haddr, val);
-#endif
+    smmu_helper(do_ram_store)(env, true, val, addr, oi, mmu_idx, index,
+                              retaddr);
 }
 
 #if DATA_SIZE > 1
@@ -512,7 +528,6 @@ void helper_be_st_name(CPUArchState *env, target_ulong addr, DATA_TYPE val,
     unsigned mmu_idx = get_mmuidx(oi);
     int index = (addr >> TARGET_PAGE_BITS) & (CPU_TLB_SIZE - 1);
     target_ulong tlb_addr = env->tlb_table[mmu_idx][index].addr_write;
-    uintptr_t haddr;
 
     /* Adjust the given return address.  */
     retaddr -= GETPC_ADJ;
@@ -538,23 +553,8 @@ void helper_be_st_name(CPUArchState *env, target_ulong addr, DATA_TYPE val,
         return;
     }
 
-    /* Handle slow unaligned access (it spans two pages or IO).  */
-    if (DATA_SIZE > 1
-        && unlikely((addr & ~TARGET_PAGE_MASK) + DATA_SIZE - 1
-                     >= TARGET_PAGE_SIZE)) {
-        smmu_helper(do_unl_store)(env, false, val, addr, oi, mmu_idx, retaddr);
-        return;
-    }
-
-    /* Handle aligned access or unaligned access in the same page.  */
-    if ((addr & (DATA_SIZE - 1)) != 0
-        && (get_memop(oi) & MO_AMASK) == MO_ALIGN) {
-        cpu_unaligned_access(ENV_GET_CPU(env), addr, MMU_DATA_STORE,
-                             mmu_idx, retaddr);
-    }
-
-    haddr = addr + env->tlb_table[mmu_idx][index].addend;
-    glue(glue(st, SUFFIX), _be_p)((uint8_t *)haddr, val);
+    smmu_helper(do_ram_store)(env, false, val, addr, oi, mmu_idx, index,
+                              retaddr);
 }
 #endif /* DATA_SIZE > 1 */
 
