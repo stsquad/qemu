@@ -36,19 +36,7 @@
 /* statistics */
 int tlb_flush_count;
 
-/* NOTE:
- * If flush_global is true (the usual case), flush all tlb entries.
- * If flush_global is false, flush (at least) all tlb entries not
- * marked global.
- *
- * Since QEMU doesn't currently implement a global/not-global flag
- * for tlb entries, at the moment tlb_flush() will also flush all
- * tlb entries in the flush_global == false case. This is OK because
- * CPU architectures generally permit an implementation to drop
- * entries from the TLB at any time, so flushing more entries than
- * required is only an efficiency issue, not a correctness issue.
- */
-void tlb_flush(CPUState *cpu, int flush_global)
+static void tlb_flush_nocheck(CPUState *cpu, int flush_global)
 {
     CPUArchState *env = cpu->env_ptr;
 
@@ -67,6 +55,52 @@ void tlb_flush(CPUState *cpu, int flush_global)
     env->tlb_flush_addr = -1;
     env->tlb_flush_mask = 0;
     tlb_flush_count++;
+    atomic_mb_set(&cpu->pending_tlb_flush, 0);
+}
+
+struct TLBFlushParams {
+    CPUState *cpu;
+    int flush_global;
+};
+
+static void tlb_flush_async_work(void *opaque)
+{
+    struct TLBFlushParams *params = opaque;
+
+    tlb_flush_nocheck(params->cpu, params->flush_global);
+    g_free(params);
+}
+
+/* NOTE:
+ * If flush_global is true (the usual case), flush all tlb entries.
+ * If flush_global is false, flush (at least) all tlb entries not
+ * marked global.
+ *
+ * Since QEMU doesn't currently implement a global/not-global flag
+ * for tlb entries, at the moment tlb_flush() will also flush all
+ * tlb entries in the flush_global == false case. This is OK because
+ * CPU architectures generally permit an implementation to drop
+ * entries from the TLB at any time, so flushing more entries than
+ * required is only an efficiency issue, not a correctness issue.
+ */
+void tlb_flush(CPUState *cpu, int flush_global)
+{
+    struct TLBFlushParams *params;
+
+    /*
+     * If we are not in the right thread we need to ask the CPU to flush
+     * its tlbs.
+     */
+    if (cpu->created && !qemu_cpu_is_self(cpu)) {
+         if (atomic_bool_cmpxchg(&cpu->pending_tlb_flush, 0, 1)) {
+             params = g_malloc(sizeof(struct TLBFlushParams));
+             params->cpu = cpu;
+             params->flush_global = flush_global;
+             async_run_on_cpu(cpu, tlb_flush_async_work, params);
+         }
+    } else {
+         tlb_flush_nocheck(cpu, flush_global);
+    }
 }
 
 static inline void v_tlb_flush_by_mmuidx(CPUState *cpu, va_list argp)
@@ -108,19 +142,6 @@ void tlb_flush_by_mmuidx(CPUState *cpu, ...)
     va_start(argp, cpu);
     v_tlb_flush_by_mmuidx(cpu, argp);
     va_end(argp);
-}
-
-struct TLBFlushParams {
-    CPUState *cpu;
-    int flush_global;
-};
-
-static void tlb_flush_async_work(void *opaque)
-{
-    struct TLBFlushParams *params = opaque;
-
-    tlb_flush(params->cpu, params->flush_global);
-    g_free(params);
 }
 
 void tlb_flush_all(int flush_global)
