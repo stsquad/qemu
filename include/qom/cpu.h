@@ -235,7 +235,15 @@ struct kvm_run;
 #define TB_JMP_CACHE_SIZE (1 << TB_JMP_CACHE_BITS)
 
 /* Atomic insn translation TLB support. */
+typedef struct CPUExclusiveHistory {
+    uint16_t last_idx;           /* index of last insertion */
+    uint16_t length;             /* history's length, it depends on smp_cpus */
+    hwaddr *c_array;             /* history's circular array */
+} CPUExclusiveHistory;
 #define EXCLUSIVE_RESET_ADDR ULLONG_MAX
+#define EXCLUSIVE_HISTORY_CPU_LEN 256
+void cpu_exclusive_history_init(void);
+void cpu_exclusive_history_free(void);
 
 /* work queue */
 typedef void (*run_on_cpu_func)(CPUState *cpu, void *data);

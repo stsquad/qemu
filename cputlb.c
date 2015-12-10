@@ -510,6 +510,27 @@ tb_page_addr_t get_page_addr_code(CPUArchState *env1, target_ulong addr)
     return qemu_ram_addr_from_host_nofail(p);
 }
 
+/* Keep a circular array with the last excl_history.length addresses used for
+ * exclusive accesses. The exiting addresses are marked as non-exclusive. */
+extern CPUExclusiveHistory excl_history;
+static inline void excl_history_put_addr(hwaddr addr)
+{
+    hwaddr last;
+
+    /* Calculate the index of the next exclusive address */
+    excl_history.last_idx = (excl_history.last_idx + 1) % excl_history.length;
+
+    last = excl_history.c_array[excl_history.last_idx];
+
+    /* Unset EXCL bit of the oldest entry */
+    if (last != EXCLUSIVE_RESET_ADDR) {
+        cpu_physical_memory_unset_excl(last);
+    }
+
+    /* Add a new address, overwriting the oldest one */
+    excl_history.c_array[excl_history.last_idx] = addr & TARGET_PAGE_MASK;
+}
+
 #define MMUSUFFIX _mmu
 
 #define SHIFT 0

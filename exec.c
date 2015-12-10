@@ -178,6 +178,25 @@ struct CPUAddressSpace {
     MemoryListener tcg_as_listener;
 };
 
+/* Exclusive memory support */
+CPUExclusiveHistory excl_history;
+void cpu_exclusive_history_init(void)
+{
+    /* Initialize exclusive history for atomic instruction handling. */
+    if (tcg_enabled()) {
+        g_assert(EXCLUSIVE_HISTORY_CPU_LEN * max_cpus <= UINT16_MAX);
+        excl_history.length = EXCLUSIVE_HISTORY_CPU_LEN * max_cpus;
+        excl_history.c_array = g_malloc(excl_history.length * sizeof(hwaddr));
+        memset(excl_history.c_array, -1, excl_history.length * sizeof(hwaddr));
+    }
+}
+
+void cpu_exclusive_history_free(void)
+{
+    if (tcg_enabled()) {
+        g_free(excl_history.c_array);
+    }
+}
 #endif
 
 #if !defined(CONFIG_USER_ONLY)

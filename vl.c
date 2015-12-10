@@ -547,6 +547,7 @@ static void res_free(void)
 {
     g_free(boot_splash_filedata);
     boot_splash_filedata = NULL;
+    cpu_exclusive_history_free();
 }
 
 static int default_driver_check(void *opaque, QemuOpts *opts, Error **errp)
@@ -4333,6 +4334,8 @@ int main(int argc, char **argv, char **envp)
     }
 
     configure_accelerator(current_machine);
+
+    cpu_exclusive_history_init();
 
     if (qtest_chrdev) {
         qtest_init(qtest_chrdev, qtest_log, &error_fatal);
