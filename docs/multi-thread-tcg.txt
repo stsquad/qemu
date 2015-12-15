@@ -12,17 +12,91 @@ This document outlines the design for multi-threaded TCG emulation.
 The original TCG implementation was single threaded and dealt with
 multiple CPUs by with simple round-robin scheduling. This simplified a
 lot of things but became increasingly limited as systems being
-emulated gained additional cores and per-core performance gains for host
-systems started to level off.
+emulated gained additional cores and per-core performance gains for
+host systems started to level off.
 
 CPU Scheduling
 ==============
 
-While the aim of the design to avoid inter-CPU dependencies wherever
-possible there will be some cases when we will need to ensure all CPUs
-are brought to a halt.
+Each vCPU will run on its own user-space thread. In the general case
+of running translated code there should be no inter-vCPU dependencies
+and all vCPUs should be able to run at full speed. Synchronisation
+will only be required while accessing internal shared data structures
+or when the emulated architecture requires a coherent representation
+of the emulated machine state.
 
-[TODO: look at existing mechanisms]
+Shared Data Structures
+======================
+
+Global TCG State
+----------------
+
+We need to protect the entire code generation cycle including any post
+generation patching of the translated code. This also implies a shared
+translation buffer which contains code running on all cores. Any
+execution path that comes to the main run loop will need to hold a
+mutex for code generation. This also includes times when we need flush
+code or jumps from the tb_cache.
+
+DESIGN REQUIREMENT: Add locking around all code generation, patching
+and jump cache modification
+
+Memory maps and TLBs
+--------------------
+
+The memory handling code is fairly critical to the speed of memory
+access in the emulated system.
+
+  - Memory regions (dividing up access to PIO, MMIO and RAM)
+  - Dirty page tracking (for code gen, migration and display)
+  - Virtual TLB (for translating guest address->real address)
+
+There is a both a fast path walked by the generated code and a slow
+path when resolution is required. When the TLB tables are updated we
+need to ensure they are done in a safe way by bringing all executing
+threads to a halt before making the modifications.
+
+DESIGN REQUIREMENTS:
+
+  - TLB Flush All/Page
+    - can be across-CPUs
+    - will need all other CPUs brought to a halt
+  - TLB Update (update a CPUTLBEntry, via tlb_set_page_with_attrs)
+    - This is a per-CPU table - by definition can't race
+    - updated by it's own thread when the slow-path is forced
+
+Emulated hardware state
+-----------------------
+
+Currently the hardware emulation has no protection against
+multiple-accesses. However guest systems accessing emulated hardware
+should be carrying out their own locking to prevent multiple CPUs
+confusing the hardware. Of course there is no guarantee the there
+couldn't be a broken guest that doesn't lock so you could get racing
+accesses to the hardware.
+
+There is the class of paravirtualized hardware (VIRTIO) that works in
+a purely mmio mode. Often setting flags directly in guest memory as a
+result of a guest triggered transaction.
+
+DESIGN REQUIREMENTS:
+
+  - Access to IO Memory should be serialised by an IOMem mutex
+  - The mutex should be recursive (e.g. allowing pid to relock itself)
+
+IO Subsystem
+------------
+
+The I/O subsystem is heavily used by KVM and has seen a lot of
+improvements to offload I/O tasks to dedicated IOThreads. There should
+be no additional locking required once we reach the Block Driver.
+
+DESIGN REQUIREMENTS:
+
+  - The dataplane should continue to be protected by the iothread locks
+
+
+References
 
 Memory Consistency
 ==================
@@ -107,79 +181,6 @@ DESIGN REQUIREMENTS:
      - Helper-based Atomic Instruction Emulation (AIE) [3]
     ]
 
-
-Shared Data Structures
-======================
-
-Global TCG State
-----------------
-
-We need to protect the entire code generation cycle including any post
-generation patching of the translated code. This also implies a shared
-translation buffer which contains code running on all cores. Any
-execution path that comes to the main run loop will need to hold a
-mutex for code generation. This also includes times when we need flush
-code or jumps from the tb_cache.
-
-DESIGN REQUIREMENT: Add locking around all code generation, patching
-and jump cache modification
-
-Memory maps and TLBs
---------------------
-
-The memory handling code is fairly critical to the speed of memory
-access in the emulated system.
-
-  - Memory regions (dividing up access to PIO, MMIO and RAM)
-  - Dirty page tracking (for code gen, migration and display)
-  - Virtual TLB (for translating guest address->real address)
-
-There is a both a fast path walked by the generated code and a slow
-path when resolution is required. When the TLB tables are updated we
-need to ensure they are done in a safe way by bringing all executing
-threads to a halt before making the modifications.
-
-DESIGN REQUIREMENTS:
-
-  - TLB Flush All/Page
-    - can be across-CPUs
-    - will need all other CPUs brought to a halt
-  - TLB Update (update a CPUTLBEntry, via tlb_set_page_with_attrs)
-    - This is a per-CPU table - by definition can't race
-    - updated by it's own thread when the slow-path is forced
-
-Emulated hardware state
------------------------
-
-Currently the hardware emulation has no protection against
-multiple-accesses. However guest systems accessing emulated hardware
-should be carrying out their own locking to prevent multiple CPUs
-confusing the hardware. Of course there is no guarantee the there
-couldn't be a broken guest that doesn't lock so you could get racing
-accesses to the hardware.
-
-There is the class of paravirtualized hardware (VIRTIO) that works in
-a purely mmio mode. Often setting flags directly in guest memory as a
-result of a guest triggered transaction.
-
-DESIGN REQUIREMENTS:
-
-  - Access to IO Memory should be serialised by an IOMem mutex
-  - The mutex should be recursive (e.g. allowing pid to relock itself)
-
-IO Subsystem
-------------
-
-The I/O subsystem is heavily used by KVM and has seen a lot of
-improvements to offload I/O tasks to dedicated IOThreads. There should
-be no additional locking required once we reach the Block Driver.
-
-DESIGN REQUIREMENTS:
-
-  - The dataplane should continue to be protected by the iothread locks
-
-
-References
 ==========
 
 [1] https://git.kernel.org/cgit/linux/kernel/git/torvalds/linux.git/plain/Documentation/memory-barriers.txt
