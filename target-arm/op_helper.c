@@ -477,6 +477,8 @@ void HELPER(wfi)(CPUARMState *env)
     CPUState *cs = CPU(arm_env_get_cpu(env));
     int target_el = check_wfx_trap(env, false);
 
+    fprintf(stderr,"%s: target_el=%d\n", __func__, target_el);
+
     if (cpu_has_work(cs)) {
         /* Don't bother to go into our "low power state" if
          * we would just wake up immediately.
@@ -485,9 +487,12 @@ void HELPER(wfi)(CPUARMState *env)
     }
 
     if (target_el) {
+        fprintf(stderr,"%s: raising exceptions\n", __func__);
         env->pc -= 4;
         raise_exception(env, EXCP_UDEF, syn_wfx(1, 0xe, 0), target_el);
     }
+
+    fprintf(stderr,"%s: halting cpu\n", __func__);
 
     cs->exception_index = EXCP_HLT;
     cs->halted = 1;
