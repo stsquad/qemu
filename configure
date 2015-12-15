@@ -360,8 +360,7 @@ for opt do
   ;;
   --cpu=*) cpu="$optarg"
   ;;
-  --extra-cflags=*) QEMU_CFLAGS="$QEMU_CFLAGS $optarg"
-                    EXTRA_CFLAGS="$optarg"
+  --extra-cflags=*) EXTRA_CFLAGS="$optarg"
   ;;
   --extra-ldflags=*) LDFLAGS="$LDFLAGS $optarg"
                      EXTRA_LDFLAGS="$optarg"
@@ -4714,6 +4713,10 @@ fi
 # prepend pixman and ftd flags after all config tests are done
 QEMU_CFLAGS="$pixman_cflags $fdt_cflags $QEMU_CFLAGS"
 libs_softmmu="$pixman_libs $libs_softmmu"
+
+# Now it the time to append extra-cflags
+CFLAGS="$CFLAGS $EXTRA_CFLAGS"
+QEMU_CFLAGS="$QEMU_CFLAGS $EXTRA_CFLAGS"
 
 echo "Install prefix    $prefix"
 echo "BIOS directory    `eval echo $qemu_datadir`"
