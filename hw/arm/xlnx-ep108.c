@@ -25,9 +25,6 @@ typedef struct XlnxEP108 {
     MemoryRegion ddr_ram;
 } XlnxEP108;
 
-/* Max 2GB RAM */
-#define EP108_MAX_RAM_SIZE 0x80000000ull
-
 static struct arm_boot_info xlnx_ep108_binfo;
 
 static void xlnx_ep108_init(MachineState *machine)
@@ -35,20 +32,12 @@ static void xlnx_ep108_init(MachineState *machine)
     XlnxEP108 *s = g_new0(XlnxEP108, 1);
     Error *err = NULL;
 
-    object_initialize(&s->soc, sizeof(s->soc), TYPE_XLNX_ZYNQMP);
-    object_property_add_child(OBJECT(machine), "soc", OBJECT(&s->soc),
-                              &error_abort);
-
-    object_property_set_bool(OBJECT(&s->soc), true, "realized", &err);
-    if (err) {
-        error_report("%s", error_get_pretty(err));
-        exit(1);
-    }
-
-    if (machine->ram_size > EP108_MAX_RAM_SIZE) {
+    /* Create the memory region to pass to the SoC */
+    if (machine->ram_size > XLNX_ZYNQMP_MAX_RAM_SIZE) {
         error_report("WARNING: RAM size " RAM_ADDR_FMT " above max supported, "
-                     "reduced to %llx", machine->ram_size, EP108_MAX_RAM_SIZE);
-        machine->ram_size = EP108_MAX_RAM_SIZE;
+                     "reduced to %llx", machine->ram_size,
+                     XLNX_ZYNQMP_MAX_RAM_SIZE);
+        machine->ram_size = XLNX_ZYNQMP_MAX_RAM_SIZE;
     }
 
     if (machine->ram_size < 0x08000000) {
@@ -58,7 +47,19 @@ static void xlnx_ep108_init(MachineState *machine)
 
     memory_region_allocate_system_memory(&s->ddr_ram, NULL, "ddr-ram",
                                          machine->ram_size);
-    memory_region_add_subregion(get_system_memory(), 0, &s->ddr_ram);
+
+    object_initialize(&s->soc, sizeof(s->soc), TYPE_XLNX_ZYNQMP);
+    object_property_add_child(OBJECT(machine), "soc", OBJECT(&s->soc),
+                              &error_abort);
+
+    object_property_set_link(OBJECT(&s->soc), OBJECT(&s->ddr_ram),
+                         "ddr-ram", &error_abort);
+
+    object_property_set_bool(OBJECT(&s->soc), true, "realized", &err);
+    if (err) {
+        error_report("%s", error_get_pretty(err));
+        exit(1);
+    }
 
     xlnx_ep108_binfo.ram_size = machine->ram_size;
     xlnx_ep108_binfo.kernel_filename = machine->kernel_filename;
