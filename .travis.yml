@@ -48,7 +48,7 @@ before_install:
 before_script:
   - ./configure --target-list=${TARGETS} --enable-debug-tcg ${EXTRA_CONFIG}
 script:
-  - make -j2 && ${TEST_CMD}
+  - make -j2 V=1 && ${TEST_CMD}
 matrix:
   # We manually include a number of additional build for non-standard bits
   include:
