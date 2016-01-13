@@ -1212,8 +1212,10 @@ static void handle_hint(DisasContext *s, uint32_t insn,
         s->is_jmp = DISAS_WFE;
         return;
     case 4: /* SEV */
+        gen_helper_sev(cpu_env);
+        return;
     case 5: /* SEVL */
-        /* we treat all as NOP at least for now */
+        gen_helper_sevl(cpu_env);
         return;
     default:
         /* default specified as NOP equivalent */

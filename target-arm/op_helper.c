@@ -24,6 +24,25 @@
 #define SIGNBIT (uint32_t)0x80000000
 #define SIGNBIT64 ((uint64_t)1 << 63)
 
+static void wake_sleeping_cpus(void)
+{
+    CPUState *cpu;
+    CPUARMState *current_cpu;
+
+    arm_exclusive_lock();
+
+    CPU_FOREACH(cpu) {
+        current_cpu = &ARM_CPU(cpu)->env;
+        if (!current_cpu->event) {      // XXX: Race?
+            fprintf(stderr,"%s: waking CPU %d\n", __func__, cpu->cpu_index);
+            current_cpu->event = true;
+            qemu_cpu_kick(cpu);
+        }
+    }
+
+    arm_exclusive_unlock();
+}
+
 static void raise_exception(CPUARMState *env, uint32_t excp,
                             uint32_t syndrome, uint32_t target_el)
 {
@@ -504,6 +523,27 @@ void HELPER(wfe)(CPUARMState *env)
      * a configurable trap to a different exception level.
      */
     HELPER(yield)(env);
+}
+
+/* SEV - Set Event
+ *
+ * Signal all CPUs an "event" has happened, waking up any that are
+ * sleeping
+ */
+void HELPER(sev)(CPUARMState *env)
+{
+    wake_sleeping_cpus();
+}
+
+/* SEVL - Set Event Local
+ *
+ * This is used to prime the event register so any WFE loop will
+ * happen at least once. We don't wake up any other CPUs so nothing
+ * needs kicking as we know we are running.
+ */
+void HELPER(sevl)(CPUARMState *env)
+{
+    env->event = true;
 }
 
 void HELPER(yield)(CPUARMState *env)
