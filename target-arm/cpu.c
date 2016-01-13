@@ -140,6 +140,7 @@ static void arm_cpu_reset(CPUState *s)
 
     cpu->powered_off = cpu->start_powered_off;
     s->halted = cpu->start_powered_off;
+    env->event = false;
 
     if (arm_feature(env, ARM_FEATURE_IWMMXT)) {
         env->iwmmxt.cregs[ARM_IWMMXT_wCID] = 0x69051000 | 'Q';

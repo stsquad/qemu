@@ -489,6 +489,9 @@ typedef struct CPUARMState {
     struct CPUBreakpoint *cpu_breakpoint[16];
     struct CPUWatchpoint *cpu_watchpoint[16];
 
+    /* For WFE instructions */
+    bool event;
+
     CPU_COMMON
 
     /* These fields after the common ones so they are preserved on reset.  */
