@@ -64,6 +64,10 @@ static void tlb_flush_nocheck(CPUState *cpu, int flush_global)
 
     tlb_debug("(%d)\n", flush_global);
 
+    /* Either we are in the right cpu, or it is not running (which can
+       be the case when we are creating the machine */
+    g_assert((cpu == current_cpu) || !cpu->created);
+
     /* must reset current TB so that interrupts cannot modify the
        links while we are modifying them */
     cpu->current_tb = NULL;
@@ -128,9 +132,10 @@ static inline void v_tlb_flush_by_mmuidx(CPUState *cpu, va_list argp)
 {
     CPUArchState *env = cpu->env_ptr;
 
-#if defined(DEBUG_TLB)
-    printf("tlb_flush_by_mmuidx:");
-#endif
+    tlb_debug("(%p)\n", cpu);
+
+    g_assert(cpu == current_cpu);
+
     /* must reset current TB so that interrupts cannot modify the
        links while we are modifying them */
     cpu->current_tb = NULL;
@@ -160,6 +165,9 @@ static inline void v_tlb_flush_by_mmuidx(CPUState *cpu, va_list argp)
 void tlb_flush_by_mmuidx(CPUState *cpu, ...)
 {
     va_list argp;
+
+    g_assert(cpu == current_cpu);
+
     va_start(argp, cpu);
     v_tlb_flush_by_mmuidx(cpu, argp);
     va_end(argp);
@@ -184,6 +192,8 @@ void tlb_flush_page(CPUState *cpu, target_ulong addr)
     int mmu_idx;
 
     tlb_debug("page :" TARGET_FMT_lx "\n", addr);
+
+    g_assert(cpu == current_cpu);
 
     /* Check if we need to flush due to large pages.  */
     if ((addr & env->tlb_flush_mask) == env->tlb_flush_addr) {
@@ -220,6 +230,8 @@ void tlb_flush_page_by_mmuidx(CPUState *cpu, target_ulong addr, ...)
     CPUArchState *env = cpu->env_ptr;
     int i, k;
     va_list argp;
+
+    g_assert(current_cpu == cpu);
 
     va_start(argp, addr);
 
@@ -279,6 +291,8 @@ struct TLBFlushPageParams {
 static void tlb_flush_page_async_work(void *opaque)
 {
     struct TLBFlushPageParams *params = opaque;
+
+    g_assert(params->cpu == current_cpu);
 
     tlb_flush_page(params->cpu, params->addr);
     g_free(params);
@@ -389,6 +403,8 @@ void tlb_set_dirty(CPUState *cpu, target_ulong vaddr)
     int i;
     int mmu_idx;
 
+    g_assert(cpu == current_cpu);
+
     vaddr &= TARGET_PAGE_MASK;
     i = (vaddr >> TARGET_PAGE_BITS) & (CPU_TLB_SIZE - 1);
     for (mmu_idx = 0; mmu_idx < NB_MMU_MODES; mmu_idx++) {
@@ -448,7 +464,9 @@ void tlb_set_page_with_attrs(CPUState *cpu, target_ulong vaddr,
     unsigned vidx = env->vtlb_index++ % CPU_VTLB_SIZE;
     int asidx = cpu_asidx_from_attrs(cpu, attrs);
 
-    assert(size >= TARGET_PAGE_SIZE);
+    g_assert(cpu == current_cpu);
+    g_assert(size >= TARGET_PAGE_SIZE);
+
     if (size != TARGET_PAGE_SIZE) {
         tlb_add_large_page(env, vaddr, size);
     }
@@ -537,6 +555,8 @@ tb_page_addr_t get_page_addr_code(CPUArchState *env1, target_ulong addr)
     MemoryRegion *mr;
     CPUState *cpu = ENV_GET_CPU(env1);
     CPUIOTLBEntry *iotlbentry;
+
+    g_assert(cpu == current_cpu);
 
     page_index = (addr >> TARGET_PAGE_BITS) & (CPU_TLB_SIZE - 1);
     mmu_idx = cpu_mmu_index(env1, true);
