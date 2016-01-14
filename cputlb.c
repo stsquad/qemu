@@ -30,8 +30,30 @@
 #include "exec/ram_addr.h"
 #include "tcg/tcg.h"
 
-//#define DEBUG_TLB
-//#define DEBUG_TLB_CHECK
+/* DEBUG defines, enable DEBUG_TLB_LOG to log to the CPU_LOG_MMU target */
+/* #define DEBUG_TLB */
+/* #define DEBUG_TLB_LOG */
+
+#ifdef DEBUG_TLB
+# define DEBUG_TLB_GATE 1
+# ifdef DEBUG_TLB_LOG
+#  define DEBUG_TLB_LOG_GATE 1
+# else
+#  define DEBUG_TLB_LOG_GATE 0
+# endif
+#else
+# define DEBUG_TLB_GATE 0
+# define DEBUG_TLB_LOG_GATE 0
+#endif
+
+#define tlb_debug(fmt, ...) do { \
+    if (DEBUG_TLB_LOG_GATE) { \
+        qemu_log_mask(CPU_LOG_MMU, "%s: " fmt, __func__, \
+                      ## __VA_ARGS__); \
+    } else if (DEBUG_TLB_GATE) { \
+        fprintf(stderr, "%s: " fmt, __func__, ## __VA_ARGS__); \
+    } \
+} while (0)
 
 /* statistics */
 int tlb_flush_count;
@@ -40,10 +62,7 @@ static void tlb_flush_nocheck(CPUState *cpu, int flush_global)
 {
     CPUArchState *env = cpu->env_ptr;
 
-#if defined(DEBUG_TLB)
-    printf("tlb_flush:\n");
-#endif
-    /* must reset current TB so that interrupts cannot modify the
+    tlb_debug("global: %d\n", flush_global);
        links while we are modifying them */
     cpu->current_tb = NULL;
 
@@ -107,9 +126,8 @@ static inline void v_tlb_flush_by_mmuidx(CPUState *cpu, va_list argp)
 {
     CPUArchState *env = cpu->env_ptr;
 
-#if defined(DEBUG_TLB)
-    printf("tlb_flush_by_mmuidx:");
-#endif
+    tlb_debug("(%p)\n", cpu);
+
     /* must reset current TB so that interrupts cannot modify the
        links while we are modifying them */
     cpu->current_tb = NULL;
@@ -149,6 +167,8 @@ void tlb_flush_all(int flush_global)
     CPUState *cpu;
     struct TLBFlushParams *params;
 
+    tlb_debug("global: %d\n", flush_global);
+
     CPU_FOREACH(cpu) {
         if (qemu_cpu_is_self(cpu)) {
             /* async_run_on_cpu handle this case but this just avoid a malloc
@@ -182,16 +202,14 @@ void tlb_flush_page(CPUState *cpu, target_ulong addr)
     int i;
     int mmu_idx;
 
-#if defined(DEBUG_TLB)
-    printf("tlb_flush_page: " TARGET_FMT_lx "\n", addr);
-#endif
+    tlb_debug("page :" TARGET_FMT_lx "\n", addr);
+
     /* Check if we need to flush due to large pages.  */
     if ((addr & env->tlb_flush_mask) == env->tlb_flush_addr) {
-#if defined(DEBUG_TLB)
-        printf("tlb_flush_page: forced full flush ("
-               TARGET_FMT_lx "/" TARGET_FMT_lx ")\n",
-               env->tlb_flush_addr, env->tlb_flush_mask);
-#endif
+        tlb_debug("forcing full flush ("
+                  TARGET_FMT_lx "/" TARGET_FMT_lx ")\n",
+                  env->tlb_flush_addr, env->tlb_flush_mask);
+
         tlb_flush(cpu, 1);
         return;
     }
@@ -224,20 +242,19 @@ void tlb_flush_page_by_mmuidx(CPUState *cpu, target_ulong addr, ...)
 
     va_start(argp, addr);
 
-#if defined(DEBUG_TLB)
-    printf("tlb_flush_page_by_mmu_idx: " TARGET_FMT_lx, addr);
-#endif
     /* Check if we need to flush due to large pages.  */
     if ((addr & env->tlb_flush_mask) == env->tlb_flush_addr) {
-#if defined(DEBUG_TLB)
-        printf(" forced full flush ("
-               TARGET_FMT_lx "/" TARGET_FMT_lx ")\n",
-               env->tlb_flush_addr, env->tlb_flush_mask);
-#endif
+        tlb_debug("forced full flush ("
+                  TARGET_FMT_lx "/" TARGET_FMT_lx ")\n",
+                  env->tlb_flush_addr, env->tlb_flush_mask);
+
         v_tlb_flush_by_mmuidx(cpu, argp);
         va_end(argp);
         return;
     }
+
+    tlb_debug(TARGET_FMT_lx, addr);
+
     /* must reset current TB so that interrupts cannot modify the
        links while we are modifying them */
     cpu->current_tb = NULL;
@@ -252,10 +269,6 @@ void tlb_flush_page_by_mmuidx(CPUState *cpu, target_ulong addr, ...)
             break;
         }
 
-#if defined(DEBUG_TLB)
-        printf(" %d", mmu_idx);
-#endif
-
         tlb_flush_entry(&env->tlb_table[mmu_idx][i], addr);
 
         /* check whether there are vltb entries that need to be flushed */
@@ -264,10 +277,6 @@ void tlb_flush_page_by_mmuidx(CPUState *cpu, target_ulong addr, ...)
         }
     }
     va_end(argp);
-
-#if defined(DEBUG_TLB)
-    printf("\n");
-#endif
 
     tb_flush_jmp_cache(cpu, addr);
 }
@@ -453,12 +462,9 @@ void tlb_set_page_with_attrs(CPUState *cpu, target_ulong vaddr,
     section = address_space_translate_for_iotlb(cpu, paddr, &xlat, &sz);
     assert(sz >= TARGET_PAGE_SIZE);
 
-#if defined(DEBUG_TLB)
-    qemu_log_mask(CPU_LOG_MMU,
-           "tlb_set_page: vaddr=" TARGET_FMT_lx " paddr=0x" TARGET_FMT_plx
-           " prot=%x idx=%d\n",
-           vaddr, paddr, prot, mmu_idx);
-#endif
+    tlb_debug("tlb_set_page: vaddr=" TARGET_FMT_lx " paddr=0x" TARGET_FMT_plx
+              " prot=%x idx=%d\n",
+              vaddr, paddr, prot, mmu_idx);
 
     address = vaddr;
     if (!memory_region_is_ram(section->mr) && !memory_region_is_romd(section->mr)) {
