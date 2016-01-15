@@ -206,6 +206,8 @@ void tlb_flush_all(int flush_global)
              */
             tlb_flush(cpu, flush_global);
         } else {
+            // FIXME: params->cpu is implied with the run, we could
+            // just pass an encoded pointer as data
             params = g_malloc(sizeof(struct TLBFlushParams));
             params->cpu = cpu;
             params->flush_global = flush_global;
@@ -365,6 +367,7 @@ void tlb_flush_page_all(target_ulong addr)
              */
             tlb_flush_page(cpu, addr);
         } else {
+            // FIXME: params->cpu is implied
             params = g_malloc(sizeof(struct TLBFlushPageParams));
             params->cpu = cpu;
             params->addr = addr;
