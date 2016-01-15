@@ -26,6 +26,7 @@
 #include "qemu/bitops.h"
 #include "internals.h"
 #include "qemu/crc32c.h"
+#include "tcg/tcg.h"
 #include <zlib.h> /* For crc32 */
 
 /* C2.4.7 Multiply and divide */
@@ -442,4 +443,58 @@ uint64_t HELPER(crc32c_64)(uint64_t acc, uint64_t val, uint32_t bytes)
 
     /* Linux crc32c converts the output to one's complement.  */
     return crc32c(acc, buf, bytes) ^ 0xffffffff;
+}
+
+/* STXP emulation for two 64 bit doublewords. We can't use directly two
+ * stcond_i64 accesses, otherwise the first will conclude the LL/SC pair.
+ * Instead, two normal 64-bit accesses are used and the CPUState is
+ * updated accordingly.
+ *
+ * We do not support paired STXPs to MMIO memory, this will become trivial
+ * when the softmmu will support 128bit memory accesses.
+ */
+target_ulong HELPER(stxp_i128)(CPUArchState *env, target_ulong addr,
+                               uint64_t vall, uint64_t valh,
+                               uint32_t mmu_idx)
+{
+    CPUState *cpu = ENV_GET_CPU(env);
+    CPUClass *cc = CPU_GET_CLASS(cpu);
+    TCGMemOpIdx op;
+    target_ulong ret = 0;
+
+    if (!cpu->ll_sc_context) {
+        cpu->excl_succeeded = false;
+        ret = 1;
+        goto out;
+    }
+
+    op = make_memop_idx(MO_BEQ, mmu_idx);
+
+    /* According to section C6.6.191 of ARM ARM DDI 0487A.h, the access has
+     * to be quadword aligned. */
+    if (addr & 0xf) {
+        /* TODO: Do unaligned access */
+        qemu_log_mask(LOG_UNIMP, "aarch64: silently executing STXP quadword"
+                      "unaligned, exception not implemented yet.\n");
+    }
+
+    /* Setting excl_succeeded to true will make the store exclusive. */
+    cpu->excl_succeeded = true;
+    helper_ret_stq_mmu(env, addr, vall, op, GETRA());
+
+    if (!cpu->excl_succeeded) {
+        ret = 1;
+        goto out;
+    }
+
+    helper_ret_stq_mmu(env, addr + 8, valh, op, GETRA());
+    if (!cpu->excl_succeeded) {
+        ret = 1;
+    }
+
+out:
+    /* Unset LL/SC context */
+    cc->cpu_reset_excl_context(cpu);
+
+    return ret;
 }

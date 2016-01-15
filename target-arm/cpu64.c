@@ -297,6 +297,13 @@ static gchar *aarch64_gdb_arch_name(CPUState *cs)
     return g_strdup("aarch64");
 }
 
+static void aarch64_set_excl_range(CPUState *cpu, hwaddr addr, hwaddr size)
+{
+    cpu->excl_protected_range.begin = addr;
+    /* At least cover 128 bits for a STXP access (two paired doublewords case)*/
+    cpu->excl_protected_range.end = addr + 16;
+}
+
 static void aarch64_cpu_class_init(ObjectClass *oc, void *data)
 {
     CPUClass *cc = CPU_CLASS(oc);
@@ -308,6 +315,7 @@ static void aarch64_cpu_class_init(ObjectClass *oc, void *data)
     cc->gdb_num_core_regs = 34;
     cc->gdb_core_xml_file = "aarch64-core.xml";
     cc->gdb_arch_name = aarch64_gdb_arch_name;
+    cc->cpu_set_excl_protected_range = aarch64_set_excl_range;
 }
 
 static void aarch64_cpu_register(const ARMCPUInfo *info)

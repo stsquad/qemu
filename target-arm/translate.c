@@ -61,9 +61,6 @@ TCGv_env cpu_env;
 static TCGv_i64 cpu_V0, cpu_V1, cpu_M0;
 static TCGv_i32 cpu_R[16];
 TCGv_i32 cpu_CF, cpu_NF, cpu_VF, cpu_ZF;
-/* The following two variables are still used by the aarch64 front-end */
-TCGv_i64 cpu_exclusive_addr;
-TCGv_i64 cpu_exclusive_val;
 #ifdef CONFIG_USER_ONLY
 TCGv_i64 cpu_exclusive_test;
 TCGv_i32 cpu_exclusive_info;
@@ -96,10 +93,6 @@ void arm_translate_init(void)
     cpu_VF = tcg_global_mem_new_i32(cpu_env, offsetof(CPUARMState, VF), "VF");
     cpu_ZF = tcg_global_mem_new_i32(cpu_env, offsetof(CPUARMState, ZF), "ZF");
 
-    cpu_exclusive_addr = tcg_global_mem_new_i64(cpu_env,
-        offsetof(CPUARMState, exclusive_addr), "exclusive_addr");
-    cpu_exclusive_val = tcg_global_mem_new_i64(cpu_env,
-        offsetof(CPUARMState, exclusive_val), "exclusive_val");
 #ifdef CONFIG_USER_ONLY
     cpu_exclusive_test = tcg_global_mem_new_i64(cpu_env,
         offsetof(CPUARMState, exclusive_test), "exclusive_test");
