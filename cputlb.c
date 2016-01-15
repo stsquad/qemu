@@ -128,49 +128,68 @@ void tlb_flush(CPUState *cpu, int flush_global)
     }
 }
 
-static inline void v_tlb_flush_by_mmuidx(CPUState *cpu, va_list argp)
+/*
+ * Flush the current_cpus TLBs by mmuidx. Called either directly or as
+ * a async routine.
+ */
+static void tlb_flush_by_mmuidx_async_work(void * opaque)
 {
+    GArray *indexes = (GArray *) opaque;
+    CPUState *cpu = current_cpu;
     CPUArchState *env = cpu->env_ptr;
+    int i;
 
-    tlb_debug("(%p)\n", cpu);
-
-    g_assert(cpu == current_cpu);
+    tlb_debug("%d tables\n", indexes->len);
 
     /* must reset current TB so that interrupts cannot modify the
        links while we are modifying them */
     cpu->current_tb = NULL;
 
-    for (;;) {
-        int mmu_idx = va_arg(argp, int);
-
-        if (mmu_idx < 0) {
-            break;
-        }
-
-#if defined(DEBUG_TLB)
-        printf(" %d", mmu_idx);
-#endif
-
+    for (i = 0; i < indexes->len; i++) {
+        int mmu_idx = g_array_index(indexes, int, i);
         memset(env->tlb_table[mmu_idx], -1, sizeof(env->tlb_table[0]));
         memset(env->tlb_v_table[mmu_idx], -1, sizeof(env->tlb_v_table[0]));
     }
 
-#if defined(DEBUG_TLB)
-    printf("\n");
-#endif
-
     memset(cpu->tb_jmp_cache, 0, sizeof(cpu->tb_jmp_cache));
+    g_array_free(indexes, TRUE);
+}
+
+/* Helper function to slurp va_args list into a GArray
+ *
+ * This introduces mallocs to what should be a fast path but its
+ * better than trying to preserve a va_list across deferred
+ * asynchronous tasks.
+ */
+static inline GArray * make_mmu_index_array(va_list args)
+{
+    GArray *indexes = g_array_sized_new(FALSE, FALSE, sizeof(int), 8);
+
+    while (1) {
+        int mmu_index = va_arg(args, int);
+        if (mmu_index < 0) {
+            break;
+        }
+        g_array_append_val(indexes, mmu_index);
+    }
+
+    return indexes;
 }
 
 void tlb_flush_by_mmuidx(CPUState *cpu, ...)
 {
     va_list argp;
-
-    g_assert(cpu == current_cpu);
+    GArray *indexes;
 
     va_start(argp, cpu);
-    v_tlb_flush_by_mmuidx(cpu, argp);
+    indexes = make_mmu_index_array(argp);
     va_end(argp);
+
+    if (qemu_cpu_is_self(cpu)) {
+        tlb_flush_by_mmuidx_async_work(indexes);
+    } else {
+        async_run_on_cpu(cpu, tlb_flush_by_mmuidx_async_work, indexes);
+    }
 }
 
 static inline void tlb_flush_entry(CPUTLBEntry *tlb_entry, target_ulong addr)
@@ -225,62 +244,79 @@ void tlb_flush_page(CPUState *cpu, target_ulong addr)
     tb_flush_jmp_cache(cpu, addr);
 }
 
-void tlb_flush_page_by_mmuidx(CPUState *cpu, target_ulong addr, ...)
+struct TLBFlushPageByMMUidxParams {
+    target_ulong addr;
+    GArray *indexes;
+};
+
+static void tlb_flush_page_by_mmuidx_async_work(void *opaque)
 {
+    struct TLBFlushPageByMMUidxParams *params =
+        (struct TLBFlushPageByMMUidxParams *) opaque;
+    target_ulong addr = params->addr;
+    CPUState *cpu = current_cpu;
     CPUArchState *env = cpu->env_ptr;
-    int i, k;
-    va_list argp;
 
-    g_assert(current_cpu == cpu);
-
-    va_start(argp, addr);
+    tlb_debug(TARGET_FMT_lx, addr);
 
 #if defined(DEBUG_TLB)
     printf("tlb_flush_page_by_mmu_idx: " TARGET_FMT_lx, addr);
 #endif
     /* Check if we need to flush due to large pages.  */
     if ((addr & env->tlb_flush_mask) == env->tlb_flush_addr) {
-#if defined(DEBUG_TLB)
-        printf(" forced full flush ("
-               TARGET_FMT_lx "/" TARGET_FMT_lx ")\n",
-               env->tlb_flush_addr, env->tlb_flush_mask);
-#endif
-        v_tlb_flush_by_mmuidx(cpu, argp);
-        va_end(argp);
-        return;
-    }
-    /* must reset current TB so that interrupts cannot modify the
-       links while we are modifying them */
-    cpu->current_tb = NULL;
+        tlb_debug("forced full flush ("
+                  TARGET_FMT_lx "/" TARGET_FMT_lx ")\n",
+                  env->tlb_flush_addr, env->tlb_flush_mask);
 
-    addr &= TARGET_PAGE_MASK;
-    i = (addr >> TARGET_PAGE_BITS) & (CPU_TLB_SIZE - 1);
+        tlb_flush_by_mmuidx_async_work(params->indexes);
+    } else {
+        int i, entry;
 
-    for (;;) {
-        int mmu_idx = va_arg(argp, int);
+        /* must reset current TB so that interrupts cannot modify the
+           links while we are modifying them */
+        cpu->current_tb = NULL;
 
-        if (mmu_idx < 0) {
-            break;
+        addr &= TARGET_PAGE_MASK;
+        entry = (addr >> TARGET_PAGE_BITS) & (CPU_TLB_SIZE - 1);
+
+        for (i=0; i<params->indexes->len; i++) {
+            int mmu_idx = g_array_index(params->indexes, int, i);
+            int k;
+
+            tlb_flush_entry(&env->tlb_table[mmu_idx][entry], addr);
+
+            /* check whether there are vltb entries that need to be flushed */
+            for (k = 0; k < CPU_VTLB_SIZE; k++) {
+                tlb_flush_entry(&env->tlb_v_table[mmu_idx][k], addr);
+            }
         }
 
-#if defined(DEBUG_TLB)
-        printf(" %d", mmu_idx);
-#endif
-
-        tlb_flush_entry(&env->tlb_table[mmu_idx][i], addr);
-
-        /* check whether there are vltb entries that need to be flushed */
-        for (k = 0; k < CPU_VTLB_SIZE; k++) {
-            tlb_flush_entry(&env->tlb_v_table[mmu_idx][k], addr);
-        }
+        tb_flush_jmp_cache(current_cpu, params->addr);
+        g_array_free(params->indexes, TRUE);
     }
+
+    g_free(params);
+}
+
+
+void tlb_flush_page_by_mmuidx(CPUState *cpu, target_ulong addr, ...)
+{
+    va_list argp;
+    struct TLBFlushPageByMMUidxParams *params;
+
+    tlb_debug(TARGET_FMT_lx, addr);
+
+    params = g_malloc(sizeof(*params));
+    params->addr = addr;
+    va_start(argp, addr);
+    params->indexes = make_mmu_index_array(argp);
     va_end(argp);
 
-#if defined(DEBUG_TLB)
-    printf("\n");
-#endif
-
-    tb_flush_jmp_cache(cpu, addr);
+    if (qemu_cpu_is_self(cpu)) {
+        tlb_flush_page_by_mmuidx_async_work(params);
+    } else {
+        async_run_on_cpu(cpu, tlb_flush_page_by_mmuidx_async_work, params);
+    }
 }
 
 struct TLBFlushPageParams {
