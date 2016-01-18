@@ -464,7 +464,7 @@ typedef struct CPUARMState {
     } vfp;
     uint64_t exclusive_addr;
     uint64_t exclusive_val;
-    uint64_t exclusive_high;
+    uint64_t exclusive_val2;    /* aarch64 ldxp/stxp */
 #if defined(CONFIG_USER_ONLY)
     uint64_t exclusive_test;
     uint32_t exclusive_info;

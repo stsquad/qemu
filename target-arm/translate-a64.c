@@ -41,9 +41,6 @@
 static TCGv_i64 cpu_X[32];
 static TCGv_i64 cpu_pc;
 
-/* Load/store exclusive handling */
-static TCGv_i64 cpu_exclusive_high;
-
 static const char *regnames[] = {
     "x0", "x1", "x2", "x3", "x4", "x5", "x6", "x7",
     "x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15",
@@ -97,9 +94,6 @@ void a64_translate_init(void)
                                           offsetof(CPUARMState, xregs[i]),
                                           regnames[i]);
     }
-
-    cpu_exclusive_high = tcg_global_mem_new_i64(TCG_AREG0,
-        offsetof(CPUARMState, exclusive_high), "exclusive_high");
 }
 
 static inline ARMMMUIdx get_a64_user_mem_index(DisasContext *s)
@@ -1704,30 +1698,33 @@ static void disas_b_exc_sys(DisasContext *s, uint32_t insn)
 static void gen_load_exclusive(DisasContext *s, int rt, int rt2,
                                TCGv_i64 addr, int size, bool is_pair)
 {
-    TCGv_i64 tmp = tcg_temp_new_i64();
+    TCGv_i64 val = tcg_temp_new_i64();
     TCGMemOp memop = MO_TE + size;
 
     g_assert(size <= 3);
-    tcg_gen_qemu_ld_i64(tmp, addr, get_mem_index(s), memop);
+    tcg_gen_qemu_ld_i64(val, addr, get_mem_index(s), memop);
+
 
     if (is_pair) {
         TCGv_i64 addr2 = tcg_temp_new_i64();
-        TCGv_i64 hitmp = tcg_temp_new_i64();
+        TCGv_i64 val2 = tcg_temp_new_i64();
 
         g_assert(size >= 2);
         tcg_gen_addi_i64(addr2, addr, 1 << size);
-        tcg_gen_qemu_ld_i64(hitmp, addr2, get_mem_index(s), memop);
+        tcg_gen_qemu_ld_i64(val2, addr2, get_mem_index(s), memop);
         tcg_temp_free_i64(addr2);
-        tcg_gen_mov_i64(cpu_exclusive_high, hitmp);
-        tcg_gen_mov_i64(cpu_reg(s, rt2), hitmp);
-        tcg_temp_free_i64(hitmp);
+        tcg_gen_mov_i64(cpu_reg(s, rt2), val2);
+
+        gen_helper_atomic_claim_pair(cpu_env, addr, val, val2);
+
+        tcg_temp_free_i64(val2);
+    } else {
+        gen_helper_atomic_claim64(cpu_env, addr, val);
     }
 
-    tcg_gen_mov_i64(cpu_exclusive_val, tmp);
-    tcg_gen_mov_i64(cpu_reg(s, rt), tmp);
+    tcg_gen_mov_i64(cpu_reg(s, rt), val);
 
-    tcg_temp_free_i64(tmp);
-    tcg_gen_mov_i64(cpu_exclusive_addr, addr);
+    tcg_temp_free_i64(val);
 }
 
 #ifdef CONFIG_USER_ONLY
@@ -1743,66 +1740,19 @@ static void gen_store_exclusive(DisasContext *s, int rd, int rt, int rt2,
 static void gen_store_exclusive(DisasContext *s, int rd, int rt, int rt2,
                                 TCGv_i64 inaddr, int size, int is_pair)
 {
-    /* if (env->exclusive_addr == addr && env->exclusive_val == [addr]
-     *     && (!is_pair || env->exclusive_high == [addr + datasize])) {
-     *     [addr] = {Rt};
-     *     if (is_pair) {
-     *         [addr + datasize] = {Rt2};
-     *     }
-     *     {Rd} = 0;
-     * } else {
-     *     {Rd} = 1;
-     * }
-     * env->exclusive_addr = -1;
-     */
-    TCGLabel *fail_label = gen_new_label();
-    TCGLabel *done_label = gen_new_label();
-    TCGv_i64 addr = tcg_temp_local_new_i64();
-    TCGv_i64 tmp;
-
-    /* Copy input into a local temp so it is not trashed when the
-     * basic block ends at the branch insn.
-     */
-    tcg_gen_mov_i64(addr, inaddr);
-    tcg_gen_brcond_i64(TCG_COND_NE, addr, cpu_exclusive_addr, fail_label);
-
-    tmp = tcg_temp_new_i64();
-    tcg_gen_qemu_ld_i64(tmp, addr, get_mem_index(s), MO_TE + size);
-    tcg_gen_brcond_i64(TCG_COND_NE, tmp, cpu_exclusive_val, fail_label);
-    tcg_temp_free_i64(tmp);
+    TCGv_i64 val = read_cpu_reg(s, rt, 1);
+    TCGv_i32 tmp_size = tcg_const_i32(size);
 
     if (is_pair) {
-        TCGv_i64 addrhi = tcg_temp_new_i64();
-        TCGv_i64 tmphi = tcg_temp_new_i64();
-
-        tcg_gen_addi_i64(addrhi, addr, 1 << size);
-        tcg_gen_qemu_ld_i64(tmphi, addrhi, get_mem_index(s), MO_TE + size);
-        tcg_gen_brcond_i64(TCG_COND_NE, tmphi, cpu_exclusive_high, fail_label);
-
-        tcg_temp_free_i64(tmphi);
-        tcg_temp_free_i64(addrhi);
+        TCGv_i64 val2 = read_cpu_reg(s, rt2, 1);
+        gen_helper_atomic_cmpxchg_pair(cpu_reg(s, rd), cpu_env,
+                                       inaddr, val, val2, tmp_size);
+    } else {
+        gen_helper_atomic_cmpxchg64(cpu_reg(s, rd), cpu_env,
+                                    inaddr, val, tmp_size);
     }
 
-    /* We seem to still have the exclusive monitor, so do the store */
-    tcg_gen_qemu_st_i64(cpu_reg(s, rt), addr, get_mem_index(s), MO_TE + size);
-    if (is_pair) {
-        TCGv_i64 addrhi = tcg_temp_new_i64();
-
-        tcg_gen_addi_i64(addrhi, addr, 1 << size);
-        tcg_gen_qemu_st_i64(cpu_reg(s, rt2), addrhi,
-                            get_mem_index(s), MO_TE + size);
-        tcg_temp_free_i64(addrhi);
-    }
-
-    tcg_temp_free_i64(addr);
-
-    tcg_gen_movi_i64(cpu_reg(s, rd), 0);
-    tcg_gen_br(done_label);
-    gen_set_label(fail_label);
-    tcg_gen_movi_i64(cpu_reg(s, rd), 1);
-    gen_set_label(done_label);
-    tcg_gen_movi_i64(cpu_exclusive_addr, -1);
-
+    tcg_temp_free_i32(tmp_size);
 }
 #endif
 

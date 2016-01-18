@@ -444,6 +444,236 @@ uint64_t HELPER(crc32c_64)(uint64_t acc, uint64_t val, uint32_t bytes)
     return crc32c(acc, buf, bytes) ^ 0xffffffff;
 }
 
+void HELPER(atomic_claim64)(CPUARMState *env, uint64_t addr, uint64_t val)
+{
+    CPUState *cpu;
+    CPUARMState *current_cpu;
+
+    /* ensure that there are no STREX's executing */
+    arm_exclusive_lock();
+
+    CPU_FOREACH(cpu) {
+        current_cpu = &ARM_CPU(cpu)->env;
+        if (current_cpu->exclusive_addr  == addr) {
+            /* We steal the atomic of this CPU. */
+            current_cpu->exclusive_addr = -1;
+        }
+    }
+
+    env->exclusive_val = val;
+    env->exclusive_addr = addr;
+    arm_exclusive_unlock();
+}
+
+void HELPER(atomic_claim_pair)(CPUARMState *env, uint64_t addr, uint64_t val, uint64 val2)
+{
+    CPUState *cpu;
+    CPUARMState *current_cpu;
+
+    /* ensure that there are no STREX's executing */
+    arm_exclusive_lock();
+
+    CPU_FOREACH(cpu) {
+        current_cpu = &ARM_CPU(cpu)->env;
+        if (current_cpu->exclusive_addr  == addr) {
+            /* We steal the atomic of this CPU. */
+            current_cpu->exclusive_addr = -1;
+        }
+    }
+
+    env->exclusive_val = val;
+    env->exclusive_val2 = val2;
+    env->exclusive_addr = addr;
+    arm_exclusive_unlock();
+}
+
+uint64_t HELPER(atomic_cmpxchg64)(CPUARMState *env, uint64_t addr,
+                                  uint64_t newval, uint32_t size)
+{
+    ARMCPU *cpu = arm_env_get_cpu(env);
+    CPUState *cs = CPU(cpu);
+
+    uintptr_t retaddr = GETRA();
+    bool result = false;
+    hwaddr len = 1 << size;
+
+    hwaddr paddr;
+    target_ulong page_size;
+    int prot;
+
+    arm_exclusive_lock();
+
+    if (env->exclusive_addr != addr) {
+        arm_exclusive_unlock();
+        return 1;
+    }
+
+    if (arm_get_phys_addr(env, addr, 1, &paddr, &prot, &page_size)) {
+        tlb_fill(ENV_GET_CPU(env), addr, MMU_DATA_STORE, cpu_mmu_index(env, false),
+                 retaddr);
+        if (arm_get_phys_addr(env, addr, 1, &paddr, &prot, &page_size)) {
+            arm_exclusive_unlock();
+            return 1;
+        }
+    }
+
+    switch (size) {
+    case 0:
+    {
+        uint8_t oldval, *p;
+        p = address_space_map(cs->as, paddr, &len, true);
+        if (len == 1 << size) {
+            oldval = (uint8_t)env->exclusive_val;
+            result = (atomic_cmpxchg(p, oldval, (uint8_t)newval) == oldval);
+        }
+        address_space_unmap(cs->as, p, len, true, result ? len : 0);
+    }
+    break;
+    case 1:
+    {
+        uint16_t oldval, *p;
+        p = address_space_map(cs->as, paddr, &len, true);
+        if (len == 1 << size) {
+            oldval = (uint16_t)env->exclusive_val;
+            result = (atomic_cmpxchg(p, oldval, (uint16_t)newval) == oldval);
+        }
+        address_space_unmap(cs->as, p, len, true, result ? len : 0);
+    }
+    break;
+    case 2:
+    {
+        uint32_t oldval, *p;
+        p = address_space_map(cs->as, paddr, &len, true);
+        if (len == 1 << size) {
+            oldval = (uint32_t)env->exclusive_val;
+            result = (atomic_cmpxchg(p, oldval, (uint32_t)newval) == oldval);
+        }
+        address_space_unmap(cs->as, p, len, true, result ? len : 0);
+    }
+    break;
+    case 3:
+    {
+        uint64_t oldval, *p;
+        p = address_space_map(cs->as, paddr, &len, true);
+        if (len == 1 << size) {
+            oldval = (uint64_t)env->exclusive_val;
+            result = (atomic_cmpxchg(p, oldval, (uint64_t)newval) == oldval);
+        }
+        address_space_unmap(cs->as, p, len, true, result ? len : 0);
+    }
+    break;
+    default:
+        abort();
+    break;
+    }
+
+    env->exclusive_addr = -1;
+    arm_exclusive_unlock();
+    if (result) {
+        return 0;
+    } else {
+        return 1;
+    }
+}
+
+/* NB return 1 for fail, 0 for pass */
+uint64_t HELPER(atomic_cmpxchg_pair)(CPUARMState *env, uint64_t addr,
+                                     uint64_t newval, uint64_t newval2, uint32_t size)
+{
+    ARMCPU *cpu = arm_env_get_cpu(env);
+    CPUState *cs = CPU(cpu);
+
+    uintptr_t retaddr = GETRA();
+    bool result = false;
+    hwaddr len = 1 << size;
+
+    hwaddr paddr;
+    target_ulong page_size;
+    int prot;
+
+    arm_exclusive_lock();
+
+    if (env->exclusive_addr != addr) {
+        arm_exclusive_unlock();
+        return 1;
+    }
+
+    if (arm_get_phys_addr(env, addr, 1, &paddr, &prot, &page_size)) {
+        tlb_fill(ENV_GET_CPU(env), addr, MMU_DATA_STORE, cpu_mmu_index(env, false),
+                 retaddr);
+        if (arm_get_phys_addr(env, addr, 1, &paddr, &prot, &page_size)) {
+            arm_exclusive_unlock();
+            return 1;
+        }
+    }
+
+    switch (size) {
+    case 0:
+    {
+        uint8_t oldval, oldval2, *p;
+        p = address_space_map(cs->as, paddr, &len, true);
+        if (len == 1 << size) {
+            oldval = (uint8_t)env->exclusive_val;
+            oldval2 = (uint8_t)env->exclusive_val2;
+            // yes this is racy, LL/SC will fix this
+            result = atomic_bool_cmpxchg(p, oldval, (uint8_t)newval) &&
+                atomic_bool_cmpxchg(&p[1], oldval2, (uint8_t)newval2);
+        }
+        address_space_unmap(cs->as, p, len, true, result ? len : 0);
+    }
+    break;
+    case 1:
+    {
+        uint16_t oldval, oldval2, *p;
+        p = address_space_map(cs->as, paddr, &len, true);
+        if (len == 1 << size) {
+            oldval = (uint16_t)env->exclusive_val;
+            oldval2 = (uint16_t)env->exclusive_val2;
+            // yes this is racy
+            result = atomic_bool_cmpxchg(p, oldval, (uint16_t)newval) &&
+                atomic_bool_cmpxchg(&p[1], oldval2, (uint16_t)newval2);
+        }
+        address_space_unmap(cs->as, p, len, true, result ? len : 0);
+    }
+    break;
+    case 2:
+    {
+        uint32_t oldval, oldval2, *p;
+        p = address_space_map(cs->as, paddr, &len, true);
+        if (len == 1 << size) {
+            oldval = (uint32_t)env->exclusive_val;
+            oldval2 = (uint32_t)env->exclusive_val2;
+            result = atomic_bool_cmpxchg(p, oldval, (uint32_t)newval) &&
+                atomic_bool_cmpxchg(&p[1], oldval2, (uint32_t)newval2);
+        }
+        address_space_unmap(cs->as, p, len, true, result ? len : 0);
+    }
+    break;
+    case 3:
+    {
+        uint64_t oldval, oldval2, *p;
+        p = address_space_map(cs->as, paddr, &len, true);
+        if (len == 1 << size) {
+            oldval = (uint64_t)env->exclusive_val;
+            oldval2 = (uint64_t)env->exclusive_val2;
+            result = atomic_bool_cmpxchg(p, oldval, (uint64_t)newval) &&
+                atomic_bool_cmpxchg(&p[1], oldval2, (uint64_t)newval2);
+        }
+        address_space_unmap(cs->as, p, len, true, result ? len : 0);
+    }
+    break;
+    default:
+        abort();
+    break;
+    }
+
+    env->exclusive_addr = -1;
+    arm_exclusive_unlock();
+
+    /* Sense is reversed */
+    return result ? 0 : 1;
+}
+
 #if !defined(CONFIG_USER_ONLY)
 
 /* Handle a CPU exception.  */

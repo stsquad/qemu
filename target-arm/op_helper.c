@@ -64,7 +64,7 @@ static void raise_exception(CPUARMState *env, uint32_t excp,
 }
 
 /* NB return 1 for fail, 0 for pass */
-uint32_t HELPER(atomic_cmpxchg64)(CPUARMState *env, uint32_t addr,
+uint32_t HELPER(atomic_cmpxchg32)(CPUARMState *env, uint32_t addr,
                                   uint64_t newval, uint32_t size)
 {
     ARMCPU *cpu = arm_env_get_cpu(env);

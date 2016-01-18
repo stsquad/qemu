@@ -310,7 +310,7 @@ const VMStateDescription vmstate_arm_cpu = {
                              0, vmstate_info_uint64, uint64_t),
         VMSTATE_UINT64(env.exclusive_addr, ARMCPU),
         VMSTATE_UINT64(env.exclusive_val, ARMCPU),
-        VMSTATE_UINT64(env.exclusive_high, ARMCPU),
+        VMSTATE_UINT64(env.exclusive_val2, ARMCPU),
         VMSTATE_UINT64(env.features, ARMCPU),
         VMSTATE_UINT32(env.exception.syndrome, ARMCPU),
         VMSTATE_UINT32(env.exception.fsr, ARMCPU),

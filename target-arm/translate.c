@@ -7423,6 +7423,7 @@ static void gen_logicq_cc(TCGv_i32 lo, TCGv_i32 hi)
    the architecturally mandated semantics, and avoids having to monitor
    regular stores.
 
+   FIXME: comment wrong for MTTCG
    In system emulation mode only one CPU will be running at once, so
    this sequence is effectively atomic.  In user emulation mode we
    throw an exception and handle the atomic operation elsewhere.  */
@@ -7495,7 +7496,7 @@ static void gen_store_exclusive(DisasContext *s, int rd, int rt, int rt2,
     tcg_temp_free_i32(tmp);
     tcg_temp_free_i32(tmp2);
 
-    gen_helper_atomic_cmpxchg64(cpu_R[rd], cpu_env, addr, val, tmp_size);
+    gen_helper_atomic_cmpxchg32(cpu_R[rd], cpu_env, addr, val, tmp_size);
     tcg_temp_free_i64(val);
     tcg_temp_free_i32(tmp_size);
 }
