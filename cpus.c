@@ -1334,6 +1334,8 @@ static void qemu_tcg_init_vcpu(CPUState *cpu)
 
     tcg_cpu_address_space_init(cpu, cpu->as);
 
+    cpu->stop = false;
+    cpu->exit_request = 0;
     cpu->halt_cond = g_malloc0(sizeof(QemuCond));
     qemu_cond_init(cpu->halt_cond);
     cpu->thread = g_malloc0(sizeof(QemuThread));
