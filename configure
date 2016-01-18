@@ -365,6 +365,8 @@ for opt do
   --extra-ldflags=*) LDFLAGS="$LDFLAGS $optarg"
                      EXTRA_LDFLAGS="$optarg"
   ;;
+  --extra-libs=*)    EXTRA_LIBS="$optarg"
+  ;;
   --enable-debug-info) debug_info="yes"
   ;;
   --disable-debug-info) debug_info="no"
@@ -784,6 +786,8 @@ for opt do
   --extra-cflags=*)
   ;;
   --extra-ldflags=*)
+  ;;
+  --extra-libs=*)
   ;;
   --enable-debug-info)
   ;;
@@ -1281,6 +1285,7 @@ Advanced options (experts only):
   --objcc=OBJCC            use Objective-C compiler OBJCC [$objcc]
   --extra-cflags=CFLAGS    append extra C compiler flags QEMU_CFLAGS
   --extra-ldflags=LDFLAGS  append extra linker flags LDFLAGS
+  --extra-libs=LIBS        append extra libraries when linking
   --make=MAKE              use specified make [$make]
   --install=INSTALL        use specified install [$install]
   --python=PYTHON          use specified python [$python]
@@ -4718,6 +4723,11 @@ libs_softmmu="$pixman_libs $libs_softmmu"
 CFLAGS="$CFLAGS $EXTRA_CFLAGS"
 QEMU_CFLAGS="$QEMU_CFLAGS $EXTRA_CFLAGS"
 
+# extra-libs
+LIBS="$LIBS $EXTRA_LIBS"
+libs_softmmu="$libs_softmmu $EXTRA_LIBS"
+libs_qga="$libs_qga $EXTRA_LIBS"
+
 echo "Install prefix    $prefix"
 echo "BIOS directory    `eval echo $qemu_datadir`"
 echo "binary directory  `eval echo $bindir`"
@@ -4888,6 +4898,7 @@ fi
 echo "qemu_helperdir=$libexecdir" >> $config_host_mak
 echo "extra_cflags=$EXTRA_CFLAGS" >> $config_host_mak
 echo "extra_ldflags=$EXTRA_LDFLAGS" >> $config_host_mak
+echo "extra_libs=$EXTRA_LIBS" >> $config_host_mak
 echo "qemu_localedir=$qemu_localedir" >> $config_host_mak
 echo "libs_softmmu=$libs_softmmu" >> $config_host_mak
 
