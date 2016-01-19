@@ -26,6 +26,7 @@
 #include "exec/memattrs.h"
 #include "qemu/queue.h"
 #include "qemu/thread.h"
+#include "qemu/range.h"
 
 typedef int (*WriteCoreDumpFunction)(const void *buf, size_t size,
                                      void *opaque);
@@ -124,6 +125,10 @@ struct TranslationBlock;
  * @cpu_exec_enter: Callback for cpu_exec preparation.
  * @cpu_exec_exit: Callback for cpu_exec cleanup.
  * @cpu_exec_interrupt: Callback for processing interrupts in cpu_exec.
+ * @cpu_set_excl_protected_range: Callback used by LL operation for setting the
+ *                                exclusive range.
+ * @cpu_valid_excl_access: Callback for checking the validity of a SC operation.
+ * @cpu_reset_excl_context: Callback for resetting the exclusive context.
  * @disas_set_info: Setup architecture specific components of disassembly info
  *
  * Represents a CPU family or model.
@@ -186,6 +191,13 @@ typedef struct CPUClass {
     void (*cpu_exec_exit)(CPUState *cpu);
     bool (*cpu_exec_interrupt)(CPUState *cpu, int interrupt_request);
 
+    /* Atomic instruction handling */
+    void (*cpu_set_excl_protected_range)(CPUState *cpu, hwaddr addr,
+                                         hwaddr size);
+    bool (*cpu_valid_excl_access)(CPUState *cpu, hwaddr addr,
+                                 hwaddr size);
+    void (*cpu_reset_excl_context)(CPUState *cpu);
+
     void (*disas_set_info)(CPUState *cpu, disassemble_info *info);
 } CPUClass;
 
@@ -221,6 +233,9 @@ struct kvm_run;
 
 #define TB_JMP_CACHE_BITS 12
 #define TB_JMP_CACHE_SIZE (1 << TB_JMP_CACHE_BITS)
+
+/* Atomic insn translation TLB support. */
+#define EXCLUSIVE_RESET_ADDR ULLONG_MAX
 
 /* work queue */
 typedef void (*run_on_cpu_func)(CPUState *cpu, void *data);
@@ -359,6 +374,11 @@ struct CPUState {
      * autoconverge
      */
     bool throttle_thread_scheduled;
+
+    /* vCPU's exclusive addresses range.
+     * The address is set to EXCLUSIVE_RESET_ADDR if the vCPU is not
+     * in the middle of a LL/SC. */
+    struct Range excl_protected_range;
 
     /* Note that this is accessed at the start of every TB via a negative
        offset from AREG0.  Leave this field at the end so as to make the

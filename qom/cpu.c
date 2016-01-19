@@ -214,6 +214,29 @@ static bool cpu_common_exec_interrupt(CPUState *cpu, int int_req)
     return false;
 }
 
+static void cpu_common_set_excl_range(CPUState *cpu, hwaddr addr, hwaddr size)
+{
+    cpu->excl_protected_range.begin = addr;
+    cpu->excl_protected_range.end = addr + size;
+}
+
+static bool cpu_common_valid_excl_access(CPUState *cpu, hwaddr addr, hwaddr size)
+{
+    /* Check if the excl range completely covers the access */
+    if (cpu->excl_protected_range.begin <= addr &&
+        cpu->excl_protected_range.end >= addr + size) {
+
+        return true;
+    }
+
+    return false;
+}
+
+static void cpu_common_reset_excl_context(CPUState *cpu)
+{
+    cpu->excl_protected_range.begin = EXCLUSIVE_RESET_ADDR;
+}
+
 void cpu_dump_state(CPUState *cpu, FILE *f, fprintf_function cpu_fprintf,
                     int flags)
 {
@@ -263,6 +286,7 @@ static void cpu_common_reset(CPUState *cpu)
     cpu->can_do_io = 1;
     cpu->exception_index = -1;
     cpu->crash_occurred = false;
+    cpu_common_reset_excl_context(cpu);
     memset(cpu->tb_jmp_cache, 0, TB_JMP_CACHE_SIZE * sizeof(void *));
 }
 
@@ -367,6 +391,9 @@ static void cpu_class_init(ObjectClass *klass, void *data)
     k->cpu_exec_enter = cpu_common_noop;
     k->cpu_exec_exit = cpu_common_noop;
     k->cpu_exec_interrupt = cpu_common_exec_interrupt;
+    k->cpu_set_excl_protected_range = cpu_common_set_excl_range;
+    k->cpu_valid_excl_access = cpu_common_valid_excl_access;
+    k->cpu_reset_excl_context = cpu_common_reset_excl_context;
     dc->realize = cpu_common_realizefn;
     /*
      * Reason: CPUs still need special care by board code: wiring up
