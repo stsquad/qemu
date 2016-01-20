@@ -30,6 +30,7 @@
 #include "exec/memory-internal.h"
 #include "exec/ram_addr.h"
 #include "tcg/tcg.h"
+#include "hw/hw.h"
 
 /* DEBUG defines, enable DEBUG_TLB_LOG to log to the CPU_LOG_MMU target */
 /* #define DEBUG_TLB */
@@ -533,6 +534,8 @@ static inline void excl_history_put_addr(hwaddr addr)
 
 #define MMUSUFFIX _mmu
 
+/* Generates LoadLink/StoreConditional helpers in softmmu_template.h */
+#define GEN_EXCLUSIVE_HELPERS
 #define SHIFT 0
 #include "softmmu_template.h"
 
@@ -545,6 +548,7 @@ static inline void excl_history_put_addr(hwaddr addr)
 #define SHIFT 3
 #include "softmmu_template.h"
 #undef MMUSUFFIX
+#undef GEN_EXCLUSIVE_HELPERS
 
 #define MMUSUFFIX _cmmu
 #undef GETPC_ADJ

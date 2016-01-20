@@ -997,6 +997,21 @@ tcg_target_ulong helper_be_ldul_mmu(CPUArchState *env, target_ulong addr,
                                     TCGMemOpIdx oi, uintptr_t retaddr);
 uint64_t helper_be_ldq_mmu(CPUArchState *env, target_ulong addr,
                            TCGMemOpIdx oi, uintptr_t retaddr);
+/* Exclusive variants */
+tcg_target_ulong helper_ret_ldlinkub_mmu(CPUArchState *env, target_ulong addr,
+                                            TCGMemOpIdx oi, uintptr_t retaddr);
+tcg_target_ulong helper_le_ldlinkuw_mmu(CPUArchState *env, target_ulong addr,
+                                            TCGMemOpIdx oi, uintptr_t retaddr);
+tcg_target_ulong helper_le_ldlinkul_mmu(CPUArchState *env, target_ulong addr,
+                                            TCGMemOpIdx oi, uintptr_t retaddr);
+uint64_t helper_le_ldlinkq_mmu(CPUArchState *env, target_ulong addr,
+                                            TCGMemOpIdx oi, uintptr_t retaddr);
+tcg_target_ulong helper_be_ldlinkuw_mmu(CPUArchState *env, target_ulong addr,
+                                            TCGMemOpIdx oi, uintptr_t retaddr);
+tcg_target_ulong helper_be_ldlinkul_mmu(CPUArchState *env, target_ulong addr,
+                                            TCGMemOpIdx oi, uintptr_t retaddr);
+uint64_t helper_be_ldlinkq_mmu(CPUArchState *env, target_ulong addr,
+                                            TCGMemOpIdx oi, uintptr_t retaddr);
 
 /* Value sign-extended to tcg register size.  */
 tcg_target_ulong helper_ret_ldsb_mmu(CPUArchState *env, target_ulong addr,
@@ -1039,6 +1054,22 @@ uint32_t helper_be_ldl_cmmu(CPUArchState *env, target_ulong addr,
                             TCGMemOpIdx oi, uintptr_t retaddr);
 uint64_t helper_be_ldq_cmmu(CPUArchState *env, target_ulong addr,
                             TCGMemOpIdx oi, uintptr_t retaddr);
+/* Exclusive variants */
+tcg_target_ulong helper_ret_stcondb_mmu(CPUArchState *env, target_ulong addr,
+                            uint8_t val, TCGMemOpIdx oi, uintptr_t retaddr);
+tcg_target_ulong helper_le_stcondw_mmu(CPUArchState *env, target_ulong addr,
+                            uint16_t val, TCGMemOpIdx oi, uintptr_t retaddr);
+tcg_target_ulong helper_le_stcondl_mmu(CPUArchState *env, target_ulong addr,
+                            uint32_t val, TCGMemOpIdx oi, uintptr_t retaddr);
+uint64_t helper_le_stcondq_mmu(CPUArchState *env, target_ulong addr,
+                            uint64_t val, TCGMemOpIdx oi, uintptr_t retaddr);
+tcg_target_ulong helper_be_stcondw_mmu(CPUArchState *env, target_ulong addr,
+                            uint16_t val, TCGMemOpIdx oi, uintptr_t retaddr);
+tcg_target_ulong helper_be_stcondl_mmu(CPUArchState *env, target_ulong addr,
+                            uint32_t val, TCGMemOpIdx oi, uintptr_t retaddr);
+uint64_t helper_be_stcondq_mmu(CPUArchState *env, target_ulong addr,
+                            uint64_t val, TCGMemOpIdx oi, uintptr_t retaddr);
+
 
 /* Temporary aliases until backends are converted.  */
 #ifdef TARGET_WORDS_BIGENDIAN

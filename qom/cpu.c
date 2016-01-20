@@ -235,6 +235,8 @@ static bool cpu_common_valid_excl_access(CPUState *cpu, hwaddr addr, hwaddr size
 static void cpu_common_reset_excl_context(CPUState *cpu)
 {
     cpu->excl_protected_range.begin = EXCLUSIVE_RESET_ADDR;
+    cpu->ll_sc_context = false;
+    cpu->excl_succeeded = false;
 }
 
 void cpu_dump_state(CPUState *cpu, FILE *f, fprintf_function cpu_fprintf,

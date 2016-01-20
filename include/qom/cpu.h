@@ -383,10 +383,15 @@ struct CPUState {
      */
     bool throttle_thread_scheduled;
 
+    /* Used by the atomic insn translation backend. */
+    bool ll_sc_context;
     /* vCPU's exclusive addresses range.
      * The address is set to EXCLUSIVE_RESET_ADDR if the vCPU is not
      * in the middle of a LL/SC. */
     struct Range excl_protected_range;
+    /* Used to carry the SC result but also to flag a normal store access made
+     * by a stcond (see softmmu_template.h). */
+    bool excl_succeeded;
 
     /* Note that this is accessed at the start of every TB via a negative
        offset from AREG0.  Leave this field at the end so as to make the
