@@ -5871,7 +5871,7 @@ if test "$target_linux_user" = "yes" -o "$target_bsd_user" = "yes" ; then
   ldflags="$ldflags $textseg_ldflags"
 fi
 
-echo "LDFLAGS+=$ldflags" >> $config_target_mak
+echo "LDFLAGS+=$ldflags" >> $config_host_mak
 echo "QEMU_CFLAGS+=$cflags" >> $config_target_mak
 
 done # for target in $targets
