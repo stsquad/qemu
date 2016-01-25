@@ -251,10 +251,6 @@ static TranslationBlock *tb_find_physical(CPUState *cpu,
         ptb1 = &tb->phys_hash_next;
     }
 
-    /* Move the TB to the head of the list */
-    *ptb1 = tb->phys_hash_next;
-    tb->phys_hash_next = tcg_ctx.tb_ctx.tb_phys_hash[h];
-    tcg_ctx.tb_ctx.tb_phys_hash[h] = tb;
     return tb;
 }
 
