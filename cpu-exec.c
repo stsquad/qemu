@@ -271,18 +271,18 @@ static TranslationBlock *tb_find_slow(CPUState *cpu,
      * tb_lock, there's a chance that our desired tb has been
      * translated.
      */
-    tb_unlock();
     mmap_lock();
     tb_lock();
     tb = tb_find_physical(cpu, pc, cs_base, flags);
     if (tb) {
+        tb_unlock();
         mmap_unlock();
         goto found;
     }
 
     /* if no translated code available, then translate it now */
     tb = tb_gen_code(cpu, pc, cs_base, flags, 0);
-
+    tb_unlock();
     mmap_unlock();
 found:
     /* we add the TB in the virtual pc hash table */
@@ -483,7 +483,7 @@ int cpu_exec(CPUState *cpu)
                     cpu->exception_index = EXCP_INTERRUPT;
                     cpu_loop_exit(cpu);
                 }
-                tb_lock();
+                //tb_lock();
                 tb = tb_find_fast(cpu);
                 /* Note: we do it here to avoid a gcc bug on Mac OS X when
                    doing it in tb_find_slow */
@@ -503,10 +503,12 @@ int cpu_exec(CPUState *cpu)
                    jump. */
                 if (next_tb != 0 && tb->page_addr[1] == -1
                     && !qemu_loglevel_mask(CPU_LOG_TB_NOCHAIN)) {
+                    tb_lock();
                     tb_add_jump((TranslationBlock *)(next_tb & ~TB_EXIT_MASK),
                                 next_tb & TB_EXIT_MASK, tb);
+                    tb_unlock();
                 }
-                tb_unlock();
+                //tb_unlock();
                 if (likely(!cpu->exit_request)) {
                     trace_exec_tb(tb, tb->pc);
                     tc_ptr = tb->tc_ptr;

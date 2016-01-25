@@ -11157,6 +11157,8 @@ void gen_intermediate_code(CPUARMState *env, TranslationBlock *tb)
     int max_insns;
     bool end_of_page;
 
+    assert(tb_lock_locked());
+
     /* generate intermediate code */
 
     /* The A64 decoder has its own top level loop, because it doesn't need
