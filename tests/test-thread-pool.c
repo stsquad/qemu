@@ -46,10 +46,10 @@ static void test_submit(void)
 {
     WorkerTestData data = { .n = 0 };
     thread_pool_submit(pool, worker_cb, &data);
-    while (data.n == 0) {
+    while (atomic_read(&data.n) == 0) {
         aio_poll(ctx, true);
     }
-    g_assert_cmpint(data.n, ==, 1);
+    g_assert_cmpint(atomic_read(&data.n), ==, 1);
 }
 
 static void test_submit_aio(void)
@@ -128,7 +128,7 @@ static void test_submit_many(void)
         aio_poll(ctx, true);
     }
     for (i = 0; i < 100; i++) {
-        g_assert_cmpint(data[i].n, ==, 1);
+        g_assert_cmpint(atomic_read(&data[i].n), ==, 1);
         g_assert_cmpint(data[i].ret, ==, 0);
     }
 }
@@ -183,7 +183,7 @@ static void do_test_cancel(bool sync)
     g_assert_cmpint(num_canceled, <, 100);
 
     for (i = 0; i < 100; i++) {
-        if (data[i].aiocb && data[i].n != 3) {
+        if (data[i].aiocb && (atomic_read(&data[i].n) != 3)) {
             if (sync) {
                 /* Canceling the others will be a blocking operation.  */
                 bdrv_aio_cancel(data[i].aiocb);
