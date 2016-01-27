@@ -99,15 +99,15 @@ static void *worker_thread(void *opaque)
 
         req = QTAILQ_FIRST(&pool->request_list);
         QTAILQ_REMOVE(&pool->request_list, req, reqs);
-        req->state = THREAD_ACTIVE;
+        atomic_set(&req->state, THREAD_ACTIVE);
         qemu_mutex_unlock(&pool->lock);
 
         ret = req->func(req->arg);
 
-        req->ret = ret;
+        atomic_set(&req->ret, ret);
         /* Write ret before state.  */
         smp_wmb();
-        req->state = THREAD_DONE;
+        atomic_set(&req->state, THREAD_DONE);
 
         qemu_mutex_lock(&pool->lock);
 
@@ -167,7 +167,7 @@ static void thread_pool_completion_bh(void *opaque)
 
 restart:
     QLIST_FOREACH_SAFE(elem, &pool->head, all, next) {
-        if (elem->state != THREAD_DONE) {
+        if (atomic_read(&elem->state) != THREAD_DONE) {
             continue;
         }
 
@@ -184,7 +184,7 @@ restart:
              */
             qemu_bh_schedule(pool->completion_bh);
 
-            elem->common.cb(elem->common.opaque, elem->ret);
+            elem->common.cb(elem->common.opaque, atomic_read(&elem->ret));
             qemu_aio_unref(elem);
             goto restart;
         } else {
@@ -201,7 +201,7 @@ static void thread_pool_cancel(BlockAIOCB *acb)
     trace_thread_pool_cancel(elem, elem->common.opaque);
 
     qemu_mutex_lock(&pool->lock);
-    if (elem->state == THREAD_QUEUED &&
+    if (atomic_read(&elem->state) == THREAD_QUEUED &&
         /* No thread has yet started working on elem. we can try to "steal"
          * the item from the worker if we can get a signal from the
          * semaphore.  Because this is non-blocking, we can do it with
