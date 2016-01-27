@@ -85,10 +85,10 @@ int aio_bh_poll(AioContext *ctx)
          */
         if (!bh->deleted && atomic_xchg(&bh->scheduled, 0)) {
             /* Idle BHs and the notify BH don't count as progress */
-            if (!bh->idle && bh != ctx->notify_dummy_bh) {
+            if (!atomic_read(&bh->idle) && bh != ctx->notify_dummy_bh) {
                 ret = 1;
             }
-            bh->idle = 0;
+            atomic_set(&bh->idle, 0);
             aio_bh_call(bh);
         }
     }
@@ -128,7 +128,7 @@ void qemu_bh_schedule(QEMUBH *bh)
     AioContext *ctx;
 
     ctx = bh->ctx;
-    bh->idle = 0;
+    atomic_set(&bh->idle, 0);
     /* The memory barrier implicit in atomic_xchg makes sure that:
      * 1. idle & any writes needed by the callback are done before the
      *    locations are read in the aio_bh_poll.
@@ -165,8 +165,8 @@ aio_compute_timeout(AioContext *ctx)
     QEMUBH *bh;
 
     for (bh = ctx->first_bh; bh; bh = bh->next) {
-        if (!bh->deleted && bh->scheduled) {
-            if (bh->idle) {
+        if (!bh->deleted && atomic_mb_read(&bh->scheduled)) {
+            if (atomic_read(&bh->idle)) {
                 /* idle bottom halves will be polled at least
                  * every 10ms */
                 timeout = 10000000;
@@ -286,7 +286,7 @@ void aio_notify(AioContext *ctx)
      * with atomic_or in aio_ctx_prepare or atomic_add in aio_poll.
      */
     smp_mb();
-    if (ctx->notify_me) {
+    if (atomic_read(&ctx->notify_me)) {
         event_notifier_set(&ctx->notifier);
         atomic_mb_set(&ctx->notified, true);
     }
