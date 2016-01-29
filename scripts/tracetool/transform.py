@@ -6,7 +6,7 @@ Type-transformation rules.
 """
 
 __author__     = "Lluís Vilanova <vilanova@ac.upc.edu>"
-__copyright__  = "Copyright 2012-2014, Lluís Vilanova <vilanova@ac.upc.edu>"
+__copyright__  = "Copyright 2012-2016, Lluís Vilanova <vilanova@ac.upc.edu>"
 __license__    = "GPL version 2 or (at your option) any later version"
 
 __maintainer__ = "Stefan Hajnoczi"
@@ -74,6 +74,7 @@ TCG_2_HOST = {
     "TCGv_i32": "uint32_t",
     "TCGv_i64": "uint64_t",
     "TCGv_ptr": "void *",
+    "TCGv_cpu": "CPUState *",
     None: _tcg_2_host,
     }
 
@@ -98,6 +99,7 @@ HOST_2_TCG = {
     "uint32_t": "TCGv_i32",
     "uint64_t": "TCGv_i64",
     "void *"  : "TCGv_ptr",
+    "CPUState *": "TCGv_cpu",
     None: _host_2_tcg,
     }
 
@@ -115,6 +117,8 @@ TCG_2_TCG_HELPER_DEF = {
     "TCGv_i32": "uint32_t",
     "TCGv_i64": "uint64_t",
     "TCGv_ptr": "void *",
+    "TCGv_cpu": "void *",
+    "CPUState *": "void *",
     None: _tcg_2_helper_def,
     }
 
@@ -130,6 +134,7 @@ TCG_2_TCG_HELPER_DECL = {
     "TCGv_ptr": "ptr",
     "TCGv_i32": "i32",
     "TCGv_i64": "i64",
+    "TCGv_cpu": "ptr",
     None: _tcg_2_tcg_helper_decl_error,
     }
 
@@ -146,6 +151,7 @@ HOST_2_TCG_TMP_NEW = {
     "uint32_t": "tcg_const_i32",
     "uint64_t": "tcg_const_i64",
     "void *"  : "tcg_const_ptr",
+    "CPUState *": "tcg_const_ptr",
     None: _host_2_tcg_tmp_new,
     }
 
@@ -162,5 +168,6 @@ HOST_2_TCG_TMP_FREE = {
     "uint32_t": "tcg_temp_free_i32",
     "uint64_t": "tcg_temp_free_i64",
     "void *"  : "tcg_temp_free_ptr",
+    "CPUState *": "tcg_temp_free_ptr",
     None: _host_2_tcg_tmp_free,
     }
