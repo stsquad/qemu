@@ -6,7 +6,7 @@ Machinery for generating tracing-related intermediate files.
 """
 
 __author__     = "Lluís Vilanova <vilanova@ac.upc.edu>"
-__copyright__  = "Copyright 2012-2014, Lluís Vilanova <vilanova@ac.upc.edu>"
+__copyright__  = "Copyright 2012-2016, Lluís Vilanova <vilanova@ac.upc.edu>"
 __license__    = "GPL version 2 or (at your option) any later version"
 
 __maintainer__ = "Stefan Hajnoczi"
@@ -146,7 +146,7 @@ class Event(object):
                       "(?:(?:(?P<fmt_trans>\".+),)?\s*(?P<fmt>\".+))?"
                       "\s*")
 
-    _VALID_PROPS = set(["disable", "tcg", "tcg-trans", "tcg-exec"])
+    _VALID_PROPS = set(["disable", "tcg", "tcg-trans", "tcg-exec", "vcpu"])
 
     def __init__(self, name, props, fmt, args, orig=None):
         """
@@ -215,6 +215,19 @@ class Event(object):
         if "tcg" in props and isinstance(fmt, str):
             raise ValueError("Events with 'tcg' property must have two formats")
 
+        # add implicit arguments when using the 'vcpu' property
+        if "vcpu" in props:
+            assert "tcg-trans" not in props and "tcg-exec" not in props
+            # events with 'tcg-trans' and 'tcg-exec' are auto-generated, they
+            # have already been transformed
+            if "tcg" in props:
+                types = ["TCGv_cpu"] + args.types()
+                names = ["_tcg_cpu"] + args.names()
+            else:
+                types = ["CPUState *"] + args.types()
+                names = ["_cpu"] + args.names()
+            args = Arguments(zip(types, names))
+
         return Event(name, props, fmt, args)
 
     def __repr__(self):
@@ -270,6 +283,7 @@ def _read_events(fobj):
             event_trans.name += "_trans"
             event_trans.properties += ["tcg-trans"]
             event_trans.fmt = event.fmt[0]
+            # ignore TCG arguments
             args_trans = []
             for atrans, aorig in zip(
                     event_trans.transform(tracetool.transform.TCG_2_HOST).args,
@@ -278,6 +292,12 @@ def _read_events(fobj):
                     args_trans.append(atrans)
             event_trans.args = Arguments(args_trans)
             event_trans = event_trans.copy()
+
+            # trace the vCPU performing the translation
+            if "vcpu" in event_trans.properties:
+                event_trans.args = Arguments(zip(
+                    ["CPUState *"] + list(event_trans.args.types()),
+                    ["_cpu"] + list(event_trans.args.names())))
 
             event_exec = event.copy()
             event_exec.name += "_exec"

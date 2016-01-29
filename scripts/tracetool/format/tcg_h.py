@@ -6,14 +6,14 @@ Generate .h file for TCG code generation.
 """
 
 __author__     = "Lluís Vilanova <vilanova@ac.upc.edu>"
-__copyright__  = "Copyright 2012-2014, Lluís Vilanova <vilanova@ac.upc.edu>"
+__copyright__  = "Copyright 2012-2016, Lluís Vilanova <vilanova@ac.upc.edu>"
 __license__    = "GPL version 2 or (at your option) any later version"
 
 __maintainer__ = "Stefan Hajnoczi"
 __email__      = "stefanha@linux.vnet.ibm.com"
 
 
-from tracetool import out
+from tracetool import out, Arguments
 
 
 def generate(events, backend):
@@ -38,10 +38,17 @@ def generate(events, backend):
         # get the original event definition
         e = e.original.original
 
+        if "vcpu" in e.properties:
+            args_api = Arguments(zip(
+                ["CPUState *"] + e.args.types(),
+                ["_cpu"] + e.args.names()))
+        else:
+            args_api = e.args
+
         out('static inline void %(name_tcg)s(%(args)s)',
             '{',
             name_tcg=e.api(e.QEMU_TRACE_TCG),
-            args=e.args)
+            args=args_api)
 
         if "disable" not in e.properties:
             out('    %(name_trans)s(%(argnames_trans)s);',
