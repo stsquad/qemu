@@ -287,6 +287,8 @@ bool qdev_machine_modified(void);
 
 qemu_irq qdev_get_gpio_in(DeviceState *dev, int n);
 qemu_irq qdev_get_gpio_in_named(DeviceState *dev, const char *name, int n);
+qemu_irq qdev_get_gpio_out(DeviceState *dev, int n);
+qemu_irq qdev_get_gpio_out_named(DeviceState *dev, const char *name, int n);
 
 void qdev_connect_gpio_out(DeviceState *dev, int n, qemu_irq pin);
 void qdev_connect_gpio_out_named(DeviceState *dev, const char *name, int n,

@@ -489,6 +489,18 @@ qemu_irq qdev_get_gpio_in(DeviceState *dev, int n)
     return qdev_get_gpio_in_named(dev, NULL, n);
 }
 
+qemu_irq qdev_get_gpio_out_named(DeviceState *dev, const char *name, int n)
+{
+    char *propname = g_strdup_printf("%s[%d]",
+                                     name ? name : "unnamed-gpio-out", n);
+    return (qemu_irq)object_property_get_link(OBJECT(dev), propname, NULL);
+}
+
+qemu_irq qdev_get_gpio_out(DeviceState *dev, int n)
+{
+    return qdev_get_gpio_out_named(dev, NULL, n);
+}
+
 void qdev_connect_gpio_out_named(DeviceState *dev, const char *name, int n,
                                  qemu_irq pin)
 {
