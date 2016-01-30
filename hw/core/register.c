@@ -188,6 +188,28 @@ void register_reset(RegisterInfo *reg)
     register_write_val(reg, reg->access->reset);
 }
 
+void register_init(RegisterInfo *reg)
+{
+    assert(reg);
+    const RegisterAccessInfo *ac;
+
+    if (!reg->data || !reg->access) {
+        return;
+    }
+
+    object_initialize((void *)reg, sizeof(*reg), TYPE_REGISTER);
+
+    ac = reg->access;
+
+    /* if there are no debug msgs and no RMW requirement, mark for fast write */
+    reg->write_lite = reg->debug || ac->ro || ac->w1c || ac->pre_write ||
+            ((ac->ge0 || ac->ge1) && qemu_loglevel_mask(LOG_GUEST_ERROR)) ||
+            ((ac->ui0 || ac->ui1) && qemu_loglevel_mask(LOG_UNIMP))
+             ? false : true;
+    /* no debug and no clear-on-read is a fast read */
+    reg->read_lite = reg->debug || ac->cor ? false : true;
+}
+
 static inline void register_write_memory(void *opaque, hwaddr addr,
                                          uint64_t value, unsigned size, bool be)
 {
@@ -235,3 +257,15 @@ uint64_t register_read_memory_le(void *opaque, hwaddr addr, unsigned size)
 {
     return register_read_memory(opaque, addr, size, false);
 }
+
+static const TypeInfo register_info = {
+    .name  = TYPE_REGISTER,
+    .parent = TYPE_DEVICE,
+};
+
+static void register_register_types(void)
+{
+    type_register_static(&register_info);
+}
+
+type_init(register_register_types)
