@@ -54,6 +54,11 @@ typedef struct RegisterAccessError {
  * allowing this function to modify the value before return to the client.
  */
 
+#define REG_DECODE_READ (1 << 0)
+#define REG_DECODE_WRITE (1 << 1)
+#define REG_DECODE_EXECUTE (1 << 2)
+#define REG_DECODE_RW (REG_DECODE_READ | REG_DECODE_WRITE)
+
 struct RegisterAccessInfo {
     const char *name;
     uint64_t ro;
@@ -71,6 +76,10 @@ struct RegisterAccessInfo {
     void (*post_write)(RegisterInfo *reg, uint64_t val);
 
     uint64_t (*post_read)(RegisterInfo *reg, uint64_t val);
+
+    struct {
+        hwaddr addr;
+    } decode;
 };
 
 /**
