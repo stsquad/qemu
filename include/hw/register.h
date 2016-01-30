@@ -86,12 +86,16 @@ struct RegisterAccessInfo {
  * @prefix: String prefix for log and debug messages
  *
  * @opaque: Opaque data for the register
+ *
+ * @mem: optional Memory region for the register
  */
 
 struct RegisterInfo {
     /* <private> */
     bool read_lite;
     bool write_lite;
+
+    MemoryRegion mem;
 
     /* <public> */
     void *data;
@@ -128,5 +132,31 @@ uint64_t register_read(RegisterInfo *reg);
  */
 
 void register_reset(RegisterInfo *reg);
+
+/**
+ * Memory API MMIO write handler that will write to a Register API register.
+ *  _be for big endian variant and _le for little endian.
+ * @opaque: RegisterInfo to write to
+ * @addr: Address to write
+ * @value: Value to write
+ * @size: Number of bytes to write
+ */
+
+void register_write_memory_be(void *opaque, hwaddr addr, uint64_t value,
+                              unsigned size);
+void register_write_memory_le(void *opaque, hwaddr addr, uint64_t value,
+                              unsigned size);
+
+/**
+ * Memory API MMIO read handler that will read from a Register API register.
+ *  _be for big endian variant and _le for little endian.
+ * @opaque: RegisterInfo to read from
+ * @addr: Address to read
+ * @size: Number of bytes to read
+ * returns: Value read from register
+ */
+
+uint64_t register_read_memory_be(void *opaque, hwaddr addr, unsigned size);
+uint64_t register_read_memory_le(void *opaque, hwaddr addr, unsigned size);
 
 #endif
