@@ -77,6 +77,11 @@ qemu_irq qemu_allocate_irq(qemu_irq_handler handler, void *opaque, int n)
     return irq;
 }
 
+void qemu_irq_set_opaque(qemu_irq irq, void *opaque)
+{
+    irq->opaque = opaque;
+}
+
 void qemu_free_irqs(qemu_irq *s, int n)
 {
     int i;
