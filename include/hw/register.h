@@ -13,6 +13,7 @@
 
 #include "hw/qdev-core.h"
 #include "exec/memory.h"
+#include "hw/irq.h"
 
 typedef struct RegisterInfo RegisterInfo;
 typedef struct RegisterAccessInfo RegisterAccessInfo;
@@ -27,6 +28,18 @@ typedef struct RegisterAccessError {
     uint64_t mask;
     const char *reason;
 } RegisterAccessError;
+
+#define REG_GPIO_POL_HIGH 0
+#define REG_GPIO_POL_LOW  1
+
+typedef struct RegisterGPIOMapping {
+    const char *name;
+    uint8_t bit_pos;
+    bool input;
+    bool polarity;
+    uint8_t num;
+    uint8_t width;
+} RegisterGPIOMapping;
 
 /**
  * Access description for a register that is part of guest accessible device
@@ -77,6 +90,8 @@ struct RegisterAccessInfo {
     void (*post_write)(RegisterInfo *reg, uint64_t val);
 
     uint64_t (*post_read)(RegisterInfo *reg, uint64_t val);
+
+    const RegisterGPIOMapping *gpios;
 
     struct {
         hwaddr addr;
@@ -155,6 +170,17 @@ void register_reset(RegisterInfo *reg);
  */
 
 void register_init(RegisterInfo *reg);
+
+/**
+ * Refresh GPIO outputs based on diff between old value register current value.
+ * GPIOs are refreshed for fields where the old value differs to the current
+ * value.
+ *
+ * @reg: Register to refresh GPIO outs
+ * @old_value: previous value of register
+ */
+
+void register_refresh_gpios(RegisterInfo *reg, uint64_t old_value);
 
 /**
  * Memory API MMIO write handler that will write to a Register API register.
