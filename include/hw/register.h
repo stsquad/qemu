@@ -182,6 +182,26 @@ void register_write_memory_le(void *opaque, hwaddr addr, uint64_t value,
 uint64_t register_read_memory_be(void *opaque, hwaddr addr, unsigned size);
 uint64_t register_read_memory_le(void *opaque, hwaddr addr, unsigned size);
 
+/**
+ * Init a block of consecutive registers into a container MemoryRegion. A
+ * number of constant register definitions are parsed to create a corresponding
+ * array of RegisterInfo's.
+ *
+ * @owner: device owning the registers
+ * @rae: Register definitions to init
+ * @num: number of registers to init (length of @rae)
+ * @ri: Register array to init
+ * @data: Array to use for register data
+ * @container: Memory region to contain new registers
+ * @ops: Memory region ops to access registers.
+ * @debug enabled: turn on/off verbose debug information
+ */
+
+void register_init_block32(DeviceState *owner, const RegisterAccessInfo *rae,
+                           int num, RegisterInfo *ri, uint32_t *data,
+                           MemoryRegion *container, const MemoryRegionOps *ops,
+                           bool debug_enabled);
+
 /* Define constants for a 32 bit register */
 #define REG32(reg, addr)                                                  \
     enum { A_ ## reg = (addr) };                                          \

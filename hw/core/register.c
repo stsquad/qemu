@@ -258,6 +258,35 @@ uint64_t register_read_memory_le(void *opaque, hwaddr addr, unsigned size)
     return register_read_memory(opaque, addr, size, false);
 }
 
+void register_init_block32(DeviceState *owner, const RegisterAccessInfo *rae,
+                           int num, RegisterInfo *ri, uint32_t *data,
+                           MemoryRegion *container, const MemoryRegionOps *ops,
+                           bool debug_enabled)
+{
+    const char *debug_prefix = object_get_typename(OBJECT(owner));
+    int i;
+
+    for (i = 0; i < num; i++) {
+        int index = rae[i].decode.addr / 4;
+        RegisterInfo *r = &ri[index];
+
+        *r = (RegisterInfo) {
+            .data = &data[index],
+            .data_size = sizeof(uint32_t),
+            .access = &rae[i],
+            .debug = debug_enabled,
+            .prefix = debug_prefix,
+            .opaque = owner,
+        };
+        register_init(r);
+
+        memory_region_init_io(&r->mem, OBJECT(owner), ops, r, r->access->name,
+                              sizeof(uint32_t));
+        memory_region_add_subregion_no_print(container,
+                                             r->access->decode.addr, &r->mem);
+    }
+}
+
 static const TypeInfo register_info = {
     .name  = TYPE_REGISTER,
     .parent = TYPE_DEVICE,
