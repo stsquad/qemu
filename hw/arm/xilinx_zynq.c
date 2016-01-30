@@ -275,6 +275,14 @@ static void zynq_init(MachineState *machine)
         sysbus_connect_irq(busdev, n + 1, pic[dma_irqs[n] - IRQ_OFFSET]);
     }
 
+    dev = qdev_create(NULL, "xlnx.ps7-dev-cfg");
+    object_property_add_child(qdev_get_machine(), "xlnx-devcfg", OBJECT(dev),
+                              NULL);
+    qdev_init_nofail(dev);
+    busdev = SYS_BUS_DEVICE(dev);
+    sysbus_connect_irq(busdev, 0, pic[40-IRQ_OFFSET]);
+    sysbus_mmio_map(busdev, 0, 0xF8007000);
+
     zynq_binfo.ram_size = ram_size;
     zynq_binfo.kernel_filename = kernel_filename;
     zynq_binfo.kernel_cmdline = kernel_cmdline;
