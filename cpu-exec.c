@@ -370,12 +370,7 @@ int cpu_exec(CPUState *cpu)
         cpu->halted = 0;
     }
 
-    atomic_mb_set(&tcg_current_cpu, cpu);
     rcu_read_lock();
-
-    if (unlikely(atomic_mb_read(&exit_request))) {
-        cpu->exit_request = 1;
-    }
 
     cc->cpu_exec_enter(cpu);
 
@@ -605,7 +600,6 @@ int cpu_exec(CPUState *cpu)
 
     tcg_cpu_allow_execution(cpu);
     /* Does not need atomic_mb_set because a spurious wakeup is okay.  */
-    atomic_set(&tcg_current_cpu, NULL);
 
     return ret;
 }

@@ -22,9 +22,6 @@
 #include "sysemu/cpus.h"
 #include "exec/memory-internal.h"
 
-bool exit_request;
-CPUState *tcg_current_cpu;
-
 /* Number of safe work pending for all VCPUs. */
 int safe_work_pending;
 
