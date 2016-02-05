@@ -1,0 +1,23 @@
+#!/bin/bash -e
+#
+# Docker test runner
+#
+# Copyright (c) 2016 Red Hat Inc.
+#
+# Authors:
+#  Fam Zheng <famz@redhat.com>
+#
+# This work is licensed under the terms of the GNU GPL, version 2
+# or (at your option) any later version. See the COPYING file in
+# the top-level directory.
+
+# Prepare the environment
+. /etc/profile || true
+export PATH=/usr/lib/ccache:$PATH
+
+tmp=$QEMU_SRC
+QEMU_SRC=/var/tmp/qemu.tmp
+cp -r $tmp $QEMU_SRC
+
+cd $QEMU_SRC/tests/docker
+"$@"
