@@ -1,0 +1,5 @@
+FROM centos:6
+RUN yum install -y \
+    git make gcc g++ \
+    zlib-devel glib2-devel SDL-devel pixman-devel
+
