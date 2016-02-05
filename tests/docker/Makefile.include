@@ -1,0 +1,88 @@
+# Makefile for Docker tests
+
+$(if $(quiet-command),,$(eval include $(SRC_PATH)/rules.mak))
+
+.PHONY: docker docker-build docker-run docker-clean
+
+DOCKER_SUFFIX = .docker
+
+DOCKER_IMAGES := $(patsubst %$(DOCKER_SUFFIX),%, $(shell \
+	ls $(SRC_PATH)/tests/docker/ | grep '$(DOCKER_SUFFIX)$$'))
+
+DOCKER_SCRIPTS := $(shell ls $(SRC_PATH)/tests/docker/ | grep '\.sh$$')
+DOCKER_TESTS := $(filter test-%, $(DOCKER_SCRIPTS))
+DOCKER_TOOLS := $(filter-out test-%, $(DOCKER_SCRIPTS))
+
+TESTS ?= %
+IMAGES ?= %
+
+$(foreach i,$(DOCKER_IMAGES), \
+	$(eval docker-build: docker-build-$i) \
+	$(foreach t,$(DOCKER_SCRIPTS), \
+		$(eval docker-build-$i docker-run-$t@$i: IMAGE=$i) \
+		$(eval docker-run-$t@$i: SCRIPT=$t) \
+		$(eval docker-run-$t@$i: docker-build-$i) \
+		$(if $(filter test-%,$t), \
+			$(eval docker-run: docker-run-$t@$i) \
+			$(eval docker-run-$t@: docker-run-$t@$i) \
+			$(eval docker-run-@$i: docker-run-$t@$i)) \
+))
+
+docker:
+	@echo 'Building QEMU and running tests or tools inside Docker containers'
+	@echo
+	@echo 'Available targets:'
+	@echo
+	@echo '    docker:              Print this help.'
+	@echo '    docker-run:          Run all image/test combinations.'
+	@echo '                         You can override the test cases to run by providing'
+	@echo '                         TESTS="foo bar" in the make command, and the image set'
+	@echo '                         by providing IMAGES="baz qux".'
+	@echo '    docker-clean:        Kill and remove residual docker testing containers.'
+	@echo '    docker-build:        Build all images.'
+	@echo '    docker-build-IMG:    Build image "IMG".'
+	@echo '                         "IMG" is one of the listed image name."'
+	@echo '    docker-run-FOO@BAR:  Run "FOO" in container "BAR".'
+	@echo '                         "FOO" must be one of the listed test/tool name."'
+	@echo '                         "BAR" must be one of the listed image name."'
+	@echo '    docker-run-FOO@:     Run "FOO" in all containers.'
+	@echo '                         "FOO" must be one of the listed test name."'
+	@echo '    docker-run-@BAR:     Run all tests in container "BAR".'
+	@echo '                         "BAR" must be one of the listed image name."'
+	@echo
+	@echo 'Available images:'
+	@echo '    $(DOCKER_IMAGES)'
+	@echo
+	@echo 'Available tests:'
+	@echo '    $(DOCKER_TESTS)'
+	@echo
+	@echo 'Available tools:'
+	@echo '    $(DOCKER_TOOLS)'
+
+docker-build-%:
+	@if test -z "$(IMAGE)"; then echo "Invalid target"; exit 1; fi
+	$(if $(filter $(IMAGES),$(IMAGE)), $(call quiet-command,\
+		$(SRC_PATH)/tests/docker/docker_build qemu:$(IMAGE) \
+			$(SRC_PATH)/tests/docker/$(IMAGE).docker \
+			$(if $V,-v,), "  BUILD $(IMAGE)"))
+
+docker-run-%:
+	@if test -z "$(IMAGE)" || test -z "$(SCRIPT)"; \
+		then echo "Invalid target"; exit 1; \
+	fi
+	$(if $(filter $(TESTS),$(SCRIPT)),$(if $(filter $(IMAGES),$(IMAGE)), \
+		$(call quiet-command,\
+			$(SRC_PATH)/tests/docker/docker_run \
+				--privileged -t --rm --net=none \
+				-v $$(realpath $(SRC_PATH)):/var/tmp/qemu \
+				-e QEMU_SRC=/var/tmp/qemu \
+				-e V=$(V) \
+				-v /var/tmp/qemu-docker-ccache:/var/tmp/ccache \
+				-e CCACHE_DIR=/var/tmp/ccache \
+				qemu:$(IMAGE) \
+				/var/tmp/qemu/tests/docker/run \
+				/var/tmp/qemu/tests/docker/$(SCRIPT); \
+			, "  RUN $(SCRIPT) in $(IMAGE)")))
+
+docker-clean:
+	$(call quiet-command, $(SRC_PATH)/tests/docker/docker_clean)
