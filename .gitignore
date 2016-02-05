@@ -109,3 +109,4 @@ cscope.*
 tags
 TAGS
 *~
+/tests/docker/*.docker.tmp
