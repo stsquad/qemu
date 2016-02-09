@@ -4100,6 +4100,9 @@ int main(int argc, char **argv, char **envp)
         exit(0);
     }
 
+    if (!trace_init_backends()) {
+        exit(1);
+    }
     trace_init_file(trace_file);
 
     /* Open the logfile at this point and set the log mask if necessary.
@@ -4118,10 +4121,6 @@ int main(int argc, char **argv, char **envp)
         qemu_set_log(mask);
     } else {
         qemu_set_log(0);
-    }
-
-    if (!trace_init_backends()) {
-        exit(1);
     }
 
     /* If no data_dir is specified then try to find it relative to the
