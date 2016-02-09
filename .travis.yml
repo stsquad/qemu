@@ -95,10 +95,8 @@ matrix:
     - env: TARGETS=i386-softmmu
            EXTRA_CONFIG="--enable-trace-backends=log"
       compiler: gcc
-    # We currently disable "make check" (until 41fc57e44ed regression fixed)
     - env: TARGETS=x86_64-softmmu
            EXTRA_CONFIG="--enable-trace-backends=simple"
-           TEST_CMD=""
       compiler: gcc
     # We currently disable "make check"
     - env: TARGETS=x86_64-softmmu
