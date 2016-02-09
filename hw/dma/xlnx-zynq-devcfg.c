@@ -37,10 +37,9 @@
 #define XLNX_ZYNQ_DEVCFG_ERR_DEBUG 0
 #endif
 
-#define DB_PRINT(...) do { \
+#define DB_PRINT(fmt, ...) do { \
     if (XLNX_ZYNQ_DEVCFG_ERR_DEBUG) { \
-        qemu_log("%s: ", __func__); \
-        qemu_log(__VA_ARGS__); \
+        qemu_log("%s: "fmt, __func__, ## __VA_ARGS__); \
     } \
 } while (0);
 
@@ -148,7 +147,7 @@ static void xlnx_zynq_devcfg_reset(DeviceState *dev)
 
 static void xlnx_zynq_devcfg_dma_go(XlnxZynqDevcfg *s)
 {
-    for (;;) {
+    do {
         uint8_t buf[BTT_MAX];
         XlnxZynqDevcfgDMACmd *dmah = s->dma_cmd_fifo;
         uint32_t btt = BTT_MAX;
@@ -178,10 +177,7 @@ static void xlnx_zynq_devcfg_dma_go(XlnxZynqDevcfg *s)
                                                                         - 1);
         }
         xlnx_zynq_devcfg_update_ixr(s);
-        if (!s->dma_cmd_fifo_num) { /* All done */
-            return;
-        }
-    }
+    } while (s->dma_cmd_fifo_num);
 }
 
 static void r_ixr_post_write(RegisterInfo *reg, uint64_t val)
