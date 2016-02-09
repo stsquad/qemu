@@ -185,6 +185,7 @@ struct MemoryRegion {
     bool skip_dump;
     bool enabled;
     bool warning_printed; /* For reservations */
+    bool do_not_print;
     uint8_t vga_logging_count;
     MemoryRegion *alias;
     hwaddr alias_offset;
@@ -953,6 +954,22 @@ void memory_region_del_eventfd(MemoryRegion *mr,
 void memory_region_add_subregion(MemoryRegion *mr,
                                  hwaddr offset,
                                  MemoryRegion *subregion);
+
+/**
+ * memory_region_add_subregion_no_print: Add a subregion to a container.
+ *
+ * The same functionality as memory_region_add_subregion except that any
+ * memory regions added by this function are not printed by 'info mtree'.
+ *
+ * @mr: the region to contain the new subregion; must be a container
+ *      initialized with memory_region_init().
+ * @offset: the offset relative to @mr where @subregion is added.
+ * @subregion: the subregion to be added.
+ */
+void memory_region_add_subregion_no_print(MemoryRegion *mr,
+                                          hwaddr offset,
+                                          MemoryRegion *subregion);
+
 /**
  * memory_region_add_subregion_overlap: Add a subregion to a container
  *                                      with overlap.

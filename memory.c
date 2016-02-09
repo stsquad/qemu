@@ -1830,6 +1830,14 @@ void memory_region_add_subregion(MemoryRegion *mr,
     memory_region_add_subregion_common(mr, offset, subregion);
 }
 
+void memory_region_add_subregion_no_print(MemoryRegion *mr,
+                                          hwaddr offset,
+                                          MemoryRegion *subregion)
+{
+    memory_region_add_subregion(mr, offset, subregion);
+    subregion->do_not_print = true;
+}
+
 void memory_region_add_subregion_overlap(MemoryRegion *mr,
                                          hwaddr offset,
                                          MemoryRegion *subregion,
@@ -2220,7 +2228,7 @@ static void mtree_print_mr(fprintf_function mon_printf, void *f,
     const MemoryRegion *submr;
     unsigned int i;
 
-    if (!mr) {
+    if (!mr || mr->do_not_print) {
         return;
     }
 
