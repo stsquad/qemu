@@ -150,3 +150,51 @@ void register_reset(RegisterInfo *reg)
 
     register_write_val(reg, reg->access->reset);
 }
+
+static inline void register_write_memory(void *opaque, hwaddr addr,
+                                         uint64_t value, unsigned size, bool be)
+{
+    RegisterInfo *reg = opaque;
+    uint64_t we = ~0;
+    int shift = 0;
+
+    if (reg->data_size != size) {
+        we = (size == 8) ? ~0ull : (1ull << size * 8) - 1;
+        shift = 8 * (be ? reg->data_size - size - addr : addr);
+    }
+
+    assert(size + addr <= reg->data_size);
+    register_write(reg, value << shift, we << shift);
+}
+
+void register_write_memory_be(void *opaque, hwaddr addr, uint64_t value,
+                              unsigned size)
+{
+    register_write_memory(opaque, addr, value, size, true);
+}
+
+
+void register_write_memory_le(void *opaque, hwaddr addr, uint64_t value,
+                              unsigned size)
+{
+    register_write_memory(opaque, addr, value, size, false);
+}
+
+static inline uint64_t register_read_memory(void *opaque, hwaddr addr,
+                                            unsigned size, bool be)
+{
+    RegisterInfo *reg = opaque;
+    int shift = 8 * (be ? reg->data_size - size - addr : addr);
+
+    return register_read(reg) >> shift;
+}
+
+uint64_t register_read_memory_be(void *opaque, hwaddr addr, unsigned size)
+{
+    return register_read_memory(opaque, addr, size, true);
+}
+
+uint64_t register_read_memory_le(void *opaque, hwaddr addr, unsigned size)
+{
+    return register_read_memory(opaque, addr, size, false);
+}
