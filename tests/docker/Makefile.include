@@ -2,7 +2,7 @@
 
 $(if $(quiet-command),,$(eval include $(SRC_PATH)/rules.mak))
 
-.PHONY: docker docker-build docker-run docker-clean
+.PHONY: docker docker-build docker-qemu-src docker-run docker-clean
 
 DOCKER_SUFFIX = .docker
 
@@ -16,12 +16,17 @@ DOCKER_TOOLS := $(filter-out test-%, $(DOCKER_SCRIPTS))
 TESTS ?= %
 IMAGES ?= %
 
+docker-qemu-src:
+	$(if git diff-index --quiet HEAD --, 										\
+		git archive -1 HEAD --prefix=qemu-docker-snapshot/ --format=tar.gz | tar -xz -C /tmp,			\
+		git archive -1 `git stash create` --prefix=qemu-docker-snapshot/ --format=tar.gz | tar -xz -C /tmp)
+
 $(foreach i,$(DOCKER_IMAGES), \
 	$(eval docker-build: docker-build-$i) \
 	$(foreach t,$(DOCKER_SCRIPTS), \
 		$(eval docker-build-$i docker-run-$t@$i: IMAGE=$i) \
 		$(eval docker-run-$t@$i: SCRIPT=$t) \
-		$(eval docker-run-$t@$i: docker-build-$i) \
+		$(eval docker-run-$t@$i: docker-build-$i docker-qemu-src) \
 		$(if $(filter test-%,$t), \
 			$(eval docker-run: docker-run-$t@$i) \
 			$(eval docker-run-$t@: docker-run-$t@$i) \
@@ -74,7 +79,7 @@ docker-run-%:
 		$(call quiet-command,\
 			$(SRC_PATH)/tests/docker/docker_run \
 				--privileged -t --rm --net=none \
-				-v $$(realpath $(SRC_PATH)):/var/tmp/qemu \
+				-v $$(realpath /tmp/qemu-docker-snapshot/):/var/tmp/qemu \
 				-e QEMU_SRC=/var/tmp/qemu \
 				-e V=$(V) \
 				-v /var/tmp/qemu-docker-ccache:/var/tmp/ccache \
