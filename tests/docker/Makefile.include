@@ -60,6 +60,8 @@ docker:
 	@echo '    TESTS="x y z .."     Filters which tests to run (for docker-test).'
 	@echo '    J=[0..9]*            Overrides the -jN parameter for make commands'
 	@echo '                         (default is 1)'
+	@echo '    PAUSE=1              Stop and drop to shell in the created container'
+	@echo '                         before running the command.'
 
 docker-image-%:
 	@if test -z "$(IMAGE)"; then echo "Invalid target"; exit 1; fi
@@ -79,9 +81,10 @@ docker-run-%:
 		$(call quiet-command,\
 			$(SRC_PATH)/tests/docker/docker_run $(if $(KEEP),,--rm) \
 				--privileged -t --net=none \
+				$(if $(PAUSE),-i) \
 				-v $$(realpath $(SRC_PATH)):/var/tmp/qemu \
 				-e QEMU_SRC=/var/tmp/qemu \
-				-e V=$V -e J=$J \
+				-e V=$V -e J=$J -e PAUSE=$(PAUSE)\
 				-v /var/tmp/qemu-docker-ccache:/var/tmp/ccache \
 				-e CCACHE_DIR=/var/tmp/ccache \
 				qemu:$(IMAGE) \

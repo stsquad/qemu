@@ -23,4 +23,12 @@ if test -n "$J"; then
 fi
 
 cd $QEMU_SRC/tests/docker
+
+if test -n "$PAUSE"; then
+    echo "* Prepared to run command:"
+    echo "  $@"
+    echo "* Hit Ctrl-D to continue, or type 'exit 1' to quit"
+    echo
+    $SHELL
+fi
 "$@"
