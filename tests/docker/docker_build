@@ -1,0 +1,42 @@
+#!/usr/bin/env python2
+#
+# Compare to Dockerfile and rebuild a docker image if necessary.
+#
+# Copyright (c) 2016 Red Hat Inc.
+#
+# Authors:
+#  Fam Zheng <famz@redhat.com>
+#
+# This work is licensed under the terms of the GNU GPL, version 2
+# or (at your option) any later version. See the COPYING file in
+# the top-level directory.
+
+import sys
+import docker
+import argparse
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("tag",
+                        help="Image Tag")
+    parser.add_argument("dockerfile",
+                        help="Dockerfile name")
+    parser.add_argument("--verbose", "-v", action="store_true",
+                        help="Print verbose information")
+    args = parser.parse_args()
+
+    dockerfile = open(args.dockerfile, "rb").read()
+    tag = args.tag
+
+    dkr = docker.Docker()
+    if dkr.image_matches_dockerfile(tag, dockerfile):
+        if args.verbose:
+            print "Image is up to date."
+        return 0
+
+    quiet = not args.verbose
+    dkr.build_image(tag, dockerfile, args.dockerfile, quiet=quiet)
+    return 0
+
+if __name__ == "__main__":
+    sys.exit(main())
