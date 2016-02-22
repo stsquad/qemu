@@ -124,6 +124,16 @@
     _old;                                                               \
     })
 
+#define atomic_bool_cmpxchg(ptr, old, new)                              \
+    ({                                                                  \
+    typeof(*ptr) _old = (old), _new = (new);                            \
+    bool r;                                                             \
+    r = __atomic_compare_exchange(ptr, &_old, &_new, false,             \
+                                  __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);  \
+    r;                                                                  \
+    })
+
+
 /* Provide shorter names for GCC atomic builtins, return old value */
 #define atomic_fetch_inc(ptr)  __atomic_fetch_add(ptr, 1, __ATOMIC_SEQ_CST)
 #define atomic_fetch_dec(ptr)  __atomic_fetch_sub(ptr, 1, __ATOMIC_SEQ_CST)
