@@ -1094,6 +1094,9 @@ static void *qemu_tcg_cpu_thread_fn(void *arg)
     cpu->can_do_io = 1;
     /* process any pending work */
     cpu->exit_request = 1;
+
+    current_cpu = cpu;
+
     qemu_cond_signal(&qemu_cpu_cond);
 
     while (1) {

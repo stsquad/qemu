@@ -90,8 +90,9 @@ static MemoryRegion io_mem_unassigned;
 #endif
 
 struct CPUTailQ cpus = QTAILQ_HEAD_INITIALIZER(cpus);
-/* current CPU in the current thread. It is only valid inside
-   cpu_exec() */
+/* Current CPU in the current thread.
+ * If it is not set then this is not a CPU thread.
+ */
 __thread CPUState *current_cpu;
 /* 0 = Do not count executed instructions.
    1 = Precise instruction counting.
