@@ -124,6 +124,11 @@ TCGContext tcg_ctx;
 /* translation block context */
 __thread int have_tb_lock;
 
+void assert_tb_lock(void)
+{
+    g_assert(have_tb_lock);
+}
+
 void tb_lock(void)
 {
     assert(!have_tb_lock);
