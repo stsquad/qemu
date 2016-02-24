@@ -228,17 +228,20 @@ static TranslationBlock *tb_find_physical(CPUState *cpu,
     tb_page_addr_t phys_pc, phys_page1;
     target_ulong virt_page2;
 
+    assert_tb_lock();
+
     tcg_ctx.tb_ctx.tb_invalidated_flag = 0;
 
     /* find translated block using physical mappings */
     phys_pc = get_page_addr_code(env, pc);
     phys_page1 = phys_pc & TARGET_PAGE_MASK;
     h = tb_phys_hash_func(phys_pc);
+
     ptb1 = &tcg_ctx.tb_ctx.tb_phys_hash[h];
     for(;;) {
         tb = *ptb1;
         if (!tb) {
-            return NULL;
+            break;
         }
         if (tb->pc == pc &&
             tb->page_addr[0] == phys_page1 &&
