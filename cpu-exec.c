@@ -274,30 +274,19 @@ static TranslationBlock *tb_find_slow(CPUState *cpu,
 {
     TranslationBlock *tb;
 
-    tb = tb_find_physical(cpu, pc, cs_base, flags);
-    if (tb) {
-        goto found;
-    }
-
     /* mmap_lock is needed by tb_gen_code, and mmap_lock must be
-     * taken outside tb_lock.  Since we're momentarily dropping
-     * tb_lock, there's a chance that our desired tb has been
-     * translated.
+     * taken outside tb_lock.
      */
-    tb_unlock();
     mmap_lock();
     tb_lock();
     tb = tb_find_physical(cpu, pc, cs_base, flags);
-    if (tb) {
-        mmap_unlock();
-        goto found;
-    }
-
     /* if no translated code available, then translate it now */
-    tb = tb_gen_code(cpu, pc, cs_base, flags, 0);
-
+    if (!tb) {
+        tb = tb_gen_code(cpu, pc, cs_base, flags, 0);
+    }
+    tb_unlock();
     mmap_unlock();
-found:
+
     /* we add the TB in the virtual pc hash table */
     cpu->tb_jmp_cache[tb_jmp_cache_hash_func(pc)] = tb;
     return tb;
@@ -494,10 +483,10 @@ int cpu_exec(CPUState *cpu)
                     cpu->exception_index = EXCP_INTERRUPT;
                     cpu_loop_exit(cpu);
                 }
-                tb_lock();
                 tb = tb_find_fast(cpu);
                 /* Note: we do it here to avoid a gcc bug on Mac OS X when
                    doing it in tb_find_slow */
+                tb_lock();
                 if (tcg_ctx.tb_ctx.tb_invalidated_flag) {
                     /* as some TB could have been invalidated because
                        of memory exceptions while generating the code, we
