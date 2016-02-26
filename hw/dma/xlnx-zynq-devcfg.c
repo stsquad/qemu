@@ -24,6 +24,7 @@
  * THE SOFTWARE.
  */
 
+#include "qemu/osdep.h"
 #include "hw/dma/xlnx-zynq-devcfg.h"
 #include "qemu/bitops.h"
 #include "sysemu/sysemu.h"
