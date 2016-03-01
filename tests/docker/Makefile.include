@@ -95,7 +95,7 @@ docker-run-%: docker-qemu-src
 			$(SRC_PATH)/tests/docker/docker_run $(if $(KEEP),,--rm) \
 				--privileged -t --net=none \
 				$(if $(PAUSE),-i) \
-				-v $$(realpath $(SRC_PATH)):/var/tmp/qemu \
+				-v $$(realpath $(SRC_COPY)):/var/tmp/qemu \
 				-e QEMU_SRC=/var/tmp/qemu \
 				-e V=$V -e J=$J -e PAUSE=$(PAUSE)\
 				-v /var/tmp/qemu-docker-ccache:/var/tmp/ccache \
