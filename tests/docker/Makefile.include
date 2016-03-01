@@ -5,9 +5,9 @@ $(if $(quiet-command),,$(eval include $(SRC_PATH)/rules.mak))
 .PHONY: docker docker-test docker-clean docker-image docker-qemu-src
 
 DOCKER_SUFFIX := .docker
-
-DOCKER_IMAGES := $(notdir $(basename \
-	$(wildcard $(SRC_PATH)/tests/docker/dockerfiles/*)))
+DOCKER_FILES_DIR := $(SRC_PATH)/tests/docker/dockerfiles
+DOCKER_IMAGES := $(notdir $(basename $(wildcard $(DOCKER_FILES_DIR)/*)))
+DOCKER_TARGETS := $(patsubst %,docker-image-%,$(DOCKER_IMAGES))
 
 DOCKER_TESTS := $(notdir $(shell \
 	find $(SRC_PATH)/tests/docker/ -name 'test-*' -type f -executable))
@@ -32,10 +32,17 @@ $(SRC_COPY):
 
 docker-qemu-src: $(SRC_COPY)
 
+.PHONY: docker-image
+docker-image: ${DOCKER_TARGETS}
+
+# General rule for building docker images
+docker-image-%: $(DOCKER_FILES_DIR)/%.docker
+	$(call quiet-command,\
+		$(SRC_PATH)/tests/docker/docker_build qemu:$* $< \
+		$(if $V,-v,), "  BUILD qemu:$*")
+
+# Expand all the pre-requistes for each docker image and test combination
 $(foreach i,$(DOCKER_IMAGES), \
-	$(eval docker-image: docker-image-$i) \
-	$(eval docker-image-$i: IMAGE = $i) \
-	$(eval .PHONY: docker-image-$i docker-@$i) \
 	$(foreach t,$(DOCKER_TESTS) $(DOCKER_TOOLS), \
 		$(eval .PHONY: docker-$t@$i) \
 		$(eval docker-$t@$i: docker-image-$i docker-run-$t@$i) \
@@ -76,14 +83,6 @@ docker:
 	@echo '                         (default is 1)'
 	@echo '    PAUSE=1              Stop and drop to shell in the created container'
 	@echo '                         before running the command.'
-
-docker-image-%:
-	@if test -z "$(IMAGE)"; then echo "Invalid target"; exit 1; fi
-	$(if $(filter $(IMAGES),$(IMAGE)), $(call quiet-command,\
-		$(SRC_PATH)/tests/docker/docker_build qemu:$(IMAGE) \
-			$(SRC_PATH)/tests/docker/dockerfiles/$(IMAGE).docker \
-			$(if $V,-v,), "  BUILD $(IMAGE)"))
-
 
 docker-run-%: CMD = $(shell echo '$@' | sed -e 's/docker-run-\([^@]*\)@\(.*\)/\1/')
 docker-run-%: IMAGE = $(shell echo '$@' | sed -e 's/docker-run-\([^@]*\)@\(.*\)/\2/')
