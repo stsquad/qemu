@@ -16,8 +16,11 @@
 mkdir build
 mkdir install
 cd build
+echo "Building"
 build_qemu \
     --prefix="${pwd}/install" \
     --target-list="$(echo {x86_64,i386,arm,aarch64}-{softmmu,linux-user})"
+echo "Check"
 make check $MAKEFLAGS
+echo "Install"
 make install

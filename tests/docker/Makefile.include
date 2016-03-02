@@ -101,7 +101,7 @@ docker-run-%: docker-qemu-src
 				-v /var/tmp/qemu-docker-ccache:/var/tmp/ccache \
 				-e CCACHE_DIR=/var/tmp/ccache \
 				qemu:$(IMAGE) \
-				/var/tmp/qemu/tests/docker/run \
+				$(if $V,/bin/bash -x ,)/var/tmp/qemu/tests/docker/run \
 				/var/tmp/qemu/tests/docker/$(CMD); \
 			, "  RUN $(CMD) in $(IMAGE)")))
 

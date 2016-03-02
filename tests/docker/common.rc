@@ -23,7 +23,7 @@ requires()
 
 build_qemu()
 {
-    make -C $QEMU_SRC distclean &>/dev/null
+    make -C $QEMU_SRC distclean
     $QEMU_SRC/configure "$@"
     make $MAKEFLAGS
 }
