@@ -146,3 +146,73 @@ void register_reset(RegisterInfo *reg)
 
     register_write_val(reg, reg->access->reset);
 }
+
+static inline void register_write_memory(void *opaque, hwaddr addr,
+                                         uint64_t value, unsigned size, bool be)
+{
+    RegisterInfoArray *reg_array = opaque;
+    RegisterInfo *reg = NULL;
+    uint64_t we = ~0;
+    int i, shift = 0;
+
+    for (i = 0; i < reg_array->num_elements; i++) {
+        if (reg_array->r[i]->access->decode.addr == addr) {
+            reg = reg_array->r[i];
+            break;
+        }
+    }
+    assert(reg);
+
+    /* Generate appropriate write enable mask and shift values */
+    if (reg->data_size < size) {
+        we = MAKE_64BIT_MASK(0, reg->data_size * 8);
+        shift = 8 * (be ? reg->data_size - size : 0);
+    } else if (reg->data_size >= size) {
+        we = MAKE_64BIT_MASK(0, size * 8);
+    }
+
+    register_write(reg, value << shift, we << shift);
+}
+
+void register_write_memory_be(void *opaque, hwaddr addr, uint64_t value,
+                              unsigned size)
+{
+    register_write_memory(opaque, addr, value, size, true);
+}
+
+
+void register_write_memory_le(void *opaque, hwaddr addr, uint64_t value,
+                              unsigned size)
+{
+    register_write_memory(opaque, addr, value, size, false);
+}
+
+static inline uint64_t register_read_memory(void *opaque, hwaddr addr,
+                                            unsigned size, bool be)
+{
+    RegisterInfoArray *reg_array = opaque;
+    RegisterInfo *reg = NULL;
+    int i, shift;
+
+    for (i = 0; i < reg_array->num_elements; i++) {
+        if (reg_array->r[i]->access->decode.addr == addr) {
+            reg = reg_array->r[i];
+            break;
+        }
+    }
+    assert(reg);
+
+    shift = 8 * (be ? reg->data_size - size : 0);
+
+    return (register_read(reg) >> shift) & MAKE_64BIT_MASK(0, size * 8);
+}
+
+uint64_t register_read_memory_be(void *opaque, hwaddr addr, unsigned size)
+{
+    return register_read_memory(opaque, addr, size, true);
+}
+
+uint64_t register_read_memory_le(void *opaque, hwaddr addr, unsigned size)
+{
+    return register_read_memory(opaque, addr, size, false);
+}

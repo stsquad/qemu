@@ -15,6 +15,7 @@
 
 typedef struct RegisterInfo RegisterInfo;
 typedef struct RegisterAccessInfo RegisterAccessInfo;
+typedef struct RegisterInfoArray RegisterInfoArray;
 
 /**
  * Access description for a register that is part of guest accessible device
@@ -51,6 +52,10 @@ struct RegisterAccessInfo {
     void (*post_write)(RegisterInfo *reg, uint64_t val);
 
     uint64_t (*post_read)(RegisterInfo *reg, uint64_t val);
+
+    struct {
+        hwaddr addr;
+    } decode;
 };
 
 /**
@@ -82,6 +87,26 @@ struct RegisterInfo {
 };
 
 /**
+ * This structure is used to group all of the individual registers which are
+ * modeled using the RegisterInfo strucutre.
+ *
+ * @r is an aray containing of all the relevent RegisterInfo structures.
+ *
+ * @num_elements is the number of elements in the array r
+ *
+ * @mem: optional Memory region for the register
+ */
+
+struct RegisterInfoArray {
+    /* <private> */
+    MemoryRegion mem;
+
+    /* <public> */
+    int num_elements;
+    RegisterInfo **r;
+};
+
+/**
  * write a value to a register, subject to its restrictions
  * @reg: register to write to
  * @val: value to write
@@ -104,5 +129,31 @@ uint64_t register_read(RegisterInfo *reg);
  */
 
 void register_reset(RegisterInfo *reg);
+
+/**
+ * Memory API MMIO write handler that will write to a Register API register.
+ *  _be for big endian variant and _le for little endian.
+ * @opaque: RegisterInfo to write to
+ * @addr: Address to write
+ * @value: Value to write
+ * @size: Number of bytes to write
+ */
+
+void register_write_memory_be(void *opaque, hwaddr addr, uint64_t value,
+                              unsigned size);
+void register_write_memory_le(void *opaque, hwaddr addr, uint64_t value,
+                              unsigned size);
+
+/**
+ * Memory API MMIO read handler that will read from a Register API register.
+ *  _be for big endian variant and _le for little endian.
+ * @opaque: RegisterInfo to read from
+ * @addr: Address to read
+ * @size: Number of bytes to read
+ * returns: Value read from register
+ */
+
+uint64_t register_read_memory_be(void *opaque, hwaddr addr, unsigned size);
+uint64_t register_read_memory_le(void *opaque, hwaddr addr, unsigned size);
 
 #endif
