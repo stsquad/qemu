@@ -136,61 +136,56 @@ void tlb_flush(CPUState *cpu, int flush_global)
  */
 static void tlb_flush_by_mmuidx_async_work(void * opaque)
 {
-    GArray *indexes = (GArray *) opaque;
+    unsigned long bitmap = GPOINTER_TO_UINT(opaque);
     CPUState *cpu = current_cpu;
     CPUArchState *env = cpu->env_ptr;
-    int i;
-
-    tlb_debug("%d tables\n", indexes->len);
+    int mmu_idx;
 
     /* must reset current TB so that interrupts cannot modify the
        links while we are modifying them */
     cpu->current_tb = NULL;
 
-    for (i = 0; i < indexes->len; i++) {
-        int mmu_idx = g_array_index(indexes, int, i);
-        memset(env->tlb_table[mmu_idx], -1, sizeof(env->tlb_table[0]));
-        memset(env->tlb_v_table[mmu_idx], -1, sizeof(env->tlb_v_table[0]));
+    for (mmu_idx = 0; mmu_idx < NB_MMU_MODES; mmu_idx++) {
+        if (test_bit(mmu_idx, &bitmap)) {
+            memset(env->tlb_table[mmu_idx], -1, sizeof(env->tlb_table[0]));
+            memset(env->tlb_v_table[mmu_idx], -1, sizeof(env->tlb_v_table[0]));
+        }
     }
 
     memset(cpu->tb_jmp_cache, 0, sizeof(cpu->tb_jmp_cache));
-    g_array_free(indexes, TRUE);
 }
 
-/* Helper function to slurp va_args list into a GArray
- *
- * This introduces mallocs to what should be a fast path but its
- * better than trying to preserve a va_list across deferred
- * asynchronous tasks.
+/* Helper function to slurp va_args list into a bitmap
  */
-static inline GArray * make_mmu_index_array(va_list args)
+static inline unsigned long make_mmu_index_bitmap(va_list args)
 {
-    GArray *indexes = g_array_sized_new(FALSE, FALSE, sizeof(int), 8);
+    unsigned long bitmap = 0;
+    int mmu_index = va_arg(args, int);
 
-    while (1) {
-        int mmu_index = va_arg(args, int);
-        if (mmu_index < 0) {
-            break;
-        }
-        g_array_append_val(indexes, mmu_index);
-    }
+    /* An empty va_list would be a bad call */
+    g_assert(mmu_index > 0);
 
-    return indexes;
+    do {
+        set_bit(mmu_index, &bitmap);
+        mmu_index = va_arg(args, int);
+    } while (mmu_index >= 0);
+
+    return bitmap;
 }
 
 void tlb_flush_by_mmuidx(CPUState *cpu, ...)
 {
     va_list argp;
-    GArray *indexes;
+    unsigned long bitmap;
 
     va_start(argp, cpu);
-    indexes = make_mmu_index_array(argp);
+    bitmap = make_mmu_index_bitmap(argp);
     va_end(argp);
 
     if (qemu_cpu_is_self(cpu)) {
-        tlb_flush_by_mmuidx_async_work(indexes);
+        tlb_flush_by_mmuidx_async_work(GUINT_TO_POINTER(bitmap));
     } else {
-        async_run_on_cpu(cpu, tlb_flush_by_mmuidx_async_work, indexes);
+        async_run_on_cpu(cpu, tlb_flush_by_mmuidx_async_work, GUINT_TO_POINTER(bitmap));
     }
 }
 
@@ -250,7 +245,7 @@ void tlb_flush_page(CPUState *cpu, target_ulong addr)
 
 struct TLBFlushPageByMMUidxParams {
     target_ulong addr;
-    GArray *indexes;
+    unsigned long mmu_idx_bitmap;
 };
 
 static void tlb_flush_page_by_mmuidx_async_work(void *opaque)
@@ -271,9 +266,9 @@ static void tlb_flush_page_by_mmuidx_async_work(void *opaque)
                   TARGET_FMT_lx "/" TARGET_FMT_lx ")\n",
                   env->tlb_flush_addr, env->tlb_flush_mask);
 
-        tlb_flush_by_mmuidx_async_work(params->indexes);
+        tlb_flush_by_mmuidx_async_work(GUINT_TO_POINTER(params->mmu_idx_bitmap));
     } else {
-        int i, entry;
+        int mmu_idx, entry;
 
         /* must reset current TB so that interrupts cannot modify the
            links while we are modifying them */
@@ -282,28 +277,28 @@ static void tlb_flush_page_by_mmuidx_async_work(void *opaque)
         addr &= TARGET_PAGE_MASK;
         entry = (addr >> TARGET_PAGE_BITS) & (CPU_TLB_SIZE - 1);
 
-        for (i=0; i<params->indexes->len; i++) {
-            int mmu_idx = g_array_index(params->indexes, int, i);
-            int k;
+        for (mmu_idx = 0; mmu_idx < NB_MMU_MODES; mmu_idx++) {
+            if (test_bit(mmu_idx, &params->mmu_idx_bitmap)) {
+                    int k;
 
-            tlb_debug("idx %d\n", mmu_idx);
+                    tlb_debug("idx %d\n", mmu_idx);
 
-            tlb_flush_entry(&env->tlb_table[mmu_idx][entry], addr);
+                    tlb_flush_entry(&env->tlb_table[mmu_idx][entry], addr);
 
-            /* check whether there are vltb entries that need to be flushed */
-            for (k = 0; k < CPU_VTLB_SIZE; k++) {
-                tlb_flush_entry(&env->tlb_v_table[mmu_idx][k], addr);
+                    /* check whether there are vltb entries that need to be flushed */
+                    for (k = 0; k < CPU_VTLB_SIZE; k++) {
+                        tlb_flush_entry(&env->tlb_v_table[mmu_idx][k], addr);
+                    }
             }
         }
 
         tb_flush_jmp_cache(current_cpu, params->addr);
-        g_array_free(params->indexes, TRUE);
     }
 
     g_free(params);
 }
 
-
+/* TODO: re-write using a bitmap and single ptr */
 void tlb_flush_page_by_mmuidx(CPUState *cpu, target_ulong addr, ...)
 {
     va_list argp;
@@ -314,7 +309,7 @@ void tlb_flush_page_by_mmuidx(CPUState *cpu, target_ulong addr, ...)
     params = g_malloc(sizeof(*params));
     params->addr = addr;
     va_start(argp, addr);
-    params->indexes = make_mmu_index_array(argp);
+    params->mmu_idx_bitmap = make_mmu_index_bitmap(argp);
     va_end(argp);
 
     if (qemu_cpu_is_self(cpu)) {
