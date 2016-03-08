@@ -589,6 +589,15 @@ void qdev_pass_gpios(DeviceState *dev, DeviceState *container,
     QLIST_INSERT_HEAD(&container->gpios, ngl, node);
 }
 
+void qdev_pass_all_gpios(DeviceState *dev, DeviceState *container)
+{
+    NamedGPIOList *ngl;
+
+    QLIST_FOREACH(ngl, &dev->gpios, node) {
+        qdev_pass_gpios(dev, container, ngl->name);
+    }
+}
+
 BusState *qdev_get_child_bus(DeviceState *dev, const char *name)
 {
     BusState *bus;
