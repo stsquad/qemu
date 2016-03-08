@@ -1026,6 +1026,7 @@ bool async_safe_work_pending(void)
 static void flush_queued_work(CPUState *cpu)
 {
     struct qemu_work_item *wi;
+    int flushed_count = 0;
 
     if (cpu->queued_work_first == NULL) {
         return;
@@ -1046,9 +1047,14 @@ static void flush_queued_work(CPUState *cpu)
         } else {
             atomic_mb_set(&wi->done, true);
         }
+        flushed_count++;
     }
     qemu_mutex_unlock(&cpu->work_mutex);
     qemu_cond_broadcast(&qemu_work_cond);
+
+    if (flushed_count > 2) {
+        fprintf(stderr,"%s: CPU%d flushed %d jobs\n", __func__, cpu->cpu_index, flushed_count);
+    }
 }
 
 static void qemu_wait_io_event_common(CPUState *cpu)
