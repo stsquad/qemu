@@ -161,4 +161,42 @@ void register_write_memory_le(void *opaque, hwaddr addr, uint64_t value,
 uint64_t register_read_memory_be(void *opaque, hwaddr addr, unsigned size);
 uint64_t register_read_memory_le(void *opaque, hwaddr addr, unsigned size);
 
+/* Define constants for a 32 bit register */
+#define REG32(reg, addr)                                                  \
+    enum { A_ ## reg = (addr) };                                          \
+    enum { R_ ## reg = (addr) / 4 };
+
+/* Define SHIFT, LEGTH and MASK constants for a field within a register */
+#define FIELD(reg, field, shift, length)                                  \
+    enum { R_ ## reg ## _ ## field ## _SHIFT = (shift)};                  \
+    enum { R_ ## reg ## _ ## field ## _LENGTH = (length)};                \
+    enum { R_ ## reg ## _ ## field ## _MASK = (((1ULL << (length)) - 1)   \
+                                          << (shift)) };
+
+/* Extract a field from a register */
+
+#define F_EX32(storage, reg, field)                                       \
+    extract32((storage), R_ ## reg ## _ ## field ## _SHIFT,               \
+              R_ ## reg ## _ ## field ## _LENGTH)
+
+/* Extract a field from an array of registers */
+
+#define AF_EX32(regs, reg, field)                                         \
+    F_EX32((regs)[R_ ## reg], reg, field)
+
+/* Deposit a register field.  */
+
+#define F_DP32(storage, reg, field, val) ({                               \
+    struct {                                                              \
+        unsigned int v:R_ ## reg ## _ ## field ## _LENGTH;                \
+    } v = { .v = val };                                                   \
+    uint32_t d;                                                           \
+    d = deposit32((storage), R_ ## reg ## _ ## field ## _SHIFT,           \
+                  R_ ## reg ## _ ## field ## _LENGTH, v.v);               \
+    d; })
+
+/* Deposit a field to array of registers.  */
+
+#define AF_DP32(regs, reg, field, val)                                    \
+    (regs)[R_ ## reg] = F_DP32((regs)[R_ ## reg], reg, field, val);
 #endif
