@@ -100,6 +100,7 @@ void register_write(RegisterInfo *reg, uint64_t val, uint64_t we)
     }
 
     register_write_val(reg, new_val);
+    register_refresh_gpios(reg, old_val);
 
     if (ac->post_write) {
         ac->post_write(reg, new_val);
@@ -139,23 +140,117 @@ uint64_t register_read(RegisterInfo *reg)
 void register_reset(RegisterInfo *reg)
 {
     g_assert(reg);
+    uint64_t old_val;
 
     if (!reg->data || !reg->access) {
         return;
     }
 
+    old_val = register_read_val(reg);
+
     register_write_val(reg, reg->access->reset);
+    register_refresh_gpios(reg, old_val);
+}
+
+void register_refresh_gpios(RegisterInfo *reg, uint64_t old_value)
+{
+    const RegisterAccessInfo *ac;
+    const RegisterGPIOMapping *gpio;
+
+    ac = reg->access;
+    for (gpio = ac->gpios; gpio && gpio->name; gpio++) {
+        int i;
+
+        if (gpio->input) {
+            continue;
+        }
+
+        for (i = 0; i < gpio->num; ++i) {
+            uint64_t gpio_value, gpio_value_old;
+
+            qemu_irq gpo = qdev_get_gpio_out_named(DEVICE(reg), gpio->name, i);
+            gpio_value_old = extract64(old_value,
+                                       gpio->bit_pos + i * gpio->width,
+                                       gpio->width) ^ gpio->polarity;
+            gpio_value = extract64(register_read_val(reg),
+                                   gpio->bit_pos + i * gpio->width,
+                                   gpio->width) ^ gpio->polarity;
+            if (!(gpio_value_old ^ gpio_value)) {
+                continue;
+            }
+            if (reg->debug && gpo) {
+                qemu_log("refreshing gpio out %s to %" PRIx64 "\n",
+                         gpio->name, gpio_value);
+            }
+            qemu_set_irq(gpo, gpio_value);
+        }
+    }
+}
+
+typedef struct DeviceNamedGPIOHandlerOpaque {
+    DeviceState *dev;
+    const char *name;
+} DeviceNamedGPIOHandlerOpaque;
+
+static void register_gpio_handler(void *opaque, int n, int level)
+{
+    DeviceNamedGPIOHandlerOpaque *gho = opaque;
+    RegisterInfo *reg = REGISTER(gho->dev);
+
+    const RegisterAccessInfo *ac;
+    const RegisterGPIOMapping *gpio;
+
+    ac = reg->access;
+    for (gpio = ac->gpios; gpio && gpio->name; gpio++) {
+        if (gpio->input && !strcmp(gho->name, gpio->name)) {
+            register_write_val(reg, deposit64(register_read_val(reg),
+                                              gpio->bit_pos + n * gpio->width,
+                                              gpio->width,
+                                              level ^ gpio->polarity));
+            return;
+        }
+    }
+
+    abort();
 }
 
 void register_init(RegisterInfo *reg)
 {
     assert(reg);
+    const RegisterAccessInfo *ac;
+    const RegisterGPIOMapping *gpio;
 
     if (!reg->data || !reg->access) {
         return;
     }
 
     object_initialize((void *)reg, sizeof(*reg), TYPE_REGISTER);
+
+    ac = reg->access;
+    for (gpio = ac->gpios; gpio && gpio->name; gpio++) {
+        if (!gpio->num) {
+            ((RegisterGPIOMapping *)gpio)->num = 1;
+        }
+        if (!gpio->width) {
+            ((RegisterGPIOMapping *)gpio)->width = 1;
+        }
+        if (gpio->input) {
+            DeviceNamedGPIOHandlerOpaque gho = {
+                .name = gpio->name,
+                .dev = DEVICE(reg),
+            };
+            qemu_irq irq;
+
+            qdev_init_gpio_in_named(DEVICE(reg), register_gpio_handler,
+                                    gpio->name, gpio->num);
+            irq = qdev_get_gpio_in_named(DEVICE(reg), gpio->name, gpio->num);
+            qemu_irq_set_opaque(irq, g_memdup(&gho, sizeof(gho)));
+        } else {
+            qemu_irq *gpos = g_new0(qemu_irq, gpio->num);
+
+            qdev_init_gpio_out_named(DEVICE(reg), gpos, gpio->name, gpio->num);
+        }
+    }
 }
 
 static inline void register_write_memory(void *opaque, hwaddr addr,
@@ -253,6 +348,7 @@ void register_init_block32(DeviceState *owner, const RegisterAccessInfo *rae,
             .opaque = owner,
         };
         register_init(r);
+        qdev_pass_all_gpios(DEVICE(r), owner);
 
         r_array->r[r_array->num_elements] = r;
         r_array->num_elements++;
