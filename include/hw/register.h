@@ -11,6 +11,7 @@
 #ifndef REGISTER_H
 #define REGISTER_H
 
+#include "hw/qdev-core.h"
 #include "exec/memory.h"
 
 typedef struct RegisterInfo RegisterInfo;
@@ -79,6 +80,9 @@ struct RegisterAccessInfo {
  */
 
 struct RegisterInfo {
+    /* <private> */
+    DeviceState parent_obj;
+
     /* <public> */
     void *data;
     int data_size;
@@ -90,6 +94,9 @@ struct RegisterInfo {
 
     void *opaque;
 };
+
+#define TYPE_REGISTER "qemu,register"
+#define REGISTER(obj) OBJECT_CHECK(RegisterInfo, (obj), TYPE_REGISTER)
 
 /**
  * This structure is used to group all of the individual registers which are
@@ -134,6 +141,14 @@ uint64_t register_read(RegisterInfo *reg);
  */
 
 void register_reset(RegisterInfo *reg);
+
+/**
+ * Initialize a register. GPIO's are setup as IOs to the specified device.
+ * Fast paths for eligible registers are enabled.
+ * @reg: Register to initialize
+ */
+
+void register_init(RegisterInfo *reg);
 
 /**
  * Memory API MMIO write handler that will write to a Register API register.
