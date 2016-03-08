@@ -228,6 +228,45 @@ uint64_t register_read_memory_le(void *opaque, hwaddr addr, unsigned size)
     return register_read_memory(opaque, addr, size, false);
 }
 
+void register_init_block32(DeviceState *owner, const RegisterAccessInfo *rae,
+                           int num, RegisterInfo *ri, uint32_t *data,
+                           MemoryRegion *container, const MemoryRegionOps *ops,
+                           bool debug_enabled, uint64_t memory_size)
+{
+    const char *device_prefix = object_get_typename(OBJECT(owner));
+    RegisterInfoArray *r_array = g_malloc(sizeof(RegisterInfoArray));
+    int i;
+
+    r_array->num_elements = 0;
+    r_array->r = g_malloc_n(num, sizeof(RegisterInfo *));
+
+    for (i = 0; i < num; i++) {
+        int index = rae[i].decode.addr / 4;
+        RegisterInfo *r = &ri[index];
+
+        *r = (RegisterInfo) {
+            .data = &data[index],
+            .data_size = sizeof(uint32_t),
+            .access = &rae[i],
+            .debug = debug_enabled,
+            .prefix = device_prefix,
+            .opaque = owner,
+        };
+        register_init(r);
+
+        r_array->r[r_array->num_elements] = r;
+        r_array->num_elements++;
+    }
+
+    r_array->num_elements--;
+
+    memory_region_init_io(&r_array->mem, OBJECT(owner), ops, r_array,
+                          device_prefix, memory_size);
+    memory_region_add_subregion(container,
+                                r_array->r[0]->access->decode.addr,
+                                &r_array->mem);
+}
+
 static const TypeInfo register_info = {
     .name  = TYPE_REGISTER,
     .parent = TYPE_DEVICE,
