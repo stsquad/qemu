@@ -33,6 +33,8 @@
 #define SATA_ADDR           0xFD0C0000
 #define SATA_NUM_PORTS      2
 
+#define IOU_SLCR_ADDR       0xFF180000
+
 static const uint64_t gem_addr[XLNX_ZYNQMP_NUM_GEMS] = {
     0xFF0B0000, 0xFF0C0000, 0xFF0D0000, 0xFF0E0000,
 };
@@ -132,6 +134,10 @@ static void xlnx_zynqmp_init(Object *obj)
                           TYPE_XILINX_SPIPS);
         qdev_set_parent_bus(DEVICE(&s->spi[i]), sysbus_get_default());
     }
+
+    object_initialize(&s->iou_slcr, sizeof(s->iou_slcr),
+                      TYPE_XLNX_ZYNQMP_IOU_SLCR);
+    qdev_set_parent_bus(DEVICE(&s->iou_slcr), sysbus_get_default());
 }
 
 static void xlnx_zynqmp_realize(DeviceState *dev, Error **errp)
@@ -363,6 +369,13 @@ static void xlnx_zynqmp_realize(DeviceState *dev, Error **errp)
                                   &error_abort);
 	g_free(bus_name);
     }
+
+    object_property_set_bool(OBJECT(&s->iou_slcr), true, "realized", &err);
+    if (err) {
+        error_propagate(errp, err);
+        return;
+    }
+    sysbus_mmio_map(SYS_BUS_DEVICE(&s->iou_slcr), 0, IOU_SLCR_ADDR);
 }
 
 static Property xlnx_zynqmp_props[] = {
