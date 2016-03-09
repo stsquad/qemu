@@ -1675,6 +1675,8 @@ void tb_flush_jmp_cache(CPUState *cpu, target_ulong addr)
 {
     unsigned int i;
 
+    g_assert(current_cpu == cpu);
+
     /* Discard jump cache entries for any tb which might potentially
        overlap the flushed page.  */
     i = tb_jmp_cache_hash_page(addr - TARGET_PAGE_SIZE);
