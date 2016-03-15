@@ -225,37 +225,37 @@ static TranslationBlock *tb_find_physical(CPUState *cpu,
     phys_pc = get_page_addr_code(env, pc);
     phys_page1 = phys_pc & TARGET_PAGE_MASK;
     h = tb_phys_hash_func(phys_pc);
-    ptb1 = &tcg_ctx.tb_ctx.tb_phys_hash[h];
-    for(;;) {
-        tb = *ptb1;
-        if (!tb) {
-            return NULL;
+    for (ptb1 = &tcg_ctx.tb_ctx.tb_phys_hash[h];
+         (tb = *ptb1) != NULL;
+         ptb1 = &tb->phys_hash_next) {
+        if (tb->pc != pc ||
+            tb->page_addr[0] != phys_page1 ||
+            tb->cs_base != cs_base ||
+            tb->flags != flags) {
+            continue;
         }
-        if (tb->pc == pc &&
-            tb->page_addr[0] == phys_page1 &&
-            tb->cs_base == cs_base &&
-            tb->flags == flags) {
-            /* check next page if needed */
-            if (tb->page_addr[1] != -1) {
-                tb_page_addr_t phys_page2;
 
-                virt_page2 = (pc & TARGET_PAGE_MASK) +
-                    TARGET_PAGE_SIZE;
-                phys_page2 = get_page_addr_code(env, virt_page2);
-                if (tb->page_addr[1] == phys_page2) {
-                    break;
-                }
-            } else {
+        /* check next page if needed */
+        if (tb->page_addr[1] != -1) {
+            tb_page_addr_t phys_page2;
+
+            virt_page2 = (pc & TARGET_PAGE_MASK) +
+                TARGET_PAGE_SIZE;
+            phys_page2 = get_page_addr_code(env, virt_page2);
+            if (tb->page_addr[1] == phys_page2) {
                 break;
             }
+        } else {
+            break;
         }
-        ptb1 = &tb->phys_hash_next;
     }
 
-    /* Move the TB to the head of the list */
-    *ptb1 = tb->phys_hash_next;
-    tb->phys_hash_next = tcg_ctx.tb_ctx.tb_phys_hash[h];
-    tcg_ctx.tb_ctx.tb_phys_hash[h] = tb;
+    if (tb) {
+        /* Move the TB to the head of the list */
+        *ptb1 = tb->phys_hash_next;
+        tb->phys_hash_next = tcg_ctx.tb_ctx.tb_phys_hash[h];
+        tcg_ctx.tb_ctx.tb_phys_hash[h] = tb;
+    }
     return tb;
 }
 
