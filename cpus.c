@@ -338,15 +338,10 @@ static int64_t qemu_icount_round(int64_t count)
 
 static void icount_warp_rt(void)
 {
-    /* The icount_warp_timer is rescheduled soon after vm_clock_warp_start
-     * changes from -1 to another value, so the race here is okay.
-     */
-    if (atomic_read(&vm_clock_warp_start) == -1) {
-        return;
-    }
+    bool check_clock = false;
 
     seqlock_write_lock(&timers_state.vm_clock_seqlock);
-    if (runstate_is_running()) {
+    if (vm_clock_warp_start != -1 && runstate_is_running()) {
         int64_t clock = REPLAY_CLOCK(REPLAY_CLOCK_VIRTUAL_RT,
                                      cpu_get_clock_locked());
         int64_t warp_delta;
@@ -362,11 +357,12 @@ static void icount_warp_rt(void)
             warp_delta = MIN(warp_delta, delta);
         }
         timers_state.qemu_icount_bias += warp_delta;
+        check_clock = true;
     }
     vm_clock_warp_start = -1;
     seqlock_write_unlock(&timers_state.vm_clock_seqlock);
 
-    if (qemu_clock_expired(QEMU_CLOCK_VIRTUAL)) {
+    if (check_clock && qemu_clock_expired(QEMU_CLOCK_VIRTUAL)) {
         qemu_clock_notify(QEMU_CLOCK_VIRTUAL);
     }
 }
