@@ -45,10 +45,10 @@ env:
   matrix:
     - CONFIG=""
     - CONFIG="--enable-debug --enable-debug-tcg --enable-trace-backends=log"
-    - CONFIG="--disable-linux-aio --disable-cap-ng --disable-attr --disable-brlapi --disable-uuid --disable-libusb"
-    - CONFIG="--enable-modules"
-    - CONFIG="--with-coroutine=ucontext"
-    - CONFIG="--with-coroutine=sigaltstack"
+    - CONFIG="--disable-linux-aio --disable-cap-ng --disable-attr --disable-brlapi --disable-uuid --disable-libusb --target-list=86"
+    - CONFIG="--enable-modules --target-list=86"
+    - CONFIG="--with-coroutine=ucontext --target-list=arm"
+    - CONFIG="--with-coroutine=sigaltstack --target-list=ppc"
 git:
   # we want to do this ourselves
   submodules: false
@@ -70,19 +70,19 @@ matrix:
     - env: CONFIG="--enable-gprof --enable-gcov --disable-pie"
       compiler: gcc
     # We manually include builds which we disable "make check" for
-    - env: CONFIG="--enable-debug --enable-tcg-interpreter"
+    - env: CONFIG="--enable-debug --enable-tcg-interpreter --target-list=mips"
            TEST_CMD=""
       compiler: gcc
-    - env: CONFIG="--enable-trace-backends=simple"
+    - env: CONFIG="--enable-trace-backends=simple --target-list=alpha"
            TEST_CMD=""
       compiler: gcc
-    - env: CONFIG="--enable-trace-backends=ftrace"
+    - env: CONFIG="--enable-trace-backends=ftrace --target-list=s390"
            TEST_CMD=""
       compiler: gcc
-    - env: CONFIG="--enable-trace-backends=ust"
+    - env: CONFIG="--enable-trace-backends=ust --target-list=sparc"
            TEST_CMD=""
       compiler: gcc
-    - env: CONFIG="--with-coroutine=gthread"
+    - env: CONFIG="--with-coroutine=gthread --target-list=sh4"
            TEST_CMD=""
       compiler: gcc
     - env: CONFIG=""
