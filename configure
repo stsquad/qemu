@@ -1246,7 +1246,8 @@ Standard options:
   --target-list=LIST       set target list (default: build everything)
 $(echo Available targets: $default_target_list | \
   fold -s -w 53 | sed -e 's/^/                           /')
-
+                           LIST can contain stems to match sets of targets
+                           (e.g. softmmu will match all softmmu targets)
 Advanced options (experts only):
   --source-path=PATH       path of source code [$source_path]
   --cross-prefix=PREFIX    use PREFIX for compile tools [$cross_prefix]
@@ -1639,15 +1640,29 @@ fi
 
 # Check that we recognised the target name; this allows a more
 # friendly error message than if we let it fall through.
+final_target_list=""
 for target in $target_list; do
     case " $default_target_list " in
         *" $target "*)
+            final_target_list="$target $final_target_list"
             ;;
         *)
-            error_exit "Unknown target name '$target'"
+            # Maybe we can match to range of targets?
+            exp="no"
+            for match in $default_target_list; do
+                if test "${match#*$target}" != "$match" ; then
+                    final_target_list="$match $final_target_list"
+                    exp="yes"
+                fi
+            done
+            if test "$exp" = "no"; then
+                error_exit "Unknown target name '$target'"
+            fi
             ;;
     esac
 done
+target_list=$final_target_list
+
 
 # see if system emulation was really requested
 case " $target_list " in
