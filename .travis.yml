@@ -41,6 +41,7 @@ notifications:
     on_failure: always
 env:
   global:
+    - MAKE_CMD="make -j3"
     - TEST_CMD="make check"
   matrix:
     - CONFIG=""
@@ -60,7 +61,8 @@ before_install:
 before_script:
   - ./configure ${CONFIG}
 script:
-  - make -j3 && ${TEST_CMD}
+  - ${MAKE_CMD}
+  - ${TEST_CMD}
 matrix:
   include:
     # Sparse is GCC only
@@ -137,4 +139,34 @@ matrix:
             - libssh2-1-dev
             - liburcu-dev
             - libusb-1.0-0-dev
+            - uuid-dev
+    - env: CONFIG="--help"
+           MAKE_CMD="make -j3 docker-image-ubuntu V=1"
+           TEST_CMD="make docker-quick@ubuntu J=3"
+      sudo: required
+      dist: trusty
+      compiler: gcc
+      addons:
+        apt:
+          packages:
+            - uuid-dev
+    - env: CONFIG="--help"
+           MAKE_CMD="make -j3 docker-image-fedora V=1"
+           TEST_CMD="make docker-quick@fedora J=3"
+      sudo: required
+      dist: trusty
+      compiler: gcc
+      addons:
+        apt:
+          packages:
+            - uuid-dev
+    - env: CONFIG="--help"
+           MAKE_CMD="make -j3 docker-image-centos V=1"
+           TEST_CMD="make docker-quick@centos J=3"
+      sudo: required
+      dist: trusty
+      compiler: gcc
+      addons:
+        apt:
+          packages:
             - uuid-dev
