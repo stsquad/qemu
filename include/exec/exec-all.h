@@ -390,7 +390,10 @@ static inline void tb_set_jmp_target(TranslationBlock *tb,
 static inline void tb_add_jump(TranslationBlock *tb, int n,
                                TranslationBlock *tb_next)
 {
-    /* NOTE: this test is only needed for thread safety */
+    /* FIXME: This test provides only some probablistic "thread safety" for
+     * user-mode emulation; appropriate synchronization/locking scheme should
+     * be implemented.
+     */
     if (!tb->jmp_list_next[n]) {
         /* patch the native jump address */
         tb_set_jmp_target(tb, n, (uintptr_t)tb_next->tc_ptr);
