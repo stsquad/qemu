@@ -20,7 +20,6 @@
 #ifndef EXEC_TB_HASH
 #define EXEC_TB_HASH
 
-#include "exec/exec-all.h"
 #include "qemu/xxhash.h"
 
 /* Only the bottom TB_JMP_PAGE_BITS of the jump cache hash bits vary for
@@ -54,13 +53,11 @@ uint32_t tb_hash_func(tb_page_addr_t phys_pc, target_ulong pc, uint64_t flags)
         target_ulong pc;
         uint64_t flags;
     } QEMU_PACKED k;
-    unsigned int hash;
 
     k.phys_pc = phys_pc;
     k.pc = pc;
     k.flags = flags;
-    hash = qemu_xxh32((uint32_t *)&k, sizeof(k) / sizeof(uint32_t), 1);
-    return hash & (CODE_GEN_PHYS_HASH_SIZE - 1);
+    return qemu_xxh32((uint32_t *)&k, sizeof(k) / sizeof(uint32_t), 1);
 }
 
 #endif
