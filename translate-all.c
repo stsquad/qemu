@@ -972,7 +972,7 @@ void tb_phys_invalidate(TranslationBlock *tb, tb_page_addr_t page_addr)
 
     /* remove the TB from the hash list */
     phys_pc = tb->page_addr[0] + (tb->pc & ~TARGET_PAGE_MASK);
-    h = tb_phys_hash_func(phys_pc);
+    h = tb_hash_func(phys_pc, tb->pc, tb->flags);
     tb_hash_remove(&tcg_ctx.tb_ctx.tb_phys_hash[h], tb);
 
     /* remove the TB from the page list */
@@ -1474,8 +1474,8 @@ static void tb_link_page(TranslationBlock *tb, tb_page_addr_t phys_pc,
     unsigned int h;
     TranslationBlock **ptb;
 
-    /* add in the physical hash table */
-    h = tb_phys_hash_func(phys_pc);
+    /* add in the hash table */
+    h = tb_hash_func(phys_pc, tb->pc, tb->flags);
     ptb = &tcg_ctx.tb_ctx.tb_phys_hash[h];
     tb->phys_hash_next = *ptb;
     *ptb = tb;
