@@ -41,6 +41,16 @@
 # define QEMU_PACKED __attribute__((packed))
 #endif
 
+#define QEMU_CACHELINE (64)
+
+#if defined(_WIN32)
+#define QEMU_ALIGN(B)
+#else
+#define QEMU_ALIGN(B) __attribute__((aligned(B)))
+#endif
+
+#define QEMU_CACHELINE_ALIGNED QEMU_ALIGN(QEMU_CACHELINE)
+
 #ifndef glue
 #define xglue(x, y) x ## y
 #define glue(x, y) xglue(x, y)
