@@ -464,11 +464,19 @@ static bool use_goto_tb(DisasContext *ctx, uint64_t dest)
     if (in_superpage(ctx, dest)) {
         return true;
     }
+#ifndef CONFIG_USER_ONLY
     /* Direct jumps with goto_tb are only safe within the page this TB resides
      * in because we don't take care of direct jumps when address mapping
-     * changes.
+     * changes in system mode.
      */
     return ((ctx->tb->pc ^ dest) & TARGET_PAGE_MASK) == 0;
+#else
+    /* In user mode, there's only a static address translation, so the
+     * destination address is always valid. TBs are always invalidated properly
+     * and direct jumps are reset when mapping attributes change.
+     */
+    return true;
+#endif
 }
 
 static ExitStatus gen_bdirect(DisasContext *ctx, int ra, int32_t disp)

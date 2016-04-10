@@ -3236,19 +3236,33 @@ static inline void gen_save_pc(target_ulong pc)
     tcg_gen_movi_tl(cpu_PC, pc);
 }
 
-static inline void gen_goto_tb(DisasContext *ctx, int n, target_ulong dest)
+static inline bool use_goto_tb(DisasContext *ctx, target_ulong dest)
 {
-    TranslationBlock *tb;
-    tb = ctx->tb;
+    if (unlikely(ctx->singlestep_enabled)) {
+        return false;
+    }
+
+#ifndef CONFIG_USER_ONLY
     /* Direct jumps with goto_tb are only safe within the pages this TB resides
      * in because we don't take care of direct jumps when address mapping
-     * changes.
+     * changes in system mode.
      */
-    if ((tb->pc & TARGET_PAGE_MASK) == (dest & TARGET_PAGE_MASK) &&
-        likely(!ctx->singlestep_enabled)) {
+    return (ctx->tb->pc & TARGET_PAGE_MASK) == (dest & TARGET_PAGE_MASK);
+#else
+    /* In user mode, there's only a static address translation, so the
+     * destination address is always valid. TBs are always invalidated properly
+     * and direct jumps are reset when mapping attributes change.
+     */
+    return true;
+#endif
+}
+
+static inline void gen_goto_tb(DisasContext *ctx, int n, target_ulong dest)
+{
+    if (use_goto_tb(ctx, dest)) {
         tcg_gen_goto_tb(n);
         gen_save_pc(dest);
-        tcg_gen_exit_tb((uintptr_t)tb + n);
+        tcg_gen_exit_tb((uintptr_t)ctx->tb + n);
     } else {
         gen_save_pc(dest);
         if (ctx->singlestep_enabled) {

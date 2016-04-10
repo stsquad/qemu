@@ -4049,20 +4049,30 @@ static int disas_vfp_insn(DisasContext *s, uint32_t insn)
     return 0;
 }
 
-static inline void gen_goto_tb(DisasContext *s, int n, target_ulong dest)
+static inline bool use_goto_tb(DisasContext *s, target_ulong dest)
 {
-    TranslationBlock *tb;
-
-    tb = s->tb;
+#ifndef CONFIG_USER_ONLY
     /* Direct jumps with goto_tb are only safe within the pages this TB resides
      * in because we don't take care of direct jumps when address mapping
-     * changes.
+     * changes in system mode.
      */
-    if ((tb->pc & TARGET_PAGE_MASK) == (dest & TARGET_PAGE_MASK) ||
-        ((s->pc - 1) & TARGET_PAGE_MASK) == (dest & TARGET_PAGE_MASK)) {
+    return (s->tb->pc & TARGET_PAGE_MASK) == (dest & TARGET_PAGE_MASK) ||
+           ((s->pc - 1) & TARGET_PAGE_MASK) == (dest & TARGET_PAGE_MASK);
+#else
+    /* In user mode, there's only a static address translation, so the
+     * destination address is always valid. TBs are always invalidated properly
+     * and direct jumps are reset when mapping attributes change.
+     */
+    return true;
+#endif
+}
+
+static inline void gen_goto_tb(DisasContext *s, int n, target_ulong dest)
+{
+    if (use_goto_tb(s, dest)) {
         tcg_gen_goto_tb(n);
         gen_set_pc_im(s, dest);
-        tcg_gen_exit_tb((uintptr_t)tb + n);
+        tcg_gen_exit_tb((uintptr_t)s->tb + n);
     } else {
         gen_set_pc_im(s, dest);
         tcg_gen_exit_tb(0);

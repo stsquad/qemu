@@ -274,14 +274,20 @@ static inline bool use_goto_tb(DisasContext *s, int n, uint64_t dest)
         return false;
     }
 
+#ifndef CONFIG_USER_ONLY
     /* Direct jumps with goto_tb are only safe within the page this TB resides
      * in because we don't take care of direct jumps when address mapping
-     * changes.
+     * changes in system mode.
      */
     if ((s->tb->pc & TARGET_PAGE_MASK) != (dest & TARGET_PAGE_MASK)) {
         return false;
     }
+#endif
 
+    /* In user mode, there's only a static address translation, so the
+     * destination address is always valid. TBs are always invalidated properly
+     * and direct jumps are reset when mapping attributes change.
+     */
     return true;
 }
 

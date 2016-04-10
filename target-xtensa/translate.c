@@ -418,13 +418,19 @@ static void gen_jump(DisasContext *dc, TCGv dest)
 static void gen_jumpi(DisasContext *dc, uint32_t dest, int slot)
 {
     TCGv_i32 tmp = tcg_const_i32(dest);
+#ifndef CONFIG_USER_ONLY
     /* Direct jumps with goto_tb are only safe within the pages this TB resides
      * in because we don't take care of direct jumps when address mapping
-     * changes.
+     * changes in system mode.
      */
     if (((dc->tb->pc ^ dest) & TARGET_PAGE_MASK) != 0) {
         slot = -1;
     }
+#endif
+    /* In user mode, there's only a static address translation, so the
+     * destination address is always valid. TBs are always invalidated properly
+     * and direct jumps are reset when mapping attributes change.
+     */
     gen_jump_slot(dc, tmp, slot);
     tcg_temp_free(tmp);
 }
@@ -450,13 +456,19 @@ static void gen_callw(DisasContext *dc, int callinc, TCGv_i32 dest)
 static void gen_callwi(DisasContext *dc, int callinc, uint32_t dest, int slot)
 {
     TCGv_i32 tmp = tcg_const_i32(dest);
+#ifndef CONFIG_USER_ONLY
     /* Direct jumps with goto_tb are only safe within the pages this TB resides
      * in because we don't take care of direct jumps when address mapping
-     * changes.
+     * changes in system mode.
      */
     if (((dc->tb->pc ^ dest) & TARGET_PAGE_MASK) != 0) {
         slot = -1;
     }
+#endif
+    /* In user mode, there's only a static address translation, so the
+     * destination address is always valid. TBs are always invalidated properly
+     * and direct jumps are reset when mapping attributes change.
+     */
     gen_callw_slot(dc, callinc, tmp, slot);
     tcg_temp_free(tmp);
 }
