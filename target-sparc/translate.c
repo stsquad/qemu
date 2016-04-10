@@ -309,6 +309,10 @@ static inline void gen_goto_tb(DisasContext *s, int tb_num,
     TranslationBlock *tb;
 
     tb = s->tb;
+    /* Direct jumps with goto_tb are only safe within the pages this TB resides
+     * in because we don't take care of direct jumps when address mapping
+     * changes.
+     */
     if ((pc & TARGET_PAGE_MASK) == (tb->pc & TARGET_PAGE_MASK) &&
         (npc & TARGET_PAGE_MASK) == (tb->pc & TARGET_PAGE_MASK) &&
         !s->singlestep)  {

@@ -608,9 +608,12 @@ static void gen_op_calc_cc(DisasContext *s)
 
 static int use_goto_tb(DisasContext *s, uint64_t dest)
 {
-    /* NOTE: we handle the case where the TB spans two pages here */
-    return (((dest & TARGET_PAGE_MASK) == (s->tb->pc & TARGET_PAGE_MASK)
-             || (dest & TARGET_PAGE_MASK) == ((s->pc - 1) & TARGET_PAGE_MASK))
+    /* Direct jumps with goto_tb are only safe within the pages this TB resides
+     * in because we don't take care of direct jumps when address mapping
+     * changes.
+     */
+    return (((dest & TARGET_PAGE_MASK) == (s->tb->pc & TARGET_PAGE_MASK) ||
+             (dest & TARGET_PAGE_MASK) == (s->pc & TARGET_PAGE_MASK))
             && !s->singlestep_enabled
             && !(s->tb->cflags & CF_LAST_IO)
             && !(s->tb->flags & FLAG_MASK_PER));

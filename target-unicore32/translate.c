@@ -1094,6 +1094,10 @@ static inline void gen_goto_tb(DisasContext *s, int n, uint32_t dest)
     TranslationBlock *tb;
 
     tb = s->tb;
+    /* Direct jumps with goto_tb are only safe within the page this TB resides
+     * in because we don't take care of direct jumps when address mapping
+     * changes.
+     */
     if ((tb->pc & TARGET_PAGE_MASK) == (dest & TARGET_PAGE_MASK)) {
         tcg_gen_goto_tb(n);
         gen_set_pc_im(dest);

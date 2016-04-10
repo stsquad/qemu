@@ -194,6 +194,10 @@ static void gen_goto_tb(DisasContext *dc, int n, target_ulong dest)
 {
     TranslationBlock *tb;
     tb = dc->tb;
+    /* Direct jumps with goto_tb are only safe within the page this TB resides
+     * in because we don't take care of direct jumps when address mapping
+     * changes.
+     */
     if ((tb->pc & TARGET_PAGE_MASK) == (dest & TARGET_PAGE_MASK) &&
                                        likely(!dc->singlestep_enabled)) {
         tcg_gen_movi_tl(cpu_pc, dest);

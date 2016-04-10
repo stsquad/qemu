@@ -418,6 +418,10 @@ static void gen_jump(DisasContext *dc, TCGv dest)
 static void gen_jumpi(DisasContext *dc, uint32_t dest, int slot)
 {
     TCGv_i32 tmp = tcg_const_i32(dest);
+    /* Direct jumps with goto_tb are only safe within the pages this TB resides
+     * in because we don't take care of direct jumps when address mapping
+     * changes.
+     */
     if (((dc->tb->pc ^ dest) & TARGET_PAGE_MASK) != 0) {
         slot = -1;
     }
@@ -446,6 +450,10 @@ static void gen_callw(DisasContext *dc, int callinc, TCGv_i32 dest)
 static void gen_callwi(DisasContext *dc, int callinc, uint32_t dest, int slot)
 {
     TCGv_i32 tmp = tcg_const_i32(dest);
+    /* Direct jumps with goto_tb are only safe within the pages this TB resides
+     * in because we don't take care of direct jumps when address mapping
+     * changes.
+     */
     if (((dc->tb->pc ^ dest) & TARGET_PAGE_MASK) != 0) {
         slot = -1;
     }

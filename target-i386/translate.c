@@ -2092,9 +2092,12 @@ static inline void gen_goto_tb(DisasContext *s, int tb_num, target_ulong eip)
 
     pc = s->cs_base + eip;
     tb = s->tb;
-    /* NOTE: we handle the case where the TB spans two pages here */
+    /* Direct jumps with goto_tb are only safe within the pages this TB resides
+     * in because we don't take care of direct jumps when address mapping
+     * changes.
+     */
     if ((pc & TARGET_PAGE_MASK) == (tb->pc & TARGET_PAGE_MASK) ||
-        (pc & TARGET_PAGE_MASK) == ((s->pc - 1) & TARGET_PAGE_MASK))  {
+        (pc & TARGET_PAGE_MASK) == (s->pc_start & TARGET_PAGE_MASK))  {
         /* jump to same page: we can use a direct jump */
         tcg_gen_goto_tb(tb_num);
         gen_jmp_im(eip);

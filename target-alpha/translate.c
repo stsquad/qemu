@@ -464,7 +464,10 @@ static bool use_goto_tb(DisasContext *ctx, uint64_t dest)
     if (in_superpage(ctx, dest)) {
         return true;
     }
-    /* Check for the dest on the same page as the start of the TB.  */
+    /* Direct jumps with goto_tb are only safe within the page this TB resides
+     * in because we don't take care of direct jumps when address mapping
+     * changes.
+     */
     return ((ctx->tb->pc ^ dest) & TARGET_PAGE_MASK) == 0;
 }
 

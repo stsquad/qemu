@@ -127,6 +127,10 @@ static inline void gen_goto_tb(CPUMoxieState *env, DisasContext *ctx,
     TranslationBlock *tb;
     tb = ctx->tb;
 
+    /* Direct jumps with goto_tb are only safe within the page this TB resides
+     * in because we don't take care of direct jumps when address mapping
+     * changes.
+     */
     if ((tb->pc & TARGET_PAGE_MASK) == (dest & TARGET_PAGE_MASK) &&
         !ctx->singlestep_enabled) {
         tcg_gen_goto_tb(n);
