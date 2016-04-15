@@ -427,6 +427,29 @@ static inline void smmu_helper(do_unl_store)(CPUArchState *env,
     }
 }
 
+static inline void smmu_helper(do_mmio_store)(CPUArchState *env,
+                                              bool little_endian,
+                                              DATA_TYPE val,
+                                              target_ulong addr,
+                                              TCGMemOpIdx oi, unsigned mmu_idx,
+                                              int index, uintptr_t retaddr)
+{
+    CPUIOTLBEntry *iotlbentry = &env->iotlb[mmu_idx][index];
+
+    if ((addr & (DATA_SIZE - 1)) != 0) {
+        smmu_helper(do_unl_store)(env, little_endian, val, addr, mmu_idx, oi,
+                                  retaddr);
+    }
+    /* ??? Note that the io helpers always read data in the target
+       byte ordering.  We should push the LE/BE request down into io.  */
+    if (little_endian) {
+        val = TGT_LE(val);
+    } else {
+        val = TGT_BE(val);
+    }
+    glue(io_write, SUFFIX)(env, iotlbentry, val, addr, retaddr);
+}
+
 void helper_le_st_name(CPUArchState *env, target_ulong addr, DATA_TYPE val,
                        TCGMemOpIdx oi, uintptr_t retaddr)
 {
@@ -454,17 +477,8 @@ void helper_le_st_name(CPUArchState *env, target_ulong addr, DATA_TYPE val,
 
     /* Handle an IO access.  */
     if (unlikely(tlb_addr & ~TARGET_PAGE_MASK)) {
-        CPUIOTLBEntry *iotlbentry;
-        if ((addr & (DATA_SIZE - 1)) != 0) {
-            smmu_helper(do_unl_store)(env, false, val, addr, oi, mmu_idx, retaddr);
-            return;
-        }
-        iotlbentry = &env->iotlb[mmu_idx][index];
-
-        /* ??? Note that the io helpers always read data in the target
-           byte ordering.  We should push the LE/BE request down into io.  */
-        val = TGT_LE(val);
-        glue(io_write, SUFFIX)(env, iotlbentry, val, addr, retaddr);
+        smmu_helper(do_mmio_store)(env, true, val, addr, oi, mmu_idx, index,
+                                   retaddr);
         return;
     }
 
@@ -519,17 +533,8 @@ void helper_be_st_name(CPUArchState *env, target_ulong addr, DATA_TYPE val,
 
     /* Handle an IO access.  */
     if (unlikely(tlb_addr & ~TARGET_PAGE_MASK)) {
-        CPUIOTLBEntry *iotlbentry;
-        if ((addr & (DATA_SIZE - 1)) != 0) {
-            smmu_helper(do_unl_store)(env, true, val, addr, oi, mmu_idx, retaddr);
-            return;
-        }
-        iotlbentry = &env->iotlb[mmu_idx][index];
-
-        /* ??? Note that the io helpers always read data in the target
-           byte ordering.  We should push the LE/BE request down into io.  */
-        val = TGT_BE(val);
-        glue(io_write, SUFFIX)(env, iotlbentry, val, addr, retaddr);
+        smmu_helper(do_mmio_store)(env, false, val, addr, oi, mmu_idx, index,
+                                   retaddr);
         return;
     }
 
