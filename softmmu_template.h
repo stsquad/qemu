@@ -486,6 +486,43 @@ static inline void smmu_helper(do_ram_store)(CPUArchState *env,
 #endif
 }
 
+static inline void smmu_helper(do_excl_store)(CPUArchState *env,
+                                              bool little_endian,
+                                              DATA_TYPE val, target_ulong addr,
+                                              TCGMemOpIdx oi, int index,
+                                              uintptr_t retaddr)
+{
+    CPUIOTLBEntry *iotlbentry = &env->iotlb[get_mmuidx(oi)][index];
+    CPUState *cpu = ENV_GET_CPU(env);
+    CPUClass *cc = CPU_GET_CLASS(cpu);
+    /* The slow-path has been forced since we are writing to
+     * exclusive-protected memory. */
+    hwaddr hw_addr = (iotlbentry->addr & TARGET_PAGE_MASK) + addr;
+
+    /* The function reset_other_cpus_colliding_ll_addr could have reset
+     * the exclusive address. Fail the SC in this case.
+     * N.B.: here excl_succeed == true means that the caller is
+     * helper_stcond_name in softmmu_llsc_template.
+     * On the contrary, excl_succeeded == false occurs when a VCPU is
+     * writing through normal store to a page with TLB_EXCL bit set. */
+    if (cpu->excl_succeeded) {
+        if (!cc->cpu_valid_excl_access(cpu, hw_addr, DATA_SIZE)) {
+            /* The vCPU is SC-ing to an unprotected address. */
+            cpu->excl_protected_range.begin = EXCLUSIVE_RESET_ADDR;
+            cpu->excl_succeeded = false;
+
+            return;
+        }
+    }
+
+    smmu_helper(do_ram_store)(env, little_endian, val, addr, oi,
+                              get_mmuidx(oi), index, retaddr);
+
+    reset_other_cpus_colliding_ll_addr(hw_addr, DATA_SIZE);
+
+    return;
+}
+
 void helper_le_st_name(CPUArchState *env, target_ulong addr, DATA_TYPE val,
                        TCGMemOpIdx oi, uintptr_t retaddr)
 {
@@ -510,11 +547,17 @@ void helper_le_st_name(CPUArchState *env, target_ulong addr, DATA_TYPE val,
         tlb_addr = env->tlb_table[mmu_idx][index].addr_write;
     }
 
-    /* Handle an IO access.  */
+    /* Handle an IO access or exclusive access.  */
     if (unlikely(tlb_addr & ~TARGET_PAGE_MASK)) {
-        smmu_helper(do_mmio_store)(env, true, val, addr, oi, mmu_idx, index,
-                                   retaddr);
-        return;
+        if (tlb_addr & TLB_EXCL) {
+            smmu_helper(do_excl_store)(env, true, val, addr, oi, index,
+                                       retaddr);
+            return;
+        } else {
+            smmu_helper(do_mmio_store)(env, true, val, addr, oi, mmu_idx,
+                                       index, retaddr);
+            return;
+        }
     }
 
     smmu_helper(do_ram_store)(env, true, val, addr, oi, mmu_idx, index,
@@ -546,11 +589,17 @@ void helper_be_st_name(CPUArchState *env, target_ulong addr, DATA_TYPE val,
         tlb_addr = env->tlb_table[mmu_idx][index].addr_write;
     }
 
-    /* Handle an IO access.  */
+    /* Handle an IO access or exclusive access.  */
     if (unlikely(tlb_addr & ~TARGET_PAGE_MASK)) {
-        smmu_helper(do_mmio_store)(env, false, val, addr, oi, mmu_idx, index,
-                                   retaddr);
-        return;
+        if (tlb_addr & TLB_EXCL) {
+            smmu_helper(do_excl_store)(env, false, val, addr, oi, index,
+                                       retaddr);
+            return;
+        } else {
+            smmu_helper(do_mmio_store)(env, false, val, addr, oi, mmu_idx,
+                                       index, retaddr);
+            return;
+        }
     }
 
     smmu_helper(do_ram_store)(env, false, val, addr, oi, mmu_idx, index,

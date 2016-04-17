@@ -452,11 +452,21 @@ void tlb_set_page_with_attrs(CPUState *cpu, target_ulong vaddr,
             || memory_region_is_romd(section->mr)) {
             /* Write access calls the I/O callback.  */
             te->addr_write = address | TLB_MMIO;
-        } else if (memory_region_is_ram(section->mr)
-                   && cpu_physical_memory_is_clean(
-                        memory_region_get_ram_addr(section->mr) + xlat)) {
-            te->addr_write = address | TLB_NOTDIRTY;
         } else {
+            if (memory_region_is_ram(section->mr)
+                       && cpu_physical_memory_is_clean(
+                            memory_region_get_ram_addr(section->mr) + xlat)) {
+                address |= TLB_NOTDIRTY;
+            }
+            /* Only normal RAM accesses need the TLB_EXCL flag to handle
+             * exclusive store operatoins. */
+            if (!(address & TLB_MMIO) &&
+                    cpu_physical_memory_is_excl(
+                            memory_region_get_ram_addr(section->mr) + xlat)) {
+                /* There is at least one vCPU that has flagged the address as
+                 * exclusive. */
+                address |= TLB_EXCL;
+            }
             te->addr_write = address;
         }
     } else {
@@ -530,6 +540,25 @@ static inline void excl_history_put_addr(hwaddr addr)
 
     /* Add a new address, overwriting the oldest one */
     excl_history.c_array[excl_history.last_idx] = addr & TARGET_PAGE_MASK;
+}
+
+/* For every vCPU compare the exclusive address and reset it in case of a
+ * match. Since only one vCPU is running at once, no lock has to be held to
+ * guard this operation. */
+static inline void reset_other_cpus_colliding_ll_addr(hwaddr addr, hwaddr size)
+{
+    CPUState *cpu;
+
+    CPU_FOREACH(cpu) {
+        if (current_cpu != cpu &&
+            cpu->excl_protected_range.begin != EXCLUSIVE_RESET_ADDR &&
+            ranges_overlap(cpu->excl_protected_range.begin,
+                           cpu->excl_protected_range.end -
+                           cpu->excl_protected_range.begin,
+                           addr, size)) {
+            cpu->excl_protected_range.begin = EXCLUSIVE_RESET_ADDR;
+        }
+    }
 }
 
 #define MMUSUFFIX _mmu
