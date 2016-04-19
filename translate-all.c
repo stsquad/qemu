@@ -1682,6 +1682,8 @@ void dump_exec_info(FILE *f, fprintf_function cpu_fprintf)
 {
     int i, target_code_size, max_target_code_size;
     int direct_jmp_count, direct_jmp2_count, cross_page;
+    double ht_avg_len;
+    size_t ht_heads;
     TranslationBlock *tb;
 
     target_code_size = 0;
@@ -1733,6 +1735,9 @@ void dump_exec_info(FILE *f, fprintf_function cpu_fprintf)
                 direct_jmp2_count,
                 tcg_ctx.tb_ctx.nb_tbs ? (direct_jmp2_count * 100) /
                         tcg_ctx.tb_ctx.nb_tbs : 0);
+    ht_avg_len = qht_avg_bucket_chain_length(&tcg_ctx.tb_ctx.htable, &ht_heads);
+    cpu_fprintf(f, "TB hash avg chain   %0.5f buckets\n", ht_avg_len);
+    cpu_fprintf(f, "TB hash size        %zu head buckets\n", ht_heads);
     cpu_fprintf(f, "\nStatistics:\n");
     cpu_fprintf(f, "TB flush count      %d\n", tcg_ctx.tb_ctx.tb_flush_count);
     cpu_fprintf(f, "TB invalidate count %d\n",
