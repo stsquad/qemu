@@ -233,7 +233,7 @@ static TranslationBlock *tb_find_physical(CPUState *cpu,
     /* find translated block using physical mappings */
     phys_pc = get_page_addr_code(env, pc);
     phys_page1 = phys_pc & TARGET_PAGE_MASK;
-    h = tb_phys_hash_func(phys_pc);
+    h = tb_hash_func(phys_pc, pc, flags);
     ptb1 = &tcg_ctx.tb_ctx.tb_phys_hash[h];
     for(;;) {
         tb = *ptb1;
