@@ -1,0 +1,54 @@
+/*
+ * Copyright (C) 2016, Emilio G. Cota <cota@braap.org>
+ *
+ * License: GNU GPL, version 2 or later.
+ *   See the COPYING file in the top-level directory.
+ */
+#ifndef QHT_H
+#define QHT_H
+
+#include "qemu/osdep.h"
+#include "qemu-common.h"
+#include "qemu/seqlock.h"
+#include "qemu/rcu.h"
+
+struct qht {
+    struct qht_map *map;
+    unsigned int mode;
+};
+
+typedef bool (*qht_lookup_func_t)(const void *obj, const void *userp);
+typedef void (*qht_iter_func_t)(struct qht *ht, void *p, uint32_t h, void *up);
+
+#define QHT_MODE_MRU_LOOKUP  0x1 /* move looked-up items to head */
+#define QHT_MODE_MRU_INSERT  0x2 /* insert new elements at the head */
+#define QHT_MODE_AUTO_RESIZE 0x4 /* auto-resize when heavily loaded */
+
+void qht_init(struct qht *ht, size_t n_elems, unsigned int mode);
+
+/* call only when there are no readers left */
+void qht_destroy(struct qht *ht);
+
+/* call with an external lock held */
+void qht_reset(struct qht *ht);
+
+/* call with an external lock held */
+void qht_reset_size(struct qht *ht, size_t n_elems);
+
+/* call with an external lock held */
+void qht_insert(struct qht *ht, void *p, uint32_t hash);
+
+/* call with an external lock held */
+bool qht_remove(struct qht *ht, const void *p, uint32_t hash);
+
+/* call with an external lock held */
+void qht_iter(struct qht *ht, qht_iter_func_t func, void *userp);
+
+/* call with an external lock held */
+void qht_grow(struct qht *ht);
+
+void *qht_lookup(struct qht *ht, qht_lookup_func_t func, const void *userp,
+                 uint32_t hash);
+double qht_avg_bucket_chain_length(struct qht *ht, size_t *n_head_buckets);
+
+#endif /* QHT_H */
