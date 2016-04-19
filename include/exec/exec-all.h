@@ -21,6 +21,7 @@
 #define _EXEC_ALL_H_
 
 #include "qemu-common.h"
+#include "qemu/qht.h"
 
 /* allow to see translation results - the slowdown should be negligible, so we leave it */
 #define DEBUG_DISAS
@@ -212,8 +213,8 @@ static inline void tlb_flush_by_mmuidx(CPUState *cpu, ...)
 
 #define CODE_GEN_ALIGN           16 /* must be >= of the size of a icache line */
 
-#define CODE_GEN_PHYS_HASH_BITS     15
-#define CODE_GEN_PHYS_HASH_SIZE     (1 << CODE_GEN_PHYS_HASH_BITS)
+#define CODE_GEN_HTABLE_BITS     15
+#define CODE_GEN_HTABLE_SIZE     (1 << CODE_GEN_HTABLE_BITS)
 
 /* Estimated block size for TB allocation.  */
 /* ??? The following is based on a 2015 survey of x86_64 host output.
@@ -249,8 +250,6 @@ struct TranslationBlock {
 
     void *tc_ptr;    /* pointer to the translated code */
     uint8_t *tc_search;  /* pointer to search data */
-    /* next matching tb for physical address. */
-    struct TranslationBlock *phys_hash_next;
     /* original tb when cflags has CF_NOCACHE */
     struct TranslationBlock *orig_tb;
     /* first and second physical page containing code. The lower bit
@@ -295,7 +294,7 @@ typedef struct TBContext TBContext;
 struct TBContext {
 
     TranslationBlock *tbs;
-    TranslationBlock *tb_phys_hash[CODE_GEN_PHYS_HASH_SIZE];
+    struct qht htable;
     int nb_tbs;
     /* any access to the tbs or the page table must use this lock */
     QemuMutex tb_lock;
