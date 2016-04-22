@@ -201,6 +201,11 @@ typedef struct CPUClass {
     void (*disas_set_info)(CPUState *cpu, disassemble_info *info);
 } CPUClass;
 
+/* Protect cpu_exclusive_* variable .*/
+void tcg_exclusive_lock(void);
+void tcg_exclusive_unlock(void);
+extern QemuSpin cpu_exclusive_lock;
+
 #ifdef HOST_WORDS_BIGENDIAN
 typedef struct icount_decr_u16 {
     uint16_t high;

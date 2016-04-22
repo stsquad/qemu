@@ -961,6 +961,8 @@ void qemu_init_cpu_loop(void)
     qemu_cond_init(&qemu_work_cond);
     qemu_mutex_init(&qemu_global_mutex);
 
+    qemu_spin_init(&cpu_exclusive_lock);
+
     qemu_thread_get_self(&io_thread);
 
     safe_work = g_array_sized_new(TRUE, TRUE, sizeof(qemu_safe_work_item), 128);

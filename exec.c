@@ -197,6 +197,24 @@ void cpu_exclusive_history_free(void)
         g_free(excl_history.c_array);
     }
 }
+
+__thread bool cpu_have_exclusive_lock;
+QemuSpin cpu_exclusive_lock;
+inline void tcg_exclusive_lock(void)
+{
+    if (!cpu_have_exclusive_lock) {
+        qemu_spin_lock(&cpu_exclusive_lock);
+        cpu_have_exclusive_lock = true;
+    }
+}
+
+inline void tcg_exclusive_unlock(void)
+{
+    if (cpu_have_exclusive_lock) {
+        cpu_have_exclusive_lock = false;
+        qemu_spin_unlock(&cpu_exclusive_lock);
+    }
+}
 #endif
 
 #if !defined(CONFIG_USER_ONLY)
