@@ -537,10 +537,15 @@ static inline void smmu_helper(do_excl_store)(CPUArchState *env,
         }
     }
 
+    /* Take the lock in case we are not coming from a SC */
+    tcg_exclusive_lock();
+
     smmu_helper(do_ram_store)(env, little_endian, val, addr, oi,
                               get_mmuidx(oi), index, retaddr);
 
     reset_other_cpus_colliding_ll_addr(hw_addr, DATA_SIZE);
+
+    tcg_exclusive_unlock();
 
     return;
 }
@@ -572,6 +577,7 @@ void helper_le_st_name(CPUArchState *env, target_ulong addr, DATA_TYPE val,
     /* Handle an IO access or exclusive access.  */
     if (unlikely(tlb_addr & ~TARGET_PAGE_MASK)) {
         if (tlb_addr & TLB_EXCL) {
+
             smmu_helper(do_excl_store)(env, true, val, addr, oi, index,
                                        retaddr);
             return;

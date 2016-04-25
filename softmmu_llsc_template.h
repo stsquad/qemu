@@ -62,10 +62,12 @@ WORD_TYPE helper_ldlink_name(CPUArchState *env, target_ulong addr,
     hwaddr hw_addr;
     unsigned mmu_idx = get_mmuidx(oi);
 
+    index = (addr >> TARGET_PAGE_BITS) & (CPU_TLB_SIZE - 1);
+
+    tcg_exclusive_lock();
+
     /* Use the proper load helper from cpu_ldst.h */
     ret = helper_ld(env, addr, oi, retaddr);
-
-    index = (addr >> TARGET_PAGE_BITS) & (CPU_TLB_SIZE - 1);
 
     /* hw_addr = hwaddr of the page (i.e. section->mr->ram_addr + xlat)
      * plus the offset (i.e. addr & ~TARGET_PAGE_MASK) */
@@ -95,6 +97,8 @@ WORD_TYPE helper_ldlink_name(CPUArchState *env, target_ulong addr,
 
     cc->cpu_set_excl_protected_range(this_cpu, hw_addr, DATA_SIZE);
 
+    tcg_exclusive_unlock();
+
     /* From now on we are in LL/SC context */
     this_cpu->ll_sc_context = true;
 
@@ -114,6 +118,8 @@ WORD_TYPE helper_stcond_name(CPUArchState *env, target_ulong addr,
          * access as one made by the store conditional wrapper. If the store
          * conditional does not succeed, the value will be set to 0.*/
         cpu->excl_succeeded = true;
+
+        tcg_exclusive_lock();
         helper_st(env, addr, val, oi, retaddr);
 
         if (cpu->excl_succeeded) {
@@ -123,6 +129,7 @@ WORD_TYPE helper_stcond_name(CPUArchState *env, target_ulong addr,
 
     /* Unset LL/SC context */
     cc->cpu_reset_excl_context(cpu);
+    tcg_exclusive_unlock();
 
     return ret;
 }

@@ -35,7 +35,9 @@ static void raise_exception(CPUARMState *env, uint32_t excp,
     cs->exception_index = excp;
     env->exception.syndrome = syndrome;
     env->exception.target_el = target_el;
+    tcg_exclusive_lock();
     cc->cpu_reset_excl_context(cs);
+    tcg_exclusive_unlock();
     cpu_loop_exit(cs);
 }
 
@@ -58,7 +60,9 @@ void HELPER(atomic_clear)(CPUARMState *env)
     CPUState *cs = ENV_GET_CPU(env);
     CPUClass *cc = CPU_GET_CLASS(cs);
 
+    tcg_exclusive_lock();
     cc->cpu_reset_excl_context(cs);
+    tcg_exclusive_unlock();
 }
 
 uint32_t HELPER(neon_tbl)(CPUARMState *env, uint32_t ireg, uint32_t def,
@@ -874,7 +878,9 @@ void HELPER(exception_return)(CPUARMState *env)
 
     aarch64_save_sp(env, cur_el);
 
+    tcg_exclusive_lock();
     cc->cpu_reset_excl_context(cs);
+    tcg_exclusive_unlock();
 
     /* We must squash the PSTATE.SS bit to zero unless both of the
      * following hold:
