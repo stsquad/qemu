@@ -75,8 +75,9 @@ typedef struct PageDesc {
     /* in order to optimize self modifying code, we count the number
        of lookups we do to a given page to use a bitmap */
     unsigned int code_write_count;
+#ifdef CONFIG_SOFTMMU
     unsigned long *code_bitmap;
-#if defined(CONFIG_USER_ONLY)
+#else
     unsigned long flags;
 #endif
 } PageDesc;
@@ -785,8 +786,10 @@ void tb_free(TranslationBlock *tb)
 
 static inline void invalidate_page_bitmap(PageDesc *p)
 {
+#ifdef CONFIG_SOFTMMU
     g_free(p->code_bitmap);
     p->code_bitmap = NULL;
+#endif
     p->code_write_count = 0;
 }
 
@@ -842,6 +845,7 @@ void tb_flush(CPUState *cpu)
 
     CPU_FOREACH(cpu) {
         memset(cpu->tb_jmp_cache, 0, sizeof(cpu->tb_jmp_cache));
+        cpu->tb_flushed = true;
     }
 
     memset(tcg_ctx.tb_ctx.tb_phys_hash, 0, sizeof(tcg_ctx.tb_ctx.tb_phys_hash));
@@ -988,8 +992,6 @@ void tb_phys_invalidate(TranslationBlock *tb, tb_page_addr_t page_addr)
         invalidate_page_bitmap(p);
     }
 
-    tcg_ctx.tb_ctx.tb_invalidated_flag = 1;
-
     /* remove the TB from the hash list */
     h = tb_jmp_cache_hash_func(tb->pc);
     CPU_FOREACH(cpu) {
@@ -1020,6 +1022,7 @@ void tb_phys_invalidate(TranslationBlock *tb, tb_page_addr_t page_addr)
     tcg_ctx.tb_ctx.tb_phys_invalidate_count++;
 }
 
+#ifdef CONFIG_SOFTMMU
 static void build_page_bitmap(PageDesc *p)
 {
     int n, tb_start, tb_end;
@@ -1048,6 +1051,7 @@ static void build_page_bitmap(PageDesc *p)
         tb = tb->page_next[n];
     }
 }
+#endif
 
 /* Called with mmap_lock held for user mode emulation.  */
 TranslationBlock *tb_gen_code(CPUState *cpu,
@@ -1077,8 +1081,6 @@ TranslationBlock *tb_gen_code(CPUState *cpu,
         /* cannot fail at this point */
         tb = tb_alloc(pc);
         assert(tb != NULL);
-        /* Don't forget to invalidate previous TB info.  */
-        tcg_ctx.tb_ctx.tb_invalidated_flag = 1;
     }
 
     gen_code_buf = tcg_ctx.code_gen_ptr;
@@ -1297,6 +1299,7 @@ void tb_invalidate_phys_page_range(tb_page_addr_t start, tb_page_addr_t end,
 #endif
 }
 
+#ifdef CONFIG_SOFTMMU
 /* len must be <= 8 and start must be a multiple of len */
 void tb_invalidate_phys_page_fast(tb_page_addr_t start, int len)
 {
@@ -1334,8 +1337,7 @@ void tb_invalidate_phys_page_fast(tb_page_addr_t start, int len)
         tb_invalidate_phys_page_range(start, start + len, 1);
     }
 }
-
-#if !defined(CONFIG_SOFTMMU)
+#else
 /* Called with mmap_lock held.  */
 static void tb_invalidate_phys_page(tb_page_addr_t addr,
                                     uintptr_t pc, void *puc,
