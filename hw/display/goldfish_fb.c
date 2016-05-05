@@ -248,7 +248,7 @@ static void goldfish_fb_update_display(void *opaque)
 
         /* XXX: double-check conversion to memsection update */
         framebuffer_update_memory_section(&s->fbsection, address_space,
-                                          s->fb_base, height, src_width);
+                                          s->fb_base, src_height, src_width);
 
         framebuffer_update_display(ds, &s->fbsection, width, height,
                 src_width, dest_row_pitch, dest_col_pitch, full_update,
