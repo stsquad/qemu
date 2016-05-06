@@ -87,12 +87,12 @@
 /* from AOSP version include/hw/android/goldfish/device.h
  * FIXME?: needs to use proper qemu abstractions
  */
-static inline void uint64_set_low(uint64_t *addr, uint32 value)
+static inline void uint64_set_low(uint64_t *addr, uint32_t value)
 {
     *addr = (*addr & ~(0xFFFFFFFFULL)) | value;
 }
 
-static inline void uint64_set_high(uint64_t *addr, uint32 value)
+static inline void uint64_set_high(uint64_t *addr, uint32_t value)
 {
     *addr = (*addr & 0xFFFFFFFFULL) | ((uint64_t)value << 32);
 }
