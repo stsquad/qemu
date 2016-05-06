@@ -24,6 +24,7 @@
  */
 
 #include "qemu/osdep.h"
+#include "qapi/error.h"
 #include "hw/sysbus.h"
 #include "hw/arm/arm.h"
 #include "hw/arm/primecell.h"
@@ -451,12 +452,12 @@ static CharDriverState *try_to_create_console_chardev(int portno)
         "socket,id=private-chardev-for-android-monitor,"
         "host=127.0.0.1,server,nowait,telnet";
 
-    opts = qemu_opts_parse(qemu_find_opts("chardev"), chardev_opts, 1);
+    opts = qemu_opts_parse(qemu_find_opts("chardev"), chardev_opts, true, &err);
     assert(opts);
-    qemu_opt_set_number(opts, "port", portno);
+    qemu_opt_set_number(opts, "port", portno, &err);
     chr = qemu_chr_new_from_opts(opts, NULL, &err);
     if (err) {
-        /* Assume this was port-in-use */
+        /* FIXME: assume this was port-in-use */
         qemu_opts_del(opts);
         error_free(err);
         return NULL;
