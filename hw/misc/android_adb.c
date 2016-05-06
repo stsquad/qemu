@@ -103,27 +103,30 @@ static void adb_reply(adb_pipe *apipe, const char *reply);
  * ADB Server Interface
  */
 
-static QemuOpts* adb_server_config(void) {
-    QemuOpts *socket_opts;
+static int send_all(int fd, gchar *buf, uint32_t len)
+{
+    int ret, remain;
 
-    socket_opts = qemu_opts_create(&socket_optslist, NULL, 0,
-                                   &error_abort);
-
-    if (!qemu_opt_get(socket_opts, "host")) {
-        qemu_opt_set(socket_opts, "host", "localhost");
+    remain = len;
+    while (remain > 0) {
+        ret = write(fd, buf, remain);
+        if (ret < 0) {
+            if (errno != EINTR && errno != EAGAIN) {
+                return -1;
+            }
+        } else if (ret == 0) {
+            break;
+        } else {
+            buf += ret;
+            remain -= ret;
+        }
     }
-
-    if (!qemu_opt_get(socket_opts, "port")) {
-        qemu_opt_set_number(socket_opts, "port", ADB_SERVER_PORT);
-    }
-
-    return socket_opts;
+    return len - remain;
 }
 
 static void adb_server_notify(int adb_port) {
     Error *local_err = NULL;
-    QemuOpts *socket_opts = adb_server_config();
-    int sock = inet_connect_opts(socket_opts, &local_err, NULL, NULL);
+    int sock = inet_connect("localhost:5037" /* ADB_SERVER_PORT */, &local_err);
     size_t len;
     gchar *message,*handshake;
 
