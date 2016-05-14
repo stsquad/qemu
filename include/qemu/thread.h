@@ -1,6 +1,9 @@
 #ifndef __QEMU_THREAD_H
 #define __QEMU_THREAD_H 1
 
+#include <errno.h>
+#include "qemu/processor.h"
+#include "qemu/atomic.h"
 
 typedef struct QemuMutex QemuMutex;
 typedef struct QemuCond QemuCond;
@@ -59,5 +62,41 @@ void qemu_thread_naming(bool enable);
 struct Notifier;
 void qemu_thread_atexit_add(struct Notifier *notifier);
 void qemu_thread_atexit_remove(struct Notifier *notifier);
+
+typedef struct QemuSpin {
+    int value;
+} QemuSpin;
+
+static inline void qemu_spin_init(QemuSpin *spin)
+{
+    atomic_set_release(&spin->value, 0);
+}
+
+static inline void qemu_spin_lock(QemuSpin *spin)
+{
+    while (atomic_test_and_set_acquire(&spin->value)) {
+        while (atomic_read(&spin->value)) {
+            cpu_relax();
+        }
+    }
+}
+
+static inline int qemu_spin_trylock(QemuSpin *spin)
+{
+    if (atomic_test_and_set_acquire(&spin->value)) {
+        return -EBUSY;
+    }
+    return 0;
+}
+
+static inline bool qemu_spin_locked(QemuSpin *spin)
+{
+    return atomic_read_acquire(&spin->value);
+}
+
+static inline void qemu_spin_unlock(QemuSpin *spin)
+{
+    atomic_set_release(&spin->value, 0);
+}
 
 #endif
