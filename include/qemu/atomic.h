@@ -113,6 +113,7 @@
 } while(0)
 #endif
 
+#define atomic_test_and_set_acquire(ptr) __atomic_test_and_set(ptr, __ATOMIC_ACQUIRE)
 
 /* All the remaining operations are fully sequentially consistent */
 
@@ -326,6 +327,8 @@
 #define atomic_xchg(ptr, i)    (smp_mb(), __sync_lock_test_and_set(ptr, i))
 #endif
 #endif
+
+#define atomic_test_and_set_acquire(ptr) __sync_lock_test_and_set(ptr, true)
 
 /* Provide shorter names for GCC atomic builtins.  */
 #define atomic_fetch_inc(ptr)  __sync_fetch_and_add(ptr, 1)
