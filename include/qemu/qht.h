@@ -10,11 +10,13 @@
 #include "qemu/osdep.h"
 #include "qemu-common.h"
 #include "qemu/seqlock.h"
+#include "qemu/thread.h"
 #include "qemu/qdist.h"
 #include "qemu/rcu.h"
 
 struct qht {
     struct qht_map *map;
+    QemuSpin lock; /* serializes setters of ht->map */
     unsigned int mode;
 };
 
@@ -33,25 +35,19 @@ typedef void (*qht_iter_func_t)(struct qht *ht, void *p, uint32_t h, void *up);
 
 void qht_init(struct qht *ht, size_t n_elems, unsigned int mode);
 
-/* call only when there are no readers left */
+/* call only when there are no readers/writers left */
 void qht_destroy(struct qht *ht);
 
-/* call with an external lock held */
 void qht_reset(struct qht *ht);
 
-/* call with an external lock held */
 bool qht_reset_size(struct qht *ht, size_t n_elems);
 
-/* call with an external lock held */
 bool qht_insert(struct qht *ht, void *p, uint32_t hash);
 
-/* call with an external lock held */
 bool qht_remove(struct qht *ht, const void *p, uint32_t hash);
 
-/* call with an external lock held */
 void qht_iter(struct qht *ht, qht_iter_func_t func, void *userp);
 
-/* call with an external lock held */
 bool qht_resize(struct qht *ht, size_t n_elems);
 
 /* if @func is NULL, then pointer comparison is used */
