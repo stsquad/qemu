@@ -56,6 +56,21 @@
     __atomic_store(ptr, &_val, __ATOMIC_RELAXED);     \
 } while(0)
 
+/* atomic read/set with acquire/release barrier */
+#define atomic_read_acquire(ptr)                      \
+    ({                                                \
+    QEMU_BUILD_BUG_ON(sizeof(*ptr) > sizeof(void *)); \
+    typeof(*ptr) _val;                                \
+    __atomic_load(ptr, &_val, __ATOMIC_ACQUIRE);      \
+    _val;                                             \
+    })
+
+#define atomic_set_release(ptr, i)  do {              \
+    QEMU_BUILD_BUG_ON(sizeof(*ptr) > sizeof(void *)); \
+    typeof(*ptr) _val = (i);                          \
+    __atomic_store(ptr, &_val, __ATOMIC_RELEASE);     \
+} while(0)
+
 /* Atomic RCU operations imply weak memory barriers */
 
 #define atomic_rcu_read(ptr)                          \
@@ -242,6 +257,18 @@
  */
 #define atomic_read(ptr)       (*(__typeof__(*ptr) volatile*) (ptr))
 #define atomic_set(ptr, i)     ((*(__typeof__(*ptr) volatile*) (ptr)) = (i))
+
+/* atomic read/set with acquire/release barrier */
+#define atomic_read_acquire(ptr)    ({            \
+    typeof(*ptr) _val = atomic_read(ptr);         \
+    smp_mb();                                     \
+    _val;                                         \
+})
+
+#define atomic_set_release(ptr, i)  do {          \
+    smp_mb();                                     \
+    atomic_set(ptr, i);                           \
+} while (0)
 
 /**
  * atomic_rcu_read - reads a RCU-protected pointer to a local variable
