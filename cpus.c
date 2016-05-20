@@ -1477,7 +1477,7 @@ static void *qemu_tcg_cpu_thread_fn(void *arg)
 
         handle_icount_deadline();
 
-        if (sleep) {
+        if (sleep && cpu->queued_work_first == NULL) {
             qemu_cond_wait(cpu->halt_cond, &qemu_global_mutex);
         }
 
