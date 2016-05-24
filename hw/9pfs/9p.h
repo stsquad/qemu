@@ -4,7 +4,6 @@
 #include <dirent.h>
 #include <utime.h>
 #include <sys/resource.h>
-#include <glib.h>
 #include "standard-headers/linux/virtio_9p.h"
 #include "hw/virtio/virtio.h"
 #include "fsdev/file-op-9p.h"

@@ -1,7 +1,6 @@
 #ifndef BIOS_LINKER_LOADER_H
 #define BIOS_LINKER_LOADER_H
 
-#include <glib.h>
 
 GArray *bios_linker_loader_init(void);
 
