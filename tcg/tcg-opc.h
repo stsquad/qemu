@@ -42,7 +42,7 @@ DEF(br, 0, 0, 1, TCG_OPF_BB_END)
 # define IMPL64  TCG_OPF_64BIT
 #endif
 
-DEF(fence, 0, 0, 0, TCG_OPF_SIDE_EFFECTS)
+DEF(fence, 0, 0, 0, 0)
 
 DEF(mov_i32, 1, 1, 0, TCG_OPF_NOT_PRESENT)
 DEF(movi_i32, 1, 0, 1, TCG_OPF_NOT_PRESENT)

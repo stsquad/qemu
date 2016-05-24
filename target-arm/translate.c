@@ -7980,9 +7980,13 @@ static void disas_arm_insn(DisasContext *s, unsigned int insn)
                 gen_clrex(s);
                 return;
             case 4: /* dsb */
+                ARCH(7);
+                return;
             case 5: /* dmb */
                 ARCH(7);
-                /* We don't emulate caches so these are a no-op.  */
+                if (TCG_TARGET_HAS_fence) {
+                    tcg_gen_fence();
+                }
                 return;
             case 6: /* isb */
                 /* We need to break the TB after this insn to execute
@@ -10330,8 +10334,11 @@ static int disas_thumb2_insn(CPUARMState *env, DisasContext *s, uint16_t insn_hw
                             gen_clrex(s);
                             break;
                         case 4: /* dsb */
+                            break;
                         case 5: /* dmb */
-                            /* These execute as NOPs.  */
+                            if (TCG_TARGET_HAS_fence) {
+                                tcg_gen_fence();
+                            }
                             break;
                         case 6: /* isb */
                             /* We need to break the TB after this insn
