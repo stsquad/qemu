@@ -2114,6 +2114,8 @@ static inline void tcg_out_op(TCGContext *s, TCGOpcode opc,
         }
         break;
 
+    case INDEX_op_fence:
+        break;
     case INDEX_op_mov_i32:  /* Always emitted via tcg_out_mov.  */
     case INDEX_op_mov_i64:
     case INDEX_op_movi_i32: /* Always emitted via tcg_out_movi.  */
@@ -2178,6 +2180,8 @@ static const TCGTargetOpDef x86_op_defs[] = {
     { INDEX_op_muls2_i32, { "a", "d", "a", "r" } },
     { INDEX_op_add2_i32, { "r", "r", "0", "1", "ri", "ri" } },
     { INDEX_op_sub2_i32, { "r", "r", "0", "1", "ri", "ri" } },
+
+    { INDEX_op_fence, { } },
 
 #if TCG_TARGET_REG_BITS == 32
     { INDEX_op_brcond2_i32, { "r", "r", "ri", "ri" } },
