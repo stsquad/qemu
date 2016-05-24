@@ -2444,6 +2444,7 @@ int tcg_gen_code(TCGContext *s, TranslationBlock *tb)
                                dead_args, sync_args);
             break;
         case INDEX_op_fence:
+            tcg_out_fence(s);
             break;
         default:
             /* Sanity check that we've not introduced any unhandled opcodes. */

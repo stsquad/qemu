@@ -347,6 +347,7 @@ static inline int tcg_target_const_match(tcg_target_long val, TCGType type,
 #define OPC_SHRX        (0xf7 | P_EXT38 | P_SIMDF2)
 #define OPC_TESTL	(0x85)
 #define OPC_XCHG_ax_r32	(0x90)
+#define OPC_MFENCE      (0xAE | P_EXT)
 
 #define OPC_GRP3_Ev	(0xf7)
 #define OPC_GRP5	(0xff)
@@ -684,6 +685,14 @@ static inline void tcg_out_pushi(TCGContext *s, tcg_target_long val)
     } else {
         tcg_abort();
     }
+}
+
+static inline void tcg_out_fence(TCGContext *s)
+{
+    /* TODO: Figure out an appropriate place for the encoding */
+    tcg_out8(s, 0x0F);
+    tcg_out8(s, 0xAE);
+    tcg_out8(s, 0xF0);
 }
 
 static inline void tcg_out_push(TCGContext *s, int reg)
