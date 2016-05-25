@@ -8807,6 +8807,8 @@ static void disas_arm_insn(DisasContext *s, unsigned int insn)
                             default:
                                 abort();
                             }
+                            gen_set_pc_im(s, s->pc);
+                            s->is_jmp = DISAS_JUMP;
                         } else {
                             rm = insn & 0xf;
                             switch (op1) {

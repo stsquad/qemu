@@ -1875,6 +1875,8 @@ static void disas_ldst_excl(DisasContext *s, uint32_t insn)
         if (!is_store) {
             s->is_ldex = true;
             gen_load_exclusive(s, rt, rt2, tcg_addr, size, is_pair);
+            gen_a64_set_pc_im(s->pc);
+            s->is_jmp = DISAS_JUMP;
         } else {
             gen_store_exclusive(s, rs, rt, rt2, tcg_addr, size, is_pair);
         }
