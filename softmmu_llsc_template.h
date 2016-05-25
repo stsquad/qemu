@@ -81,7 +81,7 @@ WORD_TYPE helper_ldlink_name(CPUArchState *env, target_ulong addr,
             excl_history_put_addr(hw_addr);
             CPU_FOREACH(cpu) {
                 if (this_cpu != cpu) {
-                    tlb_flush(cpu, 1);
+                    tlb_flush_other(this_cpu, cpu, 1);
                 }
             }
         }

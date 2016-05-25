@@ -81,12 +81,24 @@ static void tlb_flush_nocheck(CPUState *cpu, int flush_global)
     env->tlb_flush_addr = -1;
     env->tlb_flush_mask = 0;
     tlb_flush_count++;
-    /* atomic_mb_set(&cpu->pending_tlb_flush, 0); */
 }
 
 static void tlb_flush_global_async_work(CPUState *cpu, void *opaque)
 {
     tlb_flush_nocheck(cpu, GPOINTER_TO_INT(opaque));
+    atomic_mb_set(&cpu->pending_tlb_flush, false);
+}
+
+static void tlb_flush_other(CPUState *cpu, CPUState *other, int flush_global)
+{
+    if (other->created) {
+        if (!atomic_xchg(&other->pending_tlb_flush, true)) {
+            async_wait_run_on_cpu(other, cpu, tlb_flush_global_async_work,
+                                  GINT_TO_POINTER(flush_global));
+        }
+    } else {
+        tlb_flush_nocheck(other, flush_global);
+    }
 }
 
 /* NOTE:
@@ -103,11 +115,17 @@ static void tlb_flush_global_async_work(CPUState *cpu, void *opaque)
  */
 void tlb_flush(CPUState *cpu, int flush_global)
 {
-    if (cpu->created) {
-        async_run_on_cpu(cpu, tlb_flush_global_async_work,
-                         GINT_TO_POINTER(flush_global));
-    } else {
+    /* if @cpu has not been created yet or it is the current_cpu, we do not
+     * need to query the flush. */
+    if (current_cpu == cpu || !cpu->created) {
         tlb_flush_nocheck(cpu, flush_global);
+    } else {
+        if (current_cpu) {
+            tlb_flush_other(current_cpu, cpu, flush_global);
+        } else {
+            async_run_on_cpu(cpu, tlb_flush_global_async_work,
+                             GINT_TO_POINTER(flush_global));
+        }
     }
 }
 
