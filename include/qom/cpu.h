@@ -259,6 +259,8 @@ struct qemu_work_item {
     void *data;
     int done;
     bool free;
+    /* CPU waiting for this work item to finish. If NULL, no CPU is waiting. */
+    CPUState *wcpu;
 };
 
 /**
@@ -303,6 +305,7 @@ struct qemu_work_item {
  * @kvm_fd: vCPU file descriptor for KVM.
  * @work_mutex: Lock to prevent multiple access to queued_work_*.
  * @queued_work_first: First asynchronous work pending.
+ * @pending_work_items: Work items for which the CPU needs to wait completion.
  *
  * State of one CPU core or thread.
  */
@@ -337,6 +340,7 @@ struct CPUState {
 
     QemuMutex work_mutex;
     struct qemu_work_item *queued_work_first, *queued_work_last;
+    int pending_work_items;
 
     CPUAddressSpace *cpu_ases;
     int num_ases;
@@ -397,6 +401,9 @@ struct CPUState {
     /* Used to carry the SC result but also to flag a normal store access made
      * by a stcond (see softmmu_template.h). */
     bool excl_succeeded;
+
+    /* True if some CPU requested a TLB flush for this CPU. */
+    bool pending_tlb_flush;
 
     /* Note that this is accessed at the start of every TB via a negative
        offset from AREG0.  Leave this field at the end so as to make the
@@ -680,6 +687,19 @@ void run_on_cpu(CPUState *cpu, run_on_cpu_func func, void *data);
 void async_run_on_cpu(CPUState *cpu, run_on_cpu_func func, void *data);
 
 /**
+ * async_wait_run_on_cpu:
+ * @cpu: The vCPU to run on.
+ * @wpu: The vCPU submitting the work.
+ * @func: The function to be executed.
+ * @data: Data to pass to the function.
+ *
+ * Schedules the function @func for execution on the vCPU @cpu asynchronously.
+ * The vCPU @wcpu will wait for @cpu to finish the job.
+ */
+void async_wait_run_on_cpu(CPUState *cpu, CPUState *wcpu, run_on_cpu_func func,
+                                                                   void *data);
+
+/**
  * async_safe_run_on_cpu:
  * @cpu: The vCPU to run on.
  * @func: The function to be executed.
@@ -697,6 +717,17 @@ void async_safe_run_on_cpu(CPUState *cpu, run_on_cpu_func func, void *data);
  * Returns: @true if a safe work is pending, @false otherwise.
  */
 bool async_safe_work_pending(void);
+
+/**
+ * async_waiting_for_work:
+ *
+ * Check whether there are work items for which @cpu is waiting completion.
+ * Returns: @true if work items are pending for completion, @false otherwise.
+ */
+static inline bool async_waiting_for_work(CPUState *cpu)
+{
+    return atomic_mb_read(&cpu->pending_work_items) != 0;
+}
 
 /**
  * qemu_get_cpu:

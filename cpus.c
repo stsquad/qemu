@@ -89,7 +89,7 @@ static bool cpu_thread_is_idle(CPUState *cpu)
     if (cpu->stop || cpu->queued_work_first) {
         return false;
     }
-    if (cpu_is_stopped(cpu)) {
+    if (cpu_is_stopped(cpu) || async_waiting_for_work(cpu)) {
         return true;
     }
     if (!cpu->halted || cpu_has_work(cpu) ||
@@ -1012,6 +1012,7 @@ void async_run_on_cpu(CPUState *cpu, run_on_cpu_func func, void *data)
     wi->func = func;
     wi->data = data;
     wi->free = true;
+    wi->wcpu = NULL;
 
     qemu_mutex_lock(&cpu->work_mutex);
     if (cpu->queued_work_first == NULL) {
@@ -1025,6 +1026,40 @@ void async_run_on_cpu(CPUState *cpu, run_on_cpu_func func, void *data)
     qemu_mutex_unlock(&cpu->work_mutex);
 
     qemu_cpu_kick(cpu);
+}
+
+void async_wait_run_on_cpu(CPUState *cpu, CPUState *wcpu, run_on_cpu_func func,
+                                                                    void *data)
+{
+    struct qemu_work_item *wwi;
+
+    assert(wcpu != cpu);
+
+    wwi = g_malloc0(sizeof(struct qemu_work_item));
+    wwi->func = func;
+    wwi->data = data;
+    wwi->free = true;
+    wwi->wcpu = wcpu;
+
+    /* Increase the number of pending work items */
+    atomic_inc(&wcpu->pending_work_items);
+
+    qemu_mutex_lock(&cpu->work_mutex);
+    /* Add the waiting work items at the beginning to free as soon as possible
+     * the waiting CPU. */
+    if (cpu->queued_work_first == NULL) {
+        cpu->queued_work_last = wwi;
+    } else {
+        wwi->next = cpu->queued_work_first;
+    }
+    cpu->queued_work_first = wwi;
+    wwi->done = false;
+    qemu_mutex_unlock(&cpu->work_mutex);
+
+    qemu_cpu_kick(cpu);
+
+    /* In order to wait, @wcpu has to exit the CPU loop */
+    cpu_exit(wcpu);
 }
 
 /*
@@ -1120,6 +1155,10 @@ static void flush_queued_work(CPUState *cpu)
         qemu_mutex_unlock(&cpu->work_mutex);
         wi->func(cpu, wi->data);
         qemu_mutex_lock(&cpu->work_mutex);
+        if (wi->wcpu != NULL) {
+            atomic_dec(&wi->wcpu->pending_work_items);
+            qemu_cond_broadcast(wi->wcpu->halt_cond);
+        }
         if (wi->free) {
             g_free(wi);
         } else {
@@ -1406,7 +1445,8 @@ static void *qemu_tcg_cpu_thread_fn(void *arg)
     while (1) {
         bool sleep = false;
 
-        if (cpu_can_run(cpu) && !async_safe_work_pending()) {
+        if (cpu_can_run(cpu) && !async_safe_work_pending()
+                             && !async_waiting_for_work(cpu)) {
             int r;
 
             atomic_inc(&tcg_scheduled_cpus);
