@@ -157,6 +157,8 @@ static inline void tlb_tables_flush_bitmap(CPUState *cpu, unsigned long *bitmap)
 
 struct TLBFlushByMMUIdxParams {
     DECLARE_BITMAP(idx_to_flush, NB_MMU_MODES);
+    /* Used by tlb_flush_page_by_mmuidx */
+    target_ulong addr;
 };
 
 static void tlb_flush_by_mmuidx_async_work(CPUState *cpu, void *opaque)
@@ -255,13 +257,74 @@ void tlb_flush_page(CPUState *cpu, target_ulong addr)
     tb_flush_jmp_cache(cpu, addr);
 }
 
-void tlb_flush_page_by_mmuidx(CPUState *cpu, target_ulong addr, ...)
+static void tlb_flush_page_by_mmuidx_async_work(CPUState *cpu, void *opaque)
 {
     CPUArchState *env = cpu->env_ptr;
-    int i, k;
+    struct TLBFlushByMMUIdxParams *params = opaque;
+    target_ulong addr = params->addr;
+    int mmu_idx, i;
+
+    /* must reset current TB so that interrupts cannot modify the
+       links while we are modifying them */
+    cpu->current_tb = NULL;
+
+    addr &= TARGET_PAGE_MASK;
+    i = (addr >> TARGET_PAGE_BITS) & (CPU_TLB_SIZE - 1);
+
+    for (mmu_idx = 0; mmu_idx < NB_MMU_MODES; mmu_idx++) {
+        if (test_bit(mmu_idx, params->idx_to_flush)) {
+            int k;
+
+            tlb_debug("idx %d\n", mmu_idx);
+            tlb_flush_entry(&env->tlb_table[mmu_idx][i], addr);
+            /* check whether there are vltb entries that need to be flushed */
+            for (k = 0; k < CPU_VTLB_SIZE; k++) {
+                tlb_flush_entry(&env->tlb_v_table[mmu_idx][k], addr);
+            }
+        }
+    }
+
+    tb_flush_jmp_cache(cpu, addr);
+
+    g_free(params);
+}
+
+static void v_tlb_flush_page_by_mmuidx(CPUState *cpu, CPUState *target_cpu,
+                                target_ulong addr, unsigned long *idxmap)
+{
+    if (!qemu_cpu_is_self(target_cpu)) {
+        struct TLBFlushByMMUIdxParams *params;
+
+        params = g_malloc(sizeof(struct TLBFlushByMMUIdxParams));
+        params->addr = addr;
+        memcpy(params->idx_to_flush, idxmap, MMUIDX_BITMAP_SIZE);
+        async_wait_run_on_cpu(target_cpu, cpu,
+                              tlb_flush_page_by_mmuidx_async_work, params);
+    } else {
+        tlb_tables_flush_bitmap(cpu, idxmap);
+    }
+}
+
+void tlb_flush_page_by_mmuidx(CPUState *cpu, CPUState *target,
+                              target_ulong addr, ...)
+{
+    DECLARE_BITMAP(idxmap, NB_MMU_MODES) = { 0 };
+    CPUArchState *env = target->env_ptr;
     va_list argp;
 
     va_start(argp, addr);
+
+    for (;;) {
+        int mmu_idx = va_arg(argp, int);
+
+        if (mmu_idx < 0) {
+            break;
+        }
+
+        set_bit(mmu_idx, idxmap);
+    }
+
+    va_end(argp);
 
     tlb_debug("addr "TARGET_FMT_lx"\n", addr);
 
@@ -271,38 +334,11 @@ void tlb_flush_page_by_mmuidx(CPUState *cpu, target_ulong addr, ...)
                   TARGET_FMT_lx "/" TARGET_FMT_lx ")\n",
                   env->tlb_flush_addr, env->tlb_flush_mask);
 
-        /* Temporarily use current_cpu until tlb_flush_page_by_mmuidx
-         * is reworked */
-        tlb_flush_by_mmuidx(current_cpu, cpu, argp);
-        va_end(argp);
+        v_tlb_flush_by_mmuidx(cpu, target, idxmap);
         return;
     }
-    /* must reset current TB so that interrupts cannot modify the
-       links while we are modifying them */
-    cpu->current_tb = NULL;
 
-    addr &= TARGET_PAGE_MASK;
-    i = (addr >> TARGET_PAGE_BITS) & (CPU_TLB_SIZE - 1);
-
-    for (;;) {
-        int mmu_idx = va_arg(argp, int);
-
-        if (mmu_idx < 0) {
-            break;
-        }
-
-        tlb_debug("idx %d\n", mmu_idx);
-
-        tlb_flush_entry(&env->tlb_table[mmu_idx][i], addr);
-
-        /* check whether there are vltb entries that need to be flushed */
-        for (k = 0; k < CPU_VTLB_SIZE; k++) {
-            tlb_flush_entry(&env->tlb_v_table[mmu_idx][k], addr);
-        }
-    }
-    va_end(argp);
-
-    tb_flush_jmp_cache(cpu, addr);
+    v_tlb_flush_page_by_mmuidx(cpu, target, addr, idxmap);
 }
 
 static void tlb_flush_page_async_work(CPUState *cpu, void *opaque)

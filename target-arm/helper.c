@@ -2869,10 +2869,10 @@ static void tlbi_aa64_vae1_write(CPUARMState *env, const ARMCPRegInfo *ri,
     uint64_t pageaddr = sextract64(value << 12, 0, 56);
 
     if (arm_is_secure_below_el3(env)) {
-        tlb_flush_page_by_mmuidx(cs, pageaddr, ARMMMUIdx_S1SE1,
+        tlb_flush_page_by_mmuidx(cs, cs, pageaddr, ARMMMUIdx_S1SE1,
                                  ARMMMUIdx_S1SE0, -1);
     } else {
-        tlb_flush_page_by_mmuidx(cs, pageaddr, ARMMMUIdx_S12NSE1,
+        tlb_flush_page_by_mmuidx(cs, cs, pageaddr, ARMMMUIdx_S12NSE1,
                                  ARMMMUIdx_S12NSE0, -1);
     }
 }
@@ -2888,7 +2888,7 @@ static void tlbi_aa64_vae2_write(CPUARMState *env, const ARMCPRegInfo *ri,
     CPUState *cs = CPU(cpu);
     uint64_t pageaddr = sextract64(value << 12, 0, 56);
 
-    tlb_flush_page_by_mmuidx(cs, pageaddr, ARMMMUIdx_S1E2, -1);
+    tlb_flush_page_by_mmuidx(cs, cs, pageaddr, ARMMMUIdx_S1E2, -1);
 }
 
 static void tlbi_aa64_vae3_write(CPUARMState *env, const ARMCPRegInfo *ri,
@@ -2902,23 +2902,23 @@ static void tlbi_aa64_vae3_write(CPUARMState *env, const ARMCPRegInfo *ri,
     CPUState *cs = CPU(cpu);
     uint64_t pageaddr = sextract64(value << 12, 0, 56);
 
-    tlb_flush_page_by_mmuidx(cs, pageaddr, ARMMMUIdx_S1E3, -1);
+    tlb_flush_page_by_mmuidx(cs, cs, pageaddr, ARMMMUIdx_S1E3, -1);
 }
 
 static void tlbi_aa64_vae1is_write(CPUARMState *env, const ARMCPRegInfo *ri,
                                    uint64_t value)
 {
     bool sec = arm_is_secure_below_el3(env);
-    CPUState *other_cs;
+    CPUState *other_cs, *this_cs = ENV_GET_CPU(env);
     uint64_t pageaddr = sextract64(value << 12, 0, 56);
 
     CPU_FOREACH(other_cs) {
         if (sec) {
-            tlb_flush_page_by_mmuidx(other_cs, pageaddr, ARMMMUIdx_S1SE1,
-                                     ARMMMUIdx_S1SE0, -1);
+            tlb_flush_page_by_mmuidx(this_cs, other_cs, pageaddr,
+                                     ARMMMUIdx_S1SE1, ARMMMUIdx_S1SE0, -1);
         } else {
-            tlb_flush_page_by_mmuidx(other_cs, pageaddr, ARMMMUIdx_S12NSE1,
-                                     ARMMMUIdx_S12NSE0, -1);
+            tlb_flush_page_by_mmuidx(this_cs, other_cs, pageaddr,
+                                     ARMMMUIdx_S12NSE1, ARMMMUIdx_S12NSE0, -1);
         }
     }
 }
@@ -2926,22 +2926,24 @@ static void tlbi_aa64_vae1is_write(CPUARMState *env, const ARMCPRegInfo *ri,
 static void tlbi_aa64_vae2is_write(CPUARMState *env, const ARMCPRegInfo *ri,
                                    uint64_t value)
 {
-    CPUState *other_cs;
+    CPUState *other_cs, *this_cs = ENV_GET_CPU(env);
     uint64_t pageaddr = sextract64(value << 12, 0, 56);
 
     CPU_FOREACH(other_cs) {
-        tlb_flush_page_by_mmuidx(other_cs, pageaddr, ARMMMUIdx_S1E2, -1);
+        tlb_flush_page_by_mmuidx(this_cs, other_cs, pageaddr,
+                                 ARMMMUIdx_S1E2, -1);
     }
 }
 
 static void tlbi_aa64_vae3is_write(CPUARMState *env, const ARMCPRegInfo *ri,
                                    uint64_t value)
 {
-    CPUState *other_cs;
+    CPUState *other_cs, *this_cs = ENV_GET_CPU(env);
     uint64_t pageaddr = sextract64(value << 12, 0, 56);
 
     CPU_FOREACH(other_cs) {
-        tlb_flush_page_by_mmuidx(other_cs, pageaddr, ARMMMUIdx_S1E3, -1);
+        tlb_flush_page_by_mmuidx(this_cs, other_cs, pageaddr,
+                                 ARMMMUIdx_S1E3, -1);
     }
 }
 
@@ -2964,13 +2966,13 @@ static void tlbi_aa64_ipas2e1_write(CPUARMState *env, const ARMCPRegInfo *ri,
 
     pageaddr = sextract64(value << 12, 0, 48);
 
-    tlb_flush_page_by_mmuidx(cs, pageaddr, ARMMMUIdx_S2NS, -1);
+    tlb_flush_page_by_mmuidx(cs, cs, pageaddr, ARMMMUIdx_S2NS, -1);
 }
 
 static void tlbi_aa64_ipas2e1is_write(CPUARMState *env, const ARMCPRegInfo *ri,
                                       uint64_t value)
 {
-    CPUState *other_cs;
+    CPUState *other_cs, *this_cs = ENV_GET_CPU(env);
     uint64_t pageaddr;
 
     if (!arm_feature(env, ARM_FEATURE_EL2) || !(env->cp15.scr_el3 & SCR_NS)) {
@@ -2980,7 +2982,8 @@ static void tlbi_aa64_ipas2e1is_write(CPUARMState *env, const ARMCPRegInfo *ri,
     pageaddr = sextract64(value << 12, 0, 48);
 
     CPU_FOREACH(other_cs) {
-        tlb_flush_page_by_mmuidx(other_cs, pageaddr, ARMMMUIdx_S2NS, -1);
+        tlb_flush_page_by_mmuidx(this_cs, other_cs, pageaddr,
+                                 ARMMMUIdx_S2NS, -1);
     }
 }
 

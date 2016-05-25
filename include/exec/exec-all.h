@@ -143,7 +143,8 @@ void tlb_flush(CPUState *cpu, int flush_global);
  * Flush one page from the TLB of the specified CPU, for the specified
  * MMU indexes.
  */
-void tlb_flush_page_by_mmuidx(CPUState *cpu, target_ulong addr, ...);
+void tlb_flush_page_by_mmuidx(CPUState *cpu, CPUState *target,
+                              target_ulong addr, ...);
 /**
  * tlb_flush_by_mmuidx:
  * @cpu: CPU whose TLB should be flushed
@@ -200,7 +201,7 @@ static inline void tlb_flush(CPUState *cpu, int flush_global)
 {
 }
 
-static inline void tlb_flush_page_by_mmuidx(CPUState *cpu,
+static inline void tlb_flush_page_by_mmuidx(CPUState *cpu, CPUState *target,
                                             target_ulong addr, ...)
 {
 }
