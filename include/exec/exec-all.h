@@ -191,7 +191,7 @@ void tlb_set_page(CPUState *cpu, target_ulong vaddr,
 void tb_invalidate_phys_addr(AddressSpace *as, hwaddr addr);
 void probe_write(CPUArchState *env, target_ulong addr, int mmu_idx,
                  uintptr_t retaddr);
-void tlb_flush_page_all(target_ulong addr);
+void tlb_flush_page_all(CPUState *this_cpu, target_ulong addr);
 #else
 static inline void tlb_flush_page(CPUState *cpu, target_ulong addr)
 {
@@ -209,7 +209,7 @@ static inline void tlb_flush_page_by_mmuidx(CPUState *cpu, CPUState *target,
 static inline void tlb_flush_by_mmuidx(CPUState *cpu, CPUState *target ...)
 {
 }
-static inline void tlb_flush_page_all(target_ulong addr)
+static inline void tlb_flush_page_all(CPUState *this_cpu, target_ulong addr)
 {
 }
 #endif

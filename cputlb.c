@@ -346,13 +346,18 @@ static void tlb_flush_page_async_work(CPUState *cpu, void *opaque)
     tlb_flush_page(cpu, GPOINTER_TO_UINT(opaque));
 }
 
-void tlb_flush_page_all(target_ulong addr)
+void tlb_flush_page_all(CPUState *this_cpu, target_ulong addr)
 {
-    CPUState *cpu;
+    CPUState *other_cpu;
 
-    CPU_FOREACH(cpu) {
-        async_run_on_cpu(cpu, tlb_flush_page_async_work,
-                         GUINT_TO_POINTER(addr));
+    CPU_FOREACH(other_cpu) {
+        if (other_cpu != this_cpu) {
+            async_wait_run_on_cpu(other_cpu, this_cpu,
+                                  tlb_flush_page_async_work,
+                                  GUINT_TO_POINTER(addr));
+        } else {
+            tlb_flush_page(current_cpu, addr);
+        }
     }
 }
 

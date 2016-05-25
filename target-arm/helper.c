@@ -554,13 +554,13 @@ static void tlbiasid_is_write(CPUARMState *env, const ARMCPRegInfo *ri,
 static void tlbimva_is_write(CPUARMState *env, const ARMCPRegInfo *ri,
                              uint64_t value)
 {
-    tlb_flush_page_all(value & TARGET_PAGE_MASK);
+    tlb_flush_page_all(ENV_GET_CPU(env), value & TARGET_PAGE_MASK);
 }
 
 static void tlbimvaa_is_write(CPUARMState *env, const ARMCPRegInfo *ri,
                              uint64_t value)
 {
-    tlb_flush_page_all(value & TARGET_PAGE_MASK);
+    tlb_flush_page_all(ENV_GET_CPU(env), value & TARGET_PAGE_MASK);
 }
 
 static const ARMCPRegInfo cp_reginfo[] = {
