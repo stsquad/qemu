@@ -20,6 +20,8 @@ import atexit
 import uuid
 import argparse
 import tempfile
+import re
+from shutil import copyfile
 
 def _text_checksum(text):
     """Calculate a digest string unique to the text content"""
@@ -36,6 +38,27 @@ def _guess_docker_command():
     commands_txt = "\n".join(["  " + " ".join(x) for x in commands])
     raise Exception("Cannot find working docker command. Tried:\n%s" % \
                     commands_txt)
+
+def _find_user_binary(binary_name):
+    """ Find a binary in the QEMU source tree. Used for finding qemu-$arch."""
+    top = os.path.abspath("%s/../../.." % sys.argv[0])
+    linux_user = [ x for x in os.listdir(top) if x.endswith("-linux-user") ]
+    for x in linux_user:
+        check_path = "%s/%s/%s" % (top, x, binary_name)
+        if os.path.isfile(check_path):
+            print ("found %s" % check_path)
+            return check_path
+    return None
+
+def _copy_with_mkdir(src, root_dir, sub_path):
+    """Copy src into root_dir, creating sub_path as needed."""
+    full_path = "%s/%s" % (root_dir, sub_path)
+    try:
+        os.makedirs(full_path)
+    except OSError:
+        print "skipping %s" % (full_path)
+
+    copyfile(src, "%s/%s" % (full_path, os.path.basename(src)))
 
 class Docker(object):
     """ Running Docker commands """
@@ -86,18 +109,36 @@ class Docker(object):
         labels = json.loads(resp)[0]["Config"].get("Labels", {})
         return labels.get("com.qemu.dockerfile-checksum", "")
 
-    def build_image(self, tag, dockerfile, df_path, quiet=True, argv=None):
+    def build_image(self, tag, dockerfile, quiet=True, qemu=None, argv=None):
         if argv == None:
             argv = []
+
+        # Create a temporary docker context to build in
+        tmp_dir = tempfile.mkdtemp(prefix="docker_build")
+
+        # Copy the dockerfile into our work space
         tmp = dockerfile + "\n" + \
               "LABEL com.qemu.dockerfile-checksum=%s" % \
               _text_checksum(dockerfile)
-        dirname = os.path.dirname(df_path)
-        tmp_df = tempfile.NamedTemporaryFile(dir=dirname)
+        tmp_df = tempfile.NamedTemporaryFile(dir=tmp_dir, suffix=".docker")
         tmp_df.write(tmp)
         tmp_df.flush()
+
+        # Do we want to copy QEMU into here?
+        if qemu:
+            _copy_with_mkdir(qemu, tmp_dir, "/usr/bin")
+            # do ldd bit here
+            ldd_output = subprocess.check_output(["ldd", qemu])
+            for l in ldd_output.split("\n"):
+                s = re.search("(/.*/)(\S*)", l)
+                if s and len(s.groups())==2:
+                    so_path=s.groups()[0]
+                    so_lib=s.groups()[1]
+                    _copy_with_mkdir("%s/%s" % (so_path, so_lib),
+                                     tmp_dir, so_path)
+
         self._do(["build", "-t", tag, "-f", tmp_df.name] + argv + \
-                 [dirname],
+                 [tmp_dir],
                  quiet=quiet)
 
     def image_matches_dockerfile(self, tag, dockerfile):
@@ -148,6 +189,7 @@ class BuildCommand(SubCommand):
     """ Build docker image out of a dockerfile. Arguments: <tag> <dockerfile>"""
     name = "build"
     def args(self, parser):
+        parser.add_argument("--qemu", help="Include qemu-user binaries")
         parser.add_argument("tag",
                             help="Image Tag")
         parser.add_argument("dockerfile",
@@ -157,14 +199,18 @@ class BuildCommand(SubCommand):
         dockerfile = open(args.dockerfile, "rb").read()
         tag = args.tag
 
+        # find qemu binary
+        qbin=None
+        if args.qemu:
+            qbin=_find_user_binary(args.qemu)
+
         dkr = Docker()
         if dkr.image_matches_dockerfile(tag, dockerfile):
             if not args.quiet:
                 print "Image is up to date."
             return 0
 
-        dkr.build_image(tag, dockerfile, args.dockerfile,
-                        quiet=args.quiet, argv=argv)
+        dkr.build_image(tag, dockerfile, quiet=args.quiet, qemu=qbin, argv=argv)
         return 0
 
 class CleanCommand(SubCommand):
