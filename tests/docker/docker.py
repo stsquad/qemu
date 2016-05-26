@@ -205,6 +205,11 @@ class BuildCommand(SubCommand):
             # Create a docker context directory for the build
             docker_dir = tempfile.mkdtemp(prefix="docker_build")
 
+            # Is there a .pre file to run in the build context?
+            docker_pre = os.path.splitext(args.dockerfile)[0]+".pre"
+            if os.path.exists(docker_pre):
+                subprocess.call(os.path.realpath(docker_pre), cwd=docker_dir)
+
             # Do we include a extra binary?
             if args.include_executable:
                 _copy_binary_with_libs(args.include_executable,
