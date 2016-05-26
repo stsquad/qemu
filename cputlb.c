@@ -59,6 +59,8 @@
 /* We need a solution for stuffing 64 bit pointers in 32 bit ones if
  * we care about this combination */
 QEMU_BUILD_BUG_ON(sizeof(target_ulong) > sizeof(void *));
+/* Size, in bytes, of the bitmap used by tlb_flush_by_mmuidx functions */
+#define MMUIDX_BITMAP_SIZE sizeof(unsigned long) * BITS_TO_LONGS(NB_MMU_MODES)
 
 /* statistics */
 int tlb_flush_count;
@@ -153,9 +155,40 @@ static inline void tlb_tables_flush_bitmap(CPUState *cpu, unsigned long *bitmap)
     memset(cpu->tb_jmp_cache, 0, sizeof(cpu->tb_jmp_cache));
 }
 
-static inline void v_tlb_flush_by_mmuidx(CPUState *cpu, va_list argp)
+struct TLBFlushByMMUIdxParams {
+    DECLARE_BITMAP(idx_to_flush, NB_MMU_MODES);
+};
+
+static void tlb_flush_by_mmuidx_async_work(CPUState *cpu, void *opaque)
 {
+    struct TLBFlushByMMUIdxParams *params = opaque;
+
+    tlb_tables_flush_bitmap(cpu, params->idx_to_flush);
+
+    g_free(params);
+}
+
+static inline void v_tlb_flush_by_mmuidx(CPUState *cpu, CPUState *target,
+                                         unsigned long *idxmap)
+{
+    if (!qemu_cpu_is_self(target)) {
+        struct TLBFlushByMMUIdxParams *params;
+
+        params = g_malloc(sizeof(struct TLBFlushByMMUIdxParams));
+        memcpy(params->idx_to_flush, idxmap, MMUIDX_BITMAP_SIZE);
+        async_wait_run_on_cpu(target, cpu, tlb_flush_by_mmuidx_async_work,
+                              params);
+    } else {
+        tlb_tables_flush_bitmap(cpu, idxmap);
+    }
+}
+
+void tlb_flush_by_mmuidx(CPUState *cpu, CPUState *target_cpu, ...)
+{
+    va_list argp;
     DECLARE_BITMAP(idxmap, NB_MMU_MODES) = { 0 };
+
+    va_start(argp, target_cpu);
 
     for (;;) {
         int mmu_idx = va_arg(argp, int);
@@ -167,15 +200,9 @@ static inline void v_tlb_flush_by_mmuidx(CPUState *cpu, va_list argp)
         set_bit(mmu_idx, idxmap);
     }
 
-    tlb_tables_flush_bitmap(cpu, idxmap);
-}
-
-void tlb_flush_by_mmuidx(CPUState *cpu, ...)
-{
-    va_list argp;
-    va_start(argp, cpu);
-    v_tlb_flush_by_mmuidx(cpu, argp);
     va_end(argp);
+
+    v_tlb_flush_by_mmuidx(cpu, target_cpu, idxmap);
 }
 
 static inline void tlb_flush_entry(CPUTLBEntry *tlb_entry, target_ulong addr)
@@ -244,7 +271,9 @@ void tlb_flush_page_by_mmuidx(CPUState *cpu, target_ulong addr, ...)
                   TARGET_FMT_lx "/" TARGET_FMT_lx ")\n",
                   env->tlb_flush_addr, env->tlb_flush_mask);
 
-        v_tlb_flush_by_mmuidx(cpu, argp);
+        /* Temporarily use current_cpu until tlb_flush_page_by_mmuidx
+         * is reworked */
+        tlb_flush_by_mmuidx(current_cpu, cpu, argp);
         va_end(argp);
         return;
     }

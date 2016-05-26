@@ -152,7 +152,7 @@ void tlb_flush_page_by_mmuidx(CPUState *cpu, target_ulong addr, ...);
  * Flush all entries from the TLB of the specified CPU, for the specified
  * MMU indexes.
  */
-void tlb_flush_by_mmuidx(CPUState *cpu, ...);
+void tlb_flush_by_mmuidx(CPUState *cpu, CPUState *target, ...);
 /**
  * tlb_set_page_with_attrs:
  * @cpu: CPU to add this TLB entry for
@@ -205,7 +205,7 @@ static inline void tlb_flush_page_by_mmuidx(CPUState *cpu,
 {
 }
 
-static inline void tlb_flush_by_mmuidx(CPUState *cpu, ...)
+static inline void tlb_flush_by_mmuidx(CPUState *cpu, CPUState *target ...)
 {
 }
 static inline void tlb_flush_page_all(target_ulong addr)

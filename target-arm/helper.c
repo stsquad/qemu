@@ -2388,7 +2388,7 @@ static void vttbr_write(CPUARMState *env, const ARMCPRegInfo *ri,
 
     /* Accesses to VTTBR may change the VMID so we must flush the TLB.  */
     if (raw_read(env, ri) != value) {
-        tlb_flush_by_mmuidx(cs, ARMMMUIdx_S12NSE1, ARMMMUIdx_S12NSE0,
+        tlb_flush_by_mmuidx(cs, cs, ARMMMUIdx_S12NSE1, ARMMMUIdx_S12NSE0,
                             ARMMMUIdx_S2NS, -1);
         raw_write(env, ri, value);
     }
@@ -2748,9 +2748,9 @@ static void tlbi_aa64_vmalle1_write(CPUARMState *env, const ARMCPRegInfo *ri,
     CPUState *cs = CPU(cpu);
 
     if (arm_is_secure_below_el3(env)) {
-        tlb_flush_by_mmuidx(cs, ARMMMUIdx_S1SE1, ARMMMUIdx_S1SE0, -1);
+        tlb_flush_by_mmuidx(cs, cs, ARMMMUIdx_S1SE1, ARMMMUIdx_S1SE0, -1);
     } else {
-        tlb_flush_by_mmuidx(cs, ARMMMUIdx_S12NSE1, ARMMMUIdx_S12NSE0, -1);
+        tlb_flush_by_mmuidx(cs, cs, ARMMMUIdx_S12NSE1, ARMMMUIdx_S12NSE0, -1);
     }
 }
 
@@ -2758,13 +2758,14 @@ static void tlbi_aa64_vmalle1is_write(CPUARMState *env, const ARMCPRegInfo *ri,
                                       uint64_t value)
 {
     bool sec = arm_is_secure_below_el3(env);
-    CPUState *other_cs;
+    CPUState *other_cs, *this_cs = ENV_GET_CPU(env);
 
     CPU_FOREACH(other_cs) {
         if (sec) {
-            tlb_flush_by_mmuidx(other_cs, ARMMMUIdx_S1SE1, ARMMMUIdx_S1SE0, -1);
+            tlb_flush_by_mmuidx(this_cs, other_cs, ARMMMUIdx_S1SE1,
+                                ARMMMUIdx_S1SE0, -1);
         } else {
-            tlb_flush_by_mmuidx(other_cs, ARMMMUIdx_S12NSE1,
+            tlb_flush_by_mmuidx(this_cs, other_cs, ARMMMUIdx_S12NSE1,
                                 ARMMMUIdx_S12NSE0, -1);
         }
     }
@@ -2781,13 +2782,13 @@ static void tlbi_aa64_alle1_write(CPUARMState *env, const ARMCPRegInfo *ri,
     CPUState *cs = CPU(cpu);
 
     if (arm_is_secure_below_el3(env)) {
-        tlb_flush_by_mmuidx(cs, ARMMMUIdx_S1SE1, ARMMMUIdx_S1SE0, -1);
+        tlb_flush_by_mmuidx(cs, cs, ARMMMUIdx_S1SE1, ARMMMUIdx_S1SE0, -1);
     } else {
         if (arm_feature(env, ARM_FEATURE_EL2)) {
-            tlb_flush_by_mmuidx(cs, ARMMMUIdx_S12NSE1, ARMMMUIdx_S12NSE0,
+            tlb_flush_by_mmuidx(cs, cs, ARMMMUIdx_S12NSE1, ARMMMUIdx_S12NSE0,
                                 ARMMMUIdx_S2NS, -1);
         } else {
-            tlb_flush_by_mmuidx(cs, ARMMMUIdx_S12NSE1, ARMMMUIdx_S12NSE0, -1);
+            tlb_flush_by_mmuidx(cs, cs, ARMMMUIdx_S12NSE1, ARMMMUIdx_S12NSE0, -1);
         }
     }
 }
@@ -2798,7 +2799,7 @@ static void tlbi_aa64_alle2_write(CPUARMState *env, const ARMCPRegInfo *ri,
     ARMCPU *cpu = arm_env_get_cpu(env);
     CPUState *cs = CPU(cpu);
 
-    tlb_flush_by_mmuidx(cs, ARMMMUIdx_S1E2, -1);
+    tlb_flush_by_mmuidx(cs, cs, ARMMMUIdx_S1E2, -1);
 }
 
 static void tlbi_aa64_alle3_write(CPUARMState *env, const ARMCPRegInfo *ri,
@@ -2807,7 +2808,7 @@ static void tlbi_aa64_alle3_write(CPUARMState *env, const ARMCPRegInfo *ri,
     ARMCPU *cpu = arm_env_get_cpu(env);
     CPUState *cs = CPU(cpu);
 
-    tlb_flush_by_mmuidx(cs, ARMMMUIdx_S1E3, -1);
+    tlb_flush_by_mmuidx(cs, cs, ARMMMUIdx_S1E3, -1);
 }
 
 static void tlbi_aa64_alle1is_write(CPUARMState *env, const ARMCPRegInfo *ri,
@@ -2819,16 +2820,17 @@ static void tlbi_aa64_alle1is_write(CPUARMState *env, const ARMCPRegInfo *ri,
      */
     bool sec = arm_is_secure_below_el3(env);
     bool has_el2 = arm_feature(env, ARM_FEATURE_EL2);
-    CPUState *other_cs;
+    CPUState *other_cs, *this_cs = ENV_GET_CPU(env);
 
     CPU_FOREACH(other_cs) {
         if (sec) {
-            tlb_flush_by_mmuidx(other_cs, ARMMMUIdx_S1SE1, ARMMMUIdx_S1SE0, -1);
+            tlb_flush_by_mmuidx(this_cs, other_cs, ARMMMUIdx_S1SE1,
+                                ARMMMUIdx_S1SE0, -1);
         } else if (has_el2) {
-            tlb_flush_by_mmuidx(other_cs, ARMMMUIdx_S12NSE1,
+            tlb_flush_by_mmuidx(this_cs, other_cs, ARMMMUIdx_S12NSE1,
                                 ARMMMUIdx_S12NSE0, ARMMMUIdx_S2NS, -1);
         } else {
-            tlb_flush_by_mmuidx(other_cs, ARMMMUIdx_S12NSE1,
+            tlb_flush_by_mmuidx(this_cs, other_cs, ARMMMUIdx_S12NSE1,
                                 ARMMMUIdx_S12NSE0, -1);
         }
     }
@@ -2837,20 +2839,20 @@ static void tlbi_aa64_alle1is_write(CPUARMState *env, const ARMCPRegInfo *ri,
 static void tlbi_aa64_alle2is_write(CPUARMState *env, const ARMCPRegInfo *ri,
                                     uint64_t value)
 {
-    CPUState *other_cs;
+    CPUState *other_cs, *this_cs = ENV_GET_CPU(env);
 
     CPU_FOREACH(other_cs) {
-        tlb_flush_by_mmuidx(other_cs, ARMMMUIdx_S1E2, -1);
+        tlb_flush_by_mmuidx(this_cs, other_cs, ARMMMUIdx_S1E2, -1);
     }
 }
 
 static void tlbi_aa64_alle3is_write(CPUARMState *env, const ARMCPRegInfo *ri,
                                     uint64_t value)
 {
-    CPUState *other_cs;
+    CPUState *other_cs, *this_cs = ENV_GET_CPU(env);
 
     CPU_FOREACH(other_cs) {
-        tlb_flush_by_mmuidx(other_cs, ARMMMUIdx_S1E3, -1);
+        tlb_flush_by_mmuidx(this_cs, other_cs, ARMMMUIdx_S1E3, -1);
     }
 }
 
