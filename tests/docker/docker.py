@@ -21,7 +21,7 @@ import uuid
 import argparse
 import tempfile
 import re
-from shutil import copyfile
+from shutil import copy
 
 def _text_checksum(text):
     """Calculate a digest string unique to the text content"""
@@ -46,7 +46,6 @@ def _find_user_binary(binary_name):
     for x in linux_user:
         check_path = "%s/%s/%s" % (top, x, binary_name)
         if os.path.isfile(check_path):
-            print ("found %s" % check_path)
             return check_path
     return None
 
@@ -58,7 +57,7 @@ def _copy_with_mkdir(src, root_dir, sub_path):
     except OSError:
         print "skipping %s" % (full_path)
 
-    copyfile(src, "%s/%s" % (full_path, os.path.basename(src)))
+    copy(src, "%s/%s" % (full_path, os.path.basename(src)))
 
 class Docker(object):
     """ Running Docker commands """
@@ -117,11 +116,23 @@ class Docker(object):
         tmp_dir = tempfile.mkdtemp(prefix="docker_build")
 
         # Copy the dockerfile into our work space
-        tmp = dockerfile + "\n" + \
-              "LABEL com.qemu.dockerfile-checksum=%s" % \
-              _text_checksum(dockerfile)
+        # line by line, stripping and executing HOST_CMDs
+        #
         tmp_df = tempfile.NamedTemporaryFile(dir=tmp_dir, suffix=".docker")
-        tmp_df.write(tmp)
+
+        for l in open(dockerfile).readlines():
+            m = re.match("HOST_CMD ", l)
+            if m:
+                print "l=%s" % (l)
+                cmd = l[m.end():]
+                r = subprocess.check_call(cmd, cwd=tmp_dir, shell=True)
+                tmp_df.write("# HOST_CMD %s# HOST_RES = %d\n" % (cmd, r))
+            else:
+                tmp_df.write(l)
+
+        tmp_df.write("\n")
+        tmp_df.write("LABEL com.qemu.dockerfile-checksum=%s" %
+                     _text_checksum(dockerfile))
         tmp_df.flush()
 
         # Do we want to copy QEMU into here?
@@ -210,7 +221,7 @@ class BuildCommand(SubCommand):
                 print "Image is up to date."
             return 0
 
-        dkr.build_image(tag, dockerfile, quiet=args.quiet, qemu=qbin, argv=argv)
+        dkr.build_image(tag, args.dockerfile, quiet=args.quiet, qemu=qbin, argv=argv)
         return 0
 
 class CleanCommand(SubCommand):
