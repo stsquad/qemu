@@ -129,14 +129,33 @@ void tlb_flush(CPUState *cpu, int flush_global)
     }
 }
 
-static inline void v_tlb_flush_by_mmuidx(CPUState *cpu, va_list argp)
+/* Flush tlb_table[] and tlb_v_table[] of @cpu at MMU indexes given by @bitmap.
+ * Flush also tb_jmp_cache. */
+static inline void tlb_tables_flush_bitmap(CPUState *cpu, unsigned long *bitmap)
 {
-    CPUArchState *env = cpu->env_ptr;
+    int mmu_idx;
 
     tlb_debug("start\n");
     /* must reset current TB so that interrupts cannot modify the
        links while we are modifying them */
     cpu->current_tb = NULL;
+
+    for (mmu_idx = 0; mmu_idx < NB_MMU_MODES; mmu_idx++) {
+        if (test_bit(mmu_idx, bitmap)) {
+            CPUArchState *env = cpu->env_ptr;
+
+            tlb_debug("%d\n", mmu_idx);
+
+            memset(env->tlb_table[mmu_idx], -1, sizeof(env->tlb_table[0]));
+            memset(env->tlb_v_table[mmu_idx], -1, sizeof(env->tlb_v_table[0]));
+        }
+    }
+    memset(cpu->tb_jmp_cache, 0, sizeof(cpu->tb_jmp_cache));
+}
+
+static inline void v_tlb_flush_by_mmuidx(CPUState *cpu, va_list argp)
+{
+    DECLARE_BITMAP(idxmap, NB_MMU_MODES) = { 0 };
 
     for (;;) {
         int mmu_idx = va_arg(argp, int);
@@ -145,13 +164,10 @@ static inline void v_tlb_flush_by_mmuidx(CPUState *cpu, va_list argp)
             break;
         }
 
-        tlb_debug("%d\n", mmu_idx);
-
-        memset(env->tlb_table[mmu_idx], -1, sizeof(env->tlb_table[0]));
-        memset(env->tlb_v_table[mmu_idx], -1, sizeof(env->tlb_v_table[0]));
+        set_bit(mmu_idx, idxmap);
     }
 
-    memset(cpu->tb_jmp_cache, 0, sizeof(cpu->tb_jmp_cache));
+    tlb_tables_flush_bitmap(cpu, idxmap);
 }
 
 void tlb_flush_by_mmuidx(CPUState *cpu, ...)
