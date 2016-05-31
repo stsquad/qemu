@@ -599,7 +599,7 @@ static void load_iso_bc_entry(IsoBcSection *load)
 
     if (real_size) {
         /* Round up blocks to load */
-        blks_to_load = (real_size + ISO_SECTOR_SIZE - 1) / ISO_SECTOR_SIZE;
+        blks_to_load = DIV_ROUND_UP(real_size, ISO_SECTOR_SIZE);
         sclp_print("ISO boot image size verified\n");
     } else {
         sclp_print("ISO boot image size could not be verified\n");
