@@ -291,14 +291,13 @@ static inline int tcg_target_const_match(tcg_target_long val, TCGType type,
 # define P_REXW         0x1000          /* Set REX.W = 1 */
 # define P_REXB_R       0x2000          /* REG field as byte register */
 # define P_REXB_RM      0x4000          /* R/M field as byte register */
-# define P_GS           0x8000          /* gs segment override */
 #else
 # define P_ADDR32	0
 # define P_REXW		0
 # define P_REXB_R	0
 # define P_REXB_RM	0
-# define P_GS           0
 #endif
+#define P_SEG           0x8000          /* fs/gs segment override */
 #define P_SIMDF3        0x10000         /* 0xf3 opcode prefix */
 #define P_SIMDF2        0x20000         /* 0xf2 opcode prefix */
 
@@ -426,8 +425,8 @@ static void tcg_out_opc(TCGContext *s, int opc, int r, int rm, int x)
 {
     int rex;
 
-    if (opc & P_GS) {
-        tcg_out8(s, 0x65);
+    if (opc & P_SEG) {
+        tcg_out8(s, 0x65); /* %gs */
     }
     if (opc & P_DATA16) {
         /* We should never be asking for both 16 and 64-bit operation.  */
@@ -473,6 +472,9 @@ static void tcg_out_opc(TCGContext *s, int opc, int r, int rm, int x)
 #else
 static void tcg_out_opc(TCGContext *s, int opc)
 {
+    if (opc & P_SEG) {
+        tcg_out8(s, 0x64); /* %fs */
+    }
     if (opc & P_DATA16) {
         tcg_out8(s, 0x66);
     }
@@ -1550,7 +1552,7 @@ static void setup_guest_base(TCGContext *s)
     }
 # ifdef __linux__
     if (arch_prctl(ARCH_SET_GS, guest_base) == 0) {
-        guest_base_flags = (TARGET_LONG_BITS == 32 ? P_GS | P_ADDR32 : P_GS);
+        guest_base_flags = P_SEG + (TARGET_LONG_BITS == 32) * P_ADDR32;
         return;
     }
 # endif
@@ -1561,6 +1563,33 @@ static void setup_guest_base(TCGContext *s)
         tcg_regset_set_reg(s->reserved_regs, guest_base_reg);
         tcg_out_movi(s, TCG_TYPE_PTR, guest_base_reg, guest_base);
     }
+}
+#elif defined(__linux__)
+# include <asm/ldt.h>
+# include <sys/syscall.h>
+
+static int32_t guest_base_ofs;
+static int guest_base_flags;
+#define guest_base_reg    -1
+static void setup_guest_base(TCGContext *s)
+{
+    if (guest_base != 0) {
+        struct user_desc desc = {
+            .entry_number = -1,
+            .base_addr = guest_base,
+            .limit = 0xfffff,
+            .seg_32bit = 1,
+            .limit_in_pages = 1,
+            .useable = 1,
+        };
+        if (syscall(SYS_set_thread_area, &desc) == 0) {
+	    int seg = desc.entry_number * 8 + 3;
+            asm volatile("movl %0,%%fs" : : "r"(seg));
+	    guest_base_flags = P_SEG;
+            return;
+	}
+    }
+    guest_base_ofs = guest_base;
 }
 #else
 # define guest_base_flags  0
@@ -2547,6 +2576,9 @@ static void tcg_target_qemu_prologue(TCGContext *s)
     tcg_out_ld(s, TCG_TYPE_PTR, TCG_AREG0, TCG_REG_ESP,
                (ARRAY_SIZE(tcg_target_callee_save_regs) + 1) * 4);
     tcg_out_addi(s, TCG_REG_ESP, -stack_addend);
+# if !defined(CONFIG_SOFTMMU)
+    setup_guest_base(s);
+# endif
     /* jmp *tb.  */
     tcg_out_modrm_offset(s, OPC_GRP5, EXT5_JMPN_Ev, TCG_REG_ESP,
 		         (ARRAY_SIZE(tcg_target_callee_save_regs) + 2) * 4
@@ -2554,11 +2586,9 @@ static void tcg_target_qemu_prologue(TCGContext *s)
 #else
     tcg_out_mov(s, TCG_TYPE_PTR, TCG_AREG0, tcg_target_call_iarg_regs[0]);
     tcg_out_addi(s, TCG_REG_ESP, -stack_addend);
-
 # if !defined(CONFIG_SOFTMMU)
     setup_guest_base(s);
 # endif
-
     /* jmp *tb.  */
     tcg_out_modrm(s, OPC_GRP5, EXT5_JMPN_Ev, tcg_target_call_iarg_regs[1]);
 #endif
