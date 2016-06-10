@@ -388,9 +388,11 @@ static inline void cpu_handle_debug_exception(CPUState *cpu)
 {
     CPUClass *cc = CPU_GET_CLASS(cpu);
     CPUWatchpoint *wp;
+    int i;
 
-    if (!cpu->watchpoint_hit) {
-        QTAILQ_FOREACH(wp, &cpu->watchpoints, entry) {
+    if (!cpu->watchpoint_hit && cpu->watchpoints) {
+        for (i = 0; i < cpu->watchpoints->len; i++) {
+            wp = g_array_index(cpu->watchpoints, CPUWatchpoint *, i);
             wp->flags &= ~BP_WATCHPOINT_HIT;
         }
     }

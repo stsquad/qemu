@@ -3802,8 +3802,6 @@ CPUArchState *cpu_copy(CPUArchState *env)
     CPUState *cpu = ENV_GET_CPU(env);
     CPUState *new_cpu = cpu_init(cpu_model);
     CPUArchState *new_env = new_cpu->env_ptr;
-    CPUBreakpoint *bp;
-    CPUWatchpoint *wp;
 
     /* Reset non arch specific state */
     cpu_reset(new_cpu);
@@ -3813,13 +3811,21 @@ CPUArchState *cpu_copy(CPUArchState *env)
     /* Clone all break/watchpoints.
        Note: Once we support ptrace with hw-debug register access, make sure
        BP_CPU break/watchpoints are handled correctly on clone. */
-    QTAILQ_INIT(&new_cpu->breakpoints);
-    QTAILQ_INIT(&new_cpu->watchpoints);
-    QTAILQ_FOREACH(bp, &cpu->breakpoints, entry) {
-        cpu_breakpoint_insert(new_cpu, bp->pc, bp->flags, NULL);
+    if (unlikely(cpu->breakpoints) && unlikely(cpu->breakpoints->len)) {
+        CPUBreakpoint *bp;
+        int i;
+        for (i = 0; i < cpu->breakpoints->len; i++) {
+            bp = g_array_index(cpu->breakpoints, CPUBreakpoint *, i);
+            cpu_breakpoint_insert(new_cpu, bp->pc, bp->flags, NULL);
+        }
     }
-    QTAILQ_FOREACH(wp, &cpu->watchpoints, entry) {
-        cpu_watchpoint_insert(new_cpu, wp->vaddr, wp->len, wp->flags, NULL);
+    if (unlikely(cpu->watchpoints) && unlikely(cpu->watchpoints->len)) {
+        CPUWatchpoint *wp;
+        int i;
+        for (i = 0; i < cpu->watchpoints->len; i++) {
+            wp = g_array_index(cpu->watchpoints, CPUWatchpoint *, i);
+            cpu_watchpoint_insert(new_cpu, wp->vaddr, wp->len, wp->flags, NULL);
+        }
     }
 
     return new_env;

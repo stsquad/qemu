@@ -769,17 +769,22 @@ int cpu_watchpoint_insert(CPUState *cpu, vaddr addr, vaddr len,
                      VADDR_PRIx ", len=%" VADDR_PRIu, addr, len);
         return -EINVAL;
     }
-    wp = g_malloc(sizeof(*wp));
 
+    /* Allocate if no previous watchpoints */
+    if (!cpu->watchpoints) {
+        cpu->watchpoints = g_array_new(false, false, sizeof(CPUWatchpoint *));
+    }
+
+    wp = g_malloc(sizeof(*wp));
     wp->vaddr = addr;
     wp->len = len;
     wp->flags = flags;
 
     /* keep all GDB-injected watchpoints in front */
     if (flags & BP_GDB) {
-        QTAILQ_INSERT_HEAD(&cpu->watchpoints, wp, entry);
+        g_array_prepend_val(cpu->watchpoints, wp);
     } else {
-        QTAILQ_INSERT_TAIL(&cpu->watchpoints, wp, entry);
+        g_array_append_val(cpu->watchpoints, wp);
     }
 
     tlb_flush_page(cpu, addr);
@@ -794,13 +799,17 @@ int cpu_watchpoint_remove(CPUState *cpu, vaddr addr, vaddr len,
                           int flags)
 {
     CPUWatchpoint *wp;
+    int i = 0;
 
-    QTAILQ_FOREACH(wp, &cpu->watchpoints, entry) {
-        if (addr == wp->vaddr && len == wp->len
+    if (unlikely(cpu->watchpoints) && unlikely(cpu->watchpoints->len)) {
+        do {
+            wp = g_array_index(cpu->watchpoints, CPUWatchpoint *, i);
+            if (wp && addr == wp->vaddr && len == wp->len
                 && flags == (wp->flags & ~BP_WATCHPOINT_HIT)) {
-            cpu_watchpoint_remove_by_ref(cpu, wp);
-            return 0;
-        }
+                cpu_watchpoint_remove_by_ref(cpu, wp);
+                return 0;
+            }
+        } while (i++ < cpu->watchpoints->len);
     }
     return -ENOENT;
 }
@@ -808,7 +817,18 @@ int cpu_watchpoint_remove(CPUState *cpu, vaddr addr, vaddr len,
 /* Remove a specific watchpoint by reference.  */
 void cpu_watchpoint_remove_by_ref(CPUState *cpu, CPUWatchpoint *watchpoint)
 {
-    QTAILQ_REMOVE(&cpu->watchpoints, watchpoint, entry);
+    CPUWatchpoint *wp;
+    int i;
+
+    g_assert(cpu->watchpoints);
+
+    for (i = 0; i < cpu->watchpoints->len; i++) {
+        wp = g_array_index(cpu->watchpoints, CPUWatchpoint *, i);
+        if (wp == watchpoint) {
+            g_array_remove_index_fast(cpu->watchpoints, i);
+            break;
+        }
+    }
 
     tlb_flush_page(cpu, watchpoint->vaddr);
 
@@ -818,11 +838,15 @@ void cpu_watchpoint_remove_by_ref(CPUState *cpu, CPUWatchpoint *watchpoint)
 /* Remove all matching watchpoints.  */
 void cpu_watchpoint_remove_all(CPUState *cpu, int mask)
 {
-    CPUWatchpoint *wp, *next;
+    CPUWatchpoint *wp;
+    int i;
 
-    QTAILQ_FOREACH_SAFE(wp, &cpu->watchpoints, entry, next) {
-        if (wp->flags & mask) {
-            cpu_watchpoint_remove_by_ref(cpu, wp);
+    if (unlikely(cpu->watchpoints) && unlikely(cpu->watchpoints->len)) {
+        for (i = cpu->watchpoints->len; i == 0; i--) {
+            wp = g_array_index(cpu->watchpoints, CPUWatchpoint *, i);
+            if (wp->flags & mask) {
+                cpu_watchpoint_remove_by_ref(cpu, wp);
+            }
         }
     }
 }
@@ -855,6 +879,11 @@ int cpu_breakpoint_insert(CPUState *cpu, vaddr pc, int flags,
 {
     CPUBreakpoint *bp;
 
+    /* Allocate if no previous breakpoints */
+    if (!cpu->breakpoints) {
+        cpu->breakpoints = g_array_new(false, false, sizeof(CPUBreakpoint *));
+    }
+
     bp = g_malloc(sizeof(*bp));
 
     bp->pc = pc;
@@ -862,9 +891,9 @@ int cpu_breakpoint_insert(CPUState *cpu, vaddr pc, int flags,
 
     /* keep all GDB-injected breakpoints in front */
     if (flags & BP_GDB) {
-        QTAILQ_INSERT_HEAD(&cpu->breakpoints, bp, entry);
+        g_array_prepend_val(cpu->breakpoints, bp);
     } else {
-        QTAILQ_INSERT_TAIL(&cpu->breakpoints, bp, entry);
+        g_array_append_val(cpu->breakpoints, bp);
     }
 
     breakpoint_invalidate(cpu, pc);
@@ -879,8 +908,12 @@ int cpu_breakpoint_insert(CPUState *cpu, vaddr pc, int flags,
 int cpu_breakpoint_remove(CPUState *cpu, vaddr pc, int flags)
 {
     CPUBreakpoint *bp;
+    int i;
 
-    QTAILQ_FOREACH(bp, &cpu->breakpoints, entry) {
+    g_assert(cpu->breakpoints);
+
+    for (i = 0; i < cpu->breakpoints->len; i++) {
+        bp = g_array_index(cpu->breakpoints, CPUBreakpoint *, i);
         if (bp->pc == pc && bp->flags == flags) {
             cpu_breakpoint_remove_by_ref(cpu, bp);
             return 0;
@@ -892,7 +925,16 @@ int cpu_breakpoint_remove(CPUState *cpu, vaddr pc, int flags)
 /* Remove a specific breakpoint by reference.  */
 void cpu_breakpoint_remove_by_ref(CPUState *cpu, CPUBreakpoint *breakpoint)
 {
-    QTAILQ_REMOVE(&cpu->breakpoints, breakpoint, entry);
+    CPUBreakpoint *bp;
+    int i;
+
+    for (i = 0; i < cpu->breakpoints->len; i++) {
+        bp = g_array_index(cpu->breakpoints, CPUBreakpoint *, i);
+        if (bp == breakpoint) {
+            g_array_remove_index_fast(cpu->breakpoints, i);
+            break;
+        }
+    }
 
     breakpoint_invalidate(cpu, breakpoint->pc);
 
@@ -902,11 +944,15 @@ void cpu_breakpoint_remove_by_ref(CPUState *cpu, CPUBreakpoint *breakpoint)
 /* Remove all matching breakpoints. */
 void cpu_breakpoint_remove_all(CPUState *cpu, int mask)
 {
-    CPUBreakpoint *bp, *next;
+    CPUBreakpoint *bp;
+    int i;
 
-    QTAILQ_FOREACH_SAFE(bp, &cpu->breakpoints, entry, next) {
-        if (bp->flags & mask) {
-            cpu_breakpoint_remove_by_ref(cpu, bp);
+    if (unlikely(cpu->breakpoints) && unlikely(cpu->breakpoints->len)) {
+        for (i = cpu->breakpoints->len; i == 0; i--) {
+            bp = g_array_index(cpu->breakpoints, CPUBreakpoint *, i);
+            if (bp->flags & mask) {
+                cpu_breakpoint_remove_by_ref(cpu, bp);
+            }
         }
     }
 }
@@ -1068,7 +1114,6 @@ hwaddr memory_region_section_get_iotlb(CPUState *cpu,
                                        target_ulong *address)
 {
     hwaddr iotlb;
-    CPUWatchpoint *wp;
 
     if (memory_region_is_ram(section->mr)) {
         /* Normal RAM.  */
@@ -1088,13 +1133,18 @@ hwaddr memory_region_section_get_iotlb(CPUState *cpu,
 
     /* Make accesses to pages with watchpoints go via the
        watchpoint trap routines.  */
-    QTAILQ_FOREACH(wp, &cpu->watchpoints, entry) {
-        if (cpu_watchpoint_address_matches(wp, vaddr, TARGET_PAGE_SIZE)) {
-            /* Avoid trapping reads of pages with a write breakpoint. */
-            if ((prot & PAGE_WRITE) || (wp->flags & BP_MEM_READ)) {
-                iotlb = PHYS_SECTION_WATCH + paddr;
-                *address |= TLB_MMIO;
-                break;
+    if (unlikely(cpu->watchpoints) && unlikely(cpu->watchpoints->len)) {
+        CPUWatchpoint *wp;
+        int i;
+        for (i = 0; i < cpu->watchpoints->len; i++) {
+            wp = g_array_index(cpu->watchpoints, CPUWatchpoint *, i);
+            if (cpu_watchpoint_address_matches(wp, vaddr, TARGET_PAGE_SIZE)) {
+                /* Avoid trapping reads of pages with a write breakpoint. */
+                if ((prot & PAGE_WRITE) || (wp->flags & BP_MEM_READ)) {
+                    iotlb = PHYS_SECTION_WATCH + paddr;
+                    *address |= TLB_MMIO;
+                    break;
+                }
             }
         }
     }
@@ -2055,7 +2105,6 @@ static void check_watchpoint(int offset, int len, MemTxAttrs attrs, int flags)
     CPUArchState *env = cpu->env_ptr;
     target_ulong pc, cs_base;
     target_ulong vaddr;
-    CPUWatchpoint *wp;
     uint32_t cpu_flags;
 
     if (cpu->watchpoint_hit) {
@@ -2066,35 +2115,41 @@ static void check_watchpoint(int offset, int len, MemTxAttrs attrs, int flags)
         return;
     }
     vaddr = (cpu->mem_io_vaddr & TARGET_PAGE_MASK) + offset;
-    QTAILQ_FOREACH(wp, &cpu->watchpoints, entry) {
-        if (cpu_watchpoint_address_matches(wp, vaddr, len)
-            && (wp->flags & flags)) {
-            if (flags == BP_MEM_READ) {
-                wp->flags |= BP_WATCHPOINT_HIT_READ;
-            } else {
-                wp->flags |= BP_WATCHPOINT_HIT_WRITE;
-            }
-            wp->hitaddr = vaddr;
-            wp->hitattrs = attrs;
-            if (!cpu->watchpoint_hit) {
-                if (wp->flags & BP_CPU &&
-                    !cc->debug_check_watchpoint(cpu, wp)) {
-                    wp->flags &= ~BP_WATCHPOINT_HIT;
-                    continue;
-                }
-                cpu->watchpoint_hit = wp;
-                tb_check_watchpoint(cpu);
-                if (wp->flags & BP_STOP_BEFORE_ACCESS) {
-                    cpu->exception_index = EXCP_DEBUG;
-                    cpu_loop_exit(cpu);
+
+    if (unlikely(cpu->watchpoints) && unlikely(cpu->watchpoints->len)) {
+        CPUWatchpoint *wp;
+        int i;
+        for (i = 0; i < cpu->watchpoints->len; i++) {
+            wp = g_array_index(cpu->watchpoints, CPUWatchpoint *, i);
+            if (cpu_watchpoint_address_matches(wp, vaddr, len)
+                && (wp->flags & flags)) {
+                if (flags == BP_MEM_READ) {
+                    wp->flags |= BP_WATCHPOINT_HIT_READ;
                 } else {
-                    cpu_get_tb_cpu_state(env, &pc, &cs_base, &cpu_flags);
-                    tb_gen_code(cpu, pc, cs_base, cpu_flags, 1);
-                    cpu_loop_exit_noexc(cpu);
+                    wp->flags |= BP_WATCHPOINT_HIT_WRITE;
                 }
+                wp->hitaddr = vaddr;
+                wp->hitattrs = attrs;
+                if (!cpu->watchpoint_hit) {
+                    if (wp->flags & BP_CPU &&
+                        !cc->debug_check_watchpoint(cpu, wp)) {
+                        wp->flags &= ~BP_WATCHPOINT_HIT;
+                        continue;
+                    }
+                    cpu->watchpoint_hit = wp;
+                    tb_check_watchpoint(cpu);
+                    if (wp->flags & BP_STOP_BEFORE_ACCESS) {
+                        cpu->exception_index = EXCP_DEBUG;
+                        cpu_loop_exit(cpu);
+                    } else {
+                        cpu_get_tb_cpu_state(env, &pc, &cs_base, &cpu_flags);
+                        tb_gen_code(cpu, pc, cs_base, cpu_flags, 1);
+                        cpu_loop_exit_noexc(cpu);
+                    }
+                }
+            } else {
+                wp->flags &= ~BP_WATCHPOINT_HIT;
             }
-        } else {
-            wp->flags &= ~BP_WATCHPOINT_HIT;
         }
     }
 }

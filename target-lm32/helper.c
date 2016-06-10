@@ -133,7 +133,6 @@ void lm32_debug_excp_handler(CPUState *cs)
 {
     LM32CPU *cpu = LM32_CPU(cs);
     CPULM32State *env = &cpu->env;
-    CPUBreakpoint *bp;
 
     if (cs->watchpoint_hit) {
         if (cs->watchpoint_hit->flags & BP_CPU) {
@@ -145,7 +144,10 @@ void lm32_debug_excp_handler(CPUState *cs)
             }
         }
     } else {
-        QTAILQ_FOREACH(bp, &cs->breakpoints, entry) {
+        CPUBreakpoint *bp;
+        int i;
+        for (i = 0; i < cs->breakpoints->len; i++) {
+            bp = g_array_index(cs->breakpoints, CPUBreakpoint *, i);
             if (bp->pc == env->pc) {
                 if (bp->flags & BP_CPU) {
                     raise_exception(env, EXCP_BREAKPOINT);

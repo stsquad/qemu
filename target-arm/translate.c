@@ -11783,9 +11783,11 @@ void gen_intermediate_code(CPUARMState *env, TranslationBlock *tb)
         }
 #endif
 
-        if (unlikely(!QTAILQ_EMPTY(&cs->breakpoints))) {
+        if (unlikely(cs->breakpoints) && unlikely(cs->breakpoints->len)) {
             CPUBreakpoint *bp;
-            QTAILQ_FOREACH(bp, &cs->breakpoints, entry) {
+            int i;
+            for (i = 0; i < cs->breakpoints->len; i++) {
+                bp = g_array_index(cs->breakpoints, CPUBreakpoint *, i);
                 if (bp->pc == dc->pc) {
                     if (bp->flags & BP_CPU) {
                         gen_set_condexec(dc);

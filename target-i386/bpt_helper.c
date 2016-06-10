@@ -210,7 +210,6 @@ void breakpoint_handler(CPUState *cs)
 {
     X86CPU *cpu = X86_CPU(cs);
     CPUX86State *env = &cpu->env;
-    CPUBreakpoint *bp;
 
     if (cs->watchpoint_hit) {
         if (cs->watchpoint_hit->flags & BP_CPU) {
@@ -222,7 +221,10 @@ void breakpoint_handler(CPUState *cs)
             }
         }
     } else {
-        QTAILQ_FOREACH(bp, &cs->breakpoints, entry) {
+        CPUBreakpoint *bp;
+        int i;
+        for (i = 0; i < cs->breakpoints->len; i++) {
+            bp = g_array_index(cs->breakpoints, CPUBreakpoint *, i);
             if (bp->pc == env->eip) {
                 if (bp->flags & BP_CPU) {
                     check_hw_breakpoints(env, true);

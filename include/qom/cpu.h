@@ -204,7 +204,6 @@ typedef struct icount_decr_u16 {
 typedef struct CPUBreakpoint {
     vaddr pc;
     int flags; /* BP_* */
-    QTAILQ_ENTRY(CPUBreakpoint) entry;
 } CPUBreakpoint;
 
 struct CPUWatchpoint {
@@ -213,7 +212,6 @@ struct CPUWatchpoint {
     vaddr hitaddr;
     MemTxAttrs hitattrs;
     int flags; /* BP_* */
-    QTAILQ_ENTRY(CPUWatchpoint) entry;
 };
 
 struct KVMState;
@@ -321,10 +319,13 @@ struct CPUState {
     int gdb_num_g_regs;
     QTAILQ_ENTRY(CPUState) node;
 
-    /* ice debug support */
-    QTAILQ_HEAD(breakpoints_head, CPUBreakpoint) breakpoints;
-
-    QTAILQ_HEAD(watchpoints_head, CPUWatchpoint) watchpoints;
+    /* Debugging support:
+     *
+     * Both the gdbstub and architectural debug support will add
+     * references to these arrays.
+     */
+    GArray *breakpoints;
+    GArray *watchpoints;
     CPUWatchpoint *watchpoint_hit;
 
     void *opaque;
@@ -823,10 +824,11 @@ void cpu_breakpoint_remove_all(CPUState *cpu, int mask);
 /* Return true if PC matches an installed breakpoint.  */
 static inline bool cpu_breakpoint_test(CPUState *cpu, vaddr pc, int mask)
 {
-    CPUBreakpoint *bp;
-
-    if (unlikely(!QTAILQ_EMPTY(&cpu->breakpoints))) {
-        QTAILQ_FOREACH(bp, &cpu->breakpoints, entry) {
+    if (unlikely(cpu->breakpoints) && unlikely(cpu->breakpoints->len)) {
+        CPUBreakpoint *bp;
+        int i;
+        for (i = 0; i < cpu->breakpoints->len; i++) {
+            bp = g_array_index(cpu->breakpoints, CPUBreakpoint *, i);
             if (bp->pc == pc && (bp->flags & mask)) {
                 return true;
             }
