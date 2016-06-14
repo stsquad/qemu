@@ -1056,7 +1056,7 @@ static bool bp_wp_matches(ARMCPU *cpu, int n, bool is_wp)
     int access_el = arm_current_el(env);
 
     if (is_wp) {
-        CPUWatchpoint *wp = env->cpu_watchpoint[n];
+        CPUWatchpoint *wp = cpu_watchpoint_get_by_ref(CPU(cpu), n);
 
         if (!wp || !(wp->flags & BP_WATCHPOINT_HIT)) {
             return false;
@@ -1153,7 +1153,7 @@ static bool check_watchpoints(ARMCPU *cpu)
         return false;
     }
 
-    for (n = 0; n < ARRAY_SIZE(env->cpu_watchpoint); n++) {
+    for (n = 0; n < 16; n++) {
         if (bp_wp_matches(cpu, n, true)) {
             return true;
         }

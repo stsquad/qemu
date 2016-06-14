@@ -98,21 +98,14 @@ void lm32_watchpoint_insert(CPULM32State *env, int idx, target_ulong address,
     }
 
     if (flags != 0) {
-        cpu_watchpoint_insert(CPU(cpu), address, 1, flags,
-                &env->cpu_watchpoint[idx]);
+        cpu_watchpoint_insert_with_ref(CPU(cpu), address, 1, flags, idx);
     }
 }
 
 void lm32_watchpoint_remove(CPULM32State *env, int idx)
 {
     LM32CPU *cpu = lm32_env_get_cpu(env);
-
-    if (!env->cpu_watchpoint[idx]) {
-        return;
-    }
-
-    cpu_watchpoint_remove_by_ref(CPU(cpu), env->cpu_watchpoint[idx]);
-    env->cpu_watchpoint[idx] = NULL;
+    cpu_watchpoint_remove_by_ref(CPU(cpu), idx);
 }
 
 static bool check_watchpoints(CPULM32State *env)
@@ -121,8 +114,8 @@ static bool check_watchpoints(CPULM32State *env)
     int i;
 
     for (i = 0; i < cpu->num_watchpoints; i++) {
-        if (env->cpu_watchpoint[i] &&
-                env->cpu_watchpoint[i]->flags & BP_WATCHPOINT_HIT) {
+        CPUWatchpoint *wp = cpu_watchpoint_get_by_ref(CPU(cpu), i);
+        if (wp && wp->flags & BP_WATCHPOINT_HIT) {
             return true;
         }
     }

@@ -3942,13 +3942,10 @@ void hw_watchpoint_update(ARMCPU *cpu, int n)
     int mask;
     int flags = BP_CPU | BP_STOP_BEFORE_ACCESS;
 
-    if (env->cpu_watchpoint[n]) {
-        cpu_watchpoint_remove_by_ref(CPU(cpu), env->cpu_watchpoint[n]);
-        env->cpu_watchpoint[n] = NULL;
-    }
 
     if (!extract64(wcr, 0, 1)) {
         /* E bit clear : watchpoint disabled */
+        cpu_watchpoint_remove_by_ref(CPU(cpu), n);
         return;
     }
 
@@ -4012,22 +4009,19 @@ void hw_watchpoint_update(ARMCPU *cpu, int n)
         wvr += basstart;
     }
 
-    cpu_watchpoint_insert(CPU(cpu), wvr, len, flags,
-                          &env->cpu_watchpoint[n]);
+    cpu_watchpoint_insert_with_ref(CPU(cpu), wvr, len, flags, n);
 }
 
 void hw_watchpoint_update_all(ARMCPU *cpu)
 {
     int i;
-    CPUARMState *env = &cpu->env;
 
     /* Completely clear out existing QEMU watchpoints and our array, to
      * avoid possible stale entries following migration load.
      */
     cpu_watchpoint_remove_all(CPU(cpu), BP_CPU);
-    memset(env->cpu_watchpoint, 0, sizeof(env->cpu_watchpoint));
 
-    for (i = 0; i < ARRAY_SIZE(cpu->env.cpu_watchpoint); i++) {
+    for (i = 0; i < 16; i++) {
         hw_watchpoint_update(cpu, i);
     }
 }

@@ -3824,7 +3824,7 @@ CPUArchState *cpu_copy(CPUArchState *env)
         int i;
         for (i = 0; i < cpu->watchpoints->len; i++) {
             wp = g_array_index(cpu->watchpoints, CPUWatchpoint *, i);
-            cpu_watchpoint_insert(new_cpu, wp->vaddr, wp->len, wp->flags, NULL);
+            cpu_watchpoint_insert(new_cpu, wp->vaddr, wp->len, wp->flags);
         }
     }
 

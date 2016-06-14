@@ -1059,8 +1059,7 @@ typedef struct CPUX86State {
     target_ulong dr[8]; /* debug registers; note dr4 and dr5 are unused */
     union {
         struct CPUBreakpoint *cpu_breakpoint[4];
-        struct CPUWatchpoint *cpu_watchpoint[4];
-    }; /* break/watchpoints for dr[0..3] */
+    }; /* breakpoints for dr[0..3] */
     int old_exception;  /* exception in flight */
 
     uint64_t vm_vmcb;

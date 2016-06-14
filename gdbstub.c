@@ -688,7 +688,7 @@ static int gdb_breakpoint_insert(target_ulong addr, target_ulong len, int type)
     case GDB_WATCHPOINT_ACCESS:
         CPU_FOREACH(cpu) {
             err = cpu_watchpoint_insert(cpu, addr, len,
-                                        xlat_gdb_type(cpu, type), NULL);
+                                        xlat_gdb_type(cpu, type));
             if (err) {
                 break;
             }

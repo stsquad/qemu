@@ -797,9 +797,6 @@ static void set_dbreak(CPUXtensaState *env, unsigned i, uint32_t dbreaka,
     int flags = BP_CPU | BP_STOP_BEFORE_ACCESS;
     uint32_t mask = dbreakc | ~DBREAKC_MASK;
 
-    if (env->cpu_watchpoint[i]) {
-        cpu_watchpoint_remove_by_ref(cs, env->cpu_watchpoint[i]);
-    }
     if (dbreakc & DBREAKC_SB) {
         flags |= BP_MEM_WRITE;
     }
@@ -812,9 +809,8 @@ static void set_dbreak(CPUXtensaState *env, unsigned i, uint32_t dbreaka,
         /* cut mask after the first zero bit */
         mask = 0xffffffff << (32 - clo32(mask));
     }
-    if (cpu_watchpoint_insert(cs, dbreaka & mask, ~mask + 1,
-            flags, &env->cpu_watchpoint[i])) {
-        env->cpu_watchpoint[i] = NULL;
+    if (cpu_watchpoint_insert_with_ref(cs, dbreaka & mask, ~mask + 1,
+                                       flags, i)) {
         qemu_log_mask(LOG_GUEST_ERROR, "Failed to set data breakpoint at 0x%08x/%d\n",
                       dbreaka & mask, ~mask + 1);
     }
@@ -837,12 +833,8 @@ void HELPER(wsr_dbreakc)(CPUXtensaState *env, uint32_t i, uint32_t v)
         if (v & DBREAKC_SB_LB) {
             set_dbreak(env, i, env->sregs[DBREAKA + i], v);
         } else {
-            if (env->cpu_watchpoint[i]) {
-                CPUState *cs = CPU(xtensa_env_get_cpu(env));
-
-                cpu_watchpoint_remove_by_ref(cs, env->cpu_watchpoint[i]);
-                env->cpu_watchpoint[i] = NULL;
-            }
+            CPUState *cs = CPU(xtensa_env_get_cpu(env));
+            cpu_watchpoint_remove_by_ref(cs, i);
         }
     }
     env->sregs[DBREAKC + i] = v;

@@ -747,21 +747,42 @@ int cpu_watchpoint_remove(CPUState *cpu, vaddr addr, vaddr len,
     return -ENOSYS;
 }
 
-void cpu_watchpoint_remove_by_ref(CPUState *cpu, CPUWatchpoint *watchpoint)
+int cpu_watchpoint_remove_by_ref(CPUState *cpu, int ref)
 {
+    return -ENOENT;
 }
 
-int cpu_watchpoint_insert(CPUState *cpu, vaddr addr, vaddr len,
-                          int flags, CPUWatchpoint **watchpoint)
+int cpu_watchpoint_insert_with_ref(CPUState *cpu, vaddr addr, vaddr len,
+                                   int flags, int ref)
 {
     return -ENOSYS;
 }
-#else
-/* Add a watchpoint.  */
-int cpu_watchpoint_insert(CPUState *cpu, vaddr addr, vaddr len,
-                          int flags, CPUWatchpoint **watchpoint)
+int cpu_watchpoint_insert(CPUState *cpu, vaddr addr, vaddr len, int flags)
 {
-    CPUWatchpoint *wp;
+    return -ENOSYS;
+}
+CPUWatchpoint *cpu_watchpoint_get_by_ref(CPUState *cpu, int ref)
+{
+    return NULL;
+}
+#else
+/* Find watchpoint with external reference */
+CPUWatchpoint *cpu_watchpoint_get_by_ref(CPUState *cpu, int ref)
+{
+    CPUWatchpoint *wp = NULL;
+    int i = 0;
+    do {
+        wp = g_array_index(cpu->watchpoints, CPUWatchpoint *, i++);
+    } while (wp && wp->ref != ref);
+
+    return wp;
+}
+
+/* Add a watchpoint.  */
+int cpu_watchpoint_insert_with_ref(CPUState *cpu, vaddr addr, vaddr len,
+                                   int flags, int ref)
+{
+    CPUWatchpoint *wp = NULL;
 
     /* forbid ranges which are empty or run off the end of the address space */
     if (len == 0 || (addr + len - 1) < addr) {
@@ -772,26 +793,53 @@ int cpu_watchpoint_insert(CPUState *cpu, vaddr addr, vaddr len,
 
     /* Allocate if no previous watchpoints */
     if (!cpu->watchpoints) {
-        cpu->watchpoints = g_array_new(false, false, sizeof(CPUWatchpoint *));
+        cpu->watchpoints = g_array_new(true, false, sizeof(CPUWatchpoint *));
     }
 
-    wp = g_malloc(sizeof(*wp));
-    wp->vaddr = addr;
-    wp->len = len;
-    wp->flags = flags;
+    /* Find old watchpoint */
+    if (ref != WP_NOREF) {
+        wp = cpu_watchpoint_get_by_ref(cpu, ref);
+    }
 
-    /* keep all GDB-injected watchpoints in front */
-    if (flags & BP_GDB) {
-        g_array_prepend_val(cpu->watchpoints, wp);
+    if (wp) {
+        wp->vaddr = addr;
+        wp->len = len;
+        wp->flags = flags;
+        wp->ref = ref;
     } else {
-        g_array_append_val(cpu->watchpoints, wp);
+        wp = g_malloc(sizeof(*wp));
+
+        wp->vaddr = addr;
+        wp->len = len;
+        wp->flags = flags;
+        wp->ref = ref;
+
+        /* keep all GDB-injected watchpoints in front */
+        if (flags & BP_GDB) {
+            g_array_prepend_val(cpu->watchpoints, wp);
+        } else {
+            g_array_append_val(cpu->watchpoints, wp);
+        }
     }
+
 
     tlb_flush_page(cpu, addr);
 
-    if (watchpoint)
-        *watchpoint = wp;
     return 0;
+}
+
+int cpu_watchpoint_insert(CPUState *cpu, vaddr addr, vaddr len, int flags)
+{
+    return cpu_watchpoint_insert_with_ref(cpu, addr, len, flags, WP_NOREF);
+}
+
+static void cpu_watchpoint_delete(CPUState *cpu, int index)
+{
+    CPUWatchpoint *wp;
+    wp = g_array_index(cpu->watchpoints, CPUWatchpoint *, index);
+    g_array_remove_index(cpu->watchpoints, index);
+    tlb_flush_page(cpu, wp->vaddr);
+    g_free(wp);
 }
 
 /* Remove a specific watchpoint.  */
@@ -806,48 +854,49 @@ int cpu_watchpoint_remove(CPUState *cpu, vaddr addr, vaddr len,
             wp = g_array_index(cpu->watchpoints, CPUWatchpoint *, i);
             if (wp && addr == wp->vaddr && len == wp->len
                 && flags == (wp->flags & ~BP_WATCHPOINT_HIT)) {
-                cpu_watchpoint_remove_by_ref(cpu, wp);
+                cpu_watchpoint_delete(cpu, i);
                 return 0;
             }
         } while (i++ < cpu->watchpoints->len);
     }
+
     return -ENOENT;
 }
 
-/* Remove a specific watchpoint by reference.  */
-void cpu_watchpoint_remove_by_ref(CPUState *cpu, CPUWatchpoint *watchpoint)
+/* Remove a specific watchpoint by external reference.  */
+int cpu_watchpoint_remove_by_ref(CPUState *cpu, int ref)
 {
     CPUWatchpoint *wp;
-    int i;
+    int i = 0;
 
-    g_assert(cpu->watchpoints);
-
-    for (i = 0; i < cpu->watchpoints->len; i++) {
-        wp = g_array_index(cpu->watchpoints, CPUWatchpoint *, i);
-        if (wp == watchpoint) {
-            g_array_remove_index_fast(cpu->watchpoints, i);
-            break;
-        }
+    if (unlikely(cpu->watchpoints) && unlikely(cpu->watchpoints->len)) {
+        do {
+            wp = g_array_index(cpu->watchpoints, CPUWatchpoint *, i);
+            if (wp && wp->ref == ref) {
+                cpu_watchpoint_delete(cpu, i);
+                return 0;
+            }
+        } while (wp && i++ < cpu->watchpoints->len);
     }
 
-    tlb_flush_page(cpu, watchpoint->vaddr);
-
-    g_free(watchpoint);
+    return -ENOENT;
 }
 
 /* Remove all matching watchpoints.  */
 void cpu_watchpoint_remove_all(CPUState *cpu, int mask)
 {
     CPUWatchpoint *wp;
-    int i;
 
     if (unlikely(cpu->watchpoints) && unlikely(cpu->watchpoints->len)) {
-        for (i = cpu->watchpoints->len; i == 0; i--) {
+        int i = cpu->watchpoints->len;
+        do {
             wp = g_array_index(cpu->watchpoints, CPUWatchpoint *, i);
             if (wp->flags & mask) {
-                cpu_watchpoint_remove_by_ref(cpu, wp);
+                cpu_watchpoint_delete(cpu, i);
+            } else {
+                i--;
             }
-        }
+        } while (cpu->watchpoints->len && i >= 0);
     }
 }
 

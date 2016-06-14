@@ -206,12 +206,15 @@ typedef struct CPUBreakpoint {
     int flags; /* BP_* */
 } CPUBreakpoint;
 
+#define WP_NOREF -1
+
 struct CPUWatchpoint {
     vaddr vaddr;
     vaddr len;
     vaddr hitaddr;
     MemTxAttrs hitattrs;
     int flags; /* BP_* */
+    int ref; /* reference or WP_NOREF */
 };
 
 struct KVMState;
@@ -837,11 +840,61 @@ static inline bool cpu_breakpoint_test(CPUState *cpu, vaddr pc, int mask)
     return false;
 }
 
-int cpu_watchpoint_insert(CPUState *cpu, vaddr addr, vaddr len,
-                          int flags, CPUWatchpoint **watchpoint);
-int cpu_watchpoint_remove(CPUState *cpu, vaddr addr,
-                          vaddr len, int flags);
-void cpu_watchpoint_remove_by_ref(CPUState *cpu, CPUWatchpoint *watchpoint);
+/**
+ * cpu_watchpoint_insert:
+ *
+ * @cpu: CPU to monitor
+ * @addr: address of watchpoint
+ * @len: length of watched region
+ * @flags: accesss/type flags
+ *
+ * Watchpoints added this way can only be removed by resetting all
+ * watchpoints.
+ */
+int cpu_watchpoint_insert(CPUState *cpu, vaddr addr, vaddr len, int flags);
+
+/**
+ * cpu_watchpoint_insert_with_ref:
+ *
+ * @cpu: CPU to monitor
+ * @addr: address of watchpoint
+ * @len: length of watched region
+ * @flags: accesss/type flags
+ * @ref: unique reference
+ *
+ * Inserting a watchpoint with a matching reference will replace any
+ * current watchpoint with the same reference.
+ */
+int cpu_watchpoint_insert_with_ref(CPUState *cpu, vaddr addr, vaddr len,
+                                   int flags, int ref);
+
+/**
+ * cpu_watchpoint_get_by_ref:
+ *
+ * @cpu: CPU to monitor
+ * @ref: unique reference
+ *
+ * @return: a pointer to working copy of the watchpoint.
+ *
+ * Return a working copy of the current referenced watchpoint. This
+ * obviously only works for watchpoints inserted with a reference. The
+ * lifetime of this objected will be limited and should not be kept
+ * beyond its immediate use. Otherwise return NULL.
+ */
+CPUWatchpoint *cpu_watchpoint_get_by_ref(CPUState *cpu, int ref);
+
+/**
+ * cpu_watchpoint_remove_by_ref:
+ *
+ * @cpu: CPU to monitor
+ * @ref: unique reference
+ *
+ * Remove a referenced watchpoint
+ */
+int cpu_watchpoint_remove_by_ref(CPUState *cpu, int ref);
+int cpu_watchpoint_remove(CPUState *cpu, vaddr addr, vaddr len, int flags);
+
+
 void cpu_watchpoint_remove_all(CPUState *cpu, int mask);
 
 /**

@@ -86,8 +86,8 @@ static uint32_t check_hw_breakpoints(CPUXtensaState *env)
     unsigned i;
 
     for (i = 0; i < env->config->ndbreak; ++i) {
-        if (env->cpu_watchpoint[i] &&
-                env->cpu_watchpoint[i]->flags & BP_WATCHPOINT_HIT) {
+        CPUWatchpoint *wp = cpu_watchpoint_get_by_ref(CPU(env), i);
+        if (wp && wp->flags & BP_WATCHPOINT_HIT) {
             return DEBUGCAUSE_DB | (i << DEBUGCAUSE_DBNUM_SHIFT);
         }
     }

@@ -73,19 +73,17 @@ static int hw_breakpoint_insert(CPUX86State *env, int index)
 
     case DR7_TYPE_DATA_WR:
         if (hw_breakpoint_enabled(dr7, index)) {
-            err = cpu_watchpoint_insert(cs, drN,
-                                        hw_breakpoint_len(dr7, index),
-                                        BP_CPU | BP_MEM_WRITE,
-                                        &env->cpu_watchpoint[index]);
+            err = cpu_watchpoint_insert_with_ref(cs, drN,
+                                                 hw_breakpoint_len(dr7, index),
+                                                 BP_CPU | BP_MEM_WRITE, index);
         }
         break;
 
     case DR7_TYPE_DATA_RW:
         if (hw_breakpoint_enabled(dr7, index)) {
-            err = cpu_watchpoint_insert(cs, drN,
-                                        hw_breakpoint_len(dr7, index),
-                                        BP_CPU | BP_MEM_ACCESS,
-                                        &env->cpu_watchpoint[index]);
+            err = cpu_watchpoint_insert_with_ref(cs, drN,
+                                                 hw_breakpoint_len(dr7, index),
+                                                 BP_CPU | BP_MEM_ACCESS, index);
         }
         break;
     }
@@ -109,10 +107,7 @@ static void hw_breakpoint_remove(CPUX86State *env, int index)
 
     case DR7_TYPE_DATA_WR:
     case DR7_TYPE_DATA_RW:
-        if (env->cpu_breakpoint[index]) {
-            cpu_watchpoint_remove_by_ref(cs, env->cpu_watchpoint[index]);
-            env->cpu_breakpoint[index] = NULL;
-        }
+        cpu_watchpoint_remove_by_ref(cs, index);
         break;
 
     case DR7_TYPE_IO_RW:
@@ -183,11 +178,13 @@ static bool check_hw_breakpoints(CPUX86State *env, bool force_dr6_update)
             break;
         case DR7_TYPE_DATA_WR:
         case DR7_TYPE_DATA_RW:
-            if (env->cpu_watchpoint[reg] &&
-                env->cpu_watchpoint[reg]->flags & BP_WATCHPOINT_HIT) {
+        {
+            CPUWatchpoint *wp = cpu_watchpoint_get_by_ref(CPU(env), reg);
+            if (wp && wp->flags & BP_WATCHPOINT_HIT) {
                 wp_match = true;
             }
             break;
+        }
         case DR7_TYPE_IO_RW:
             break;
         }
