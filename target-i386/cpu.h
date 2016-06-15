@@ -1057,9 +1057,6 @@ typedef struct CPUX86State {
     int exception_is_int;
     target_ulong exception_next_eip;
     target_ulong dr[8]; /* debug registers; note dr4 and dr5 are unused */
-    union {
-        struct CPUBreakpoint *cpu_breakpoint[4];
-    }; /* breakpoints for dr[0..3] */
     int old_exception;  /* exception in flight */
 
     uint64_t vm_vmcb;

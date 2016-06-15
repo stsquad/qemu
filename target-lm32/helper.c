@@ -60,20 +60,14 @@ void lm32_breakpoint_insert(CPULM32State *env, int idx, target_ulong address)
 {
     LM32CPU *cpu = lm32_env_get_cpu(env);
 
-    cpu_breakpoint_insert(CPU(cpu), address, BP_CPU,
-                          &env->cpu_breakpoint[idx]);
+    cpu_breakpoint_insert_with_ref(CPU(cpu), address, BP_CPU, idx);
 }
 
 void lm32_breakpoint_remove(CPULM32State *env, int idx)
 {
     LM32CPU *cpu = lm32_env_get_cpu(env);
 
-    if (!env->cpu_breakpoint[idx]) {
-        return;
-    }
-
-    cpu_breakpoint_remove_by_ref(CPU(cpu), env->cpu_breakpoint[idx]);
-    env->cpu_breakpoint[idx] = NULL;
+    cpu_breakpoint_remove_by_ref(CPU(cpu), idx);
 }
 
 void lm32_watchpoint_insert(CPULM32State *env, int idx, target_ulong address,

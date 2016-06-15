@@ -201,12 +201,13 @@ typedef struct icount_decr_u16 {
 } icount_decr_u16;
 #endif
 
+#define BPWP_NOREF -1
+
 typedef struct CPUBreakpoint {
     vaddr pc;
     int flags; /* BP_* */
+    int ref; /* reference or WPBP_NOREF */
 } CPUBreakpoint;
-
-#define WP_NOREF -1
 
 struct CPUWatchpoint {
     vaddr vaddr;
@@ -214,7 +215,7 @@ struct CPUWatchpoint {
     vaddr hitaddr;
     MemTxAttrs hitattrs;
     int flags; /* BP_* */
-    int ref; /* reference or WP_NOREF */
+    int ref; /* reference or WPBP_NOREF */
 };
 
 struct KVMState;
@@ -818,10 +819,56 @@ void cpu_single_step(CPUState *cpu, int enabled);
 #define BP_WATCHPOINT_HIT_WRITE 0x80
 #define BP_WATCHPOINT_HIT (BP_WATCHPOINT_HIT_READ | BP_WATCHPOINT_HIT_WRITE)
 
-int cpu_breakpoint_insert(CPUState *cpu, vaddr pc, int flags,
-                          CPUBreakpoint **breakpoint);
+/*
+ * cpu_breakpoint_insert:
+ *
+ * @cpu: CPU to monitor
+ * @pc: address of breakpoint
+ * @flags: accesss/type flags
+ *
+ * Breakpoints added this way can only be removed by resetting all
+ * breakpoints.
+ */
+int cpu_breakpoint_insert(CPUState *cpu, vaddr pc, int flags);
+
+/*
+ * cpu_breakpoint_insert_with_ref:
+ *
+ * @cpu: CPU to monitor
+ * @pc: address of breakpoint
+ * @flags: accesss/type flags
+ *
+ * Inserting a breakpoint with a matching reference will replace any
+ * current breakpoint with the same reference.
+ */
+int cpu_breakpoint_insert_with_ref(CPUState *cpu, vaddr pc, int flags, int ref);
+
+/**
+ * cpu_breakpoint_get_by_ref:
+ *
+ * @cpu: CPU to monitor
+ * @ref: unique reference
+ *
+ * @return: a pointer to working copy of the breakpoint.
+ *
+ * Return a working copy of the current referenced breakpoint. This
+ * obviously only works for breakpoints inserted with a reference. The
+ * lifetime of this objected will be limited and should not be kept
+ * beyond its immediate use. Otherwise return NULL.
+ */
+CPUBreakpoint *cpu_breakpoint_get_by_ref(CPUState *cpu, int ref);
+
+/**
+ * cpu_breakpoint_remove_by_ref:
+ *
+ * @cpu: CPU to monitor
+ * @ref: unique reference
+ *
+ * Remove a referenced breakpoint
+ */
 int cpu_breakpoint_remove(CPUState *cpu, vaddr pc, int flags);
-void cpu_breakpoint_remove_by_ref(CPUState *cpu, CPUBreakpoint *breakpoint);
+void cpu_breakpoint_remove_by_ref(CPUState *cpu, int ref);
+
 void cpu_breakpoint_remove_all(CPUState *cpu, int mask);
 
 /* Return true if PC matches an installed breakpoint.  */

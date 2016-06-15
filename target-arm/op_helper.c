@@ -1071,8 +1071,8 @@ static bool bp_wp_matches(ARMCPU *cpu, int n, bool is_wp)
         }
     } else {
         uint64_t pc = is_a64(env) ? env->pc : env->regs[15];
-
-        if (!env->cpu_breakpoint[n] || env->cpu_breakpoint[n]->pc != pc) {
+        CPUBreakpoint *bp = cpu_breakpoint_get_by_ref(CPU(cpu), n);
+        if (!bp || bp->pc != pc) {
             return false;
         }
         cr = env->cp15.dbgbcr[n];
@@ -1174,7 +1174,7 @@ static bool check_breakpoints(ARMCPU *cpu)
         return false;
     }
 
-    for (n = 0; n < ARRAY_SIZE(env->cpu_breakpoint); n++) {
+    for (n = 0; n < 16; n++) {
         if (bp_wp_matches(cpu, n, false)) {
             return true;
         }

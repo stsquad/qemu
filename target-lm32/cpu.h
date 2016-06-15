@@ -162,8 +162,6 @@ struct CPULM32State {
     uint32_t bp[4];     /* breakpoints */
     uint32_t wp[4];     /* watchpoints */
 
-    struct CPUBreakpoint *cpu_breakpoint[4];
-
     CPU_COMMON
 
     /* Fields from here on are preserved across CPU reset. */

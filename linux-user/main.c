@@ -3816,7 +3816,7 @@ CPUArchState *cpu_copy(CPUArchState *env)
         int i;
         for (i = 0; i < cpu->breakpoints->len; i++) {
             bp = g_array_index(cpu->breakpoints, CPUBreakpoint *, i);
-            cpu_breakpoint_insert(new_cpu, bp->pc, bp->flags, NULL);
+            cpu_breakpoint_insert(new_cpu, bp->pc, bp->flags);
         }
     }
     if (unlikely(cpu->watchpoints) && unlikely(cpu->watchpoints->len)) {

@@ -4061,12 +4061,8 @@ void hw_breakpoint_update(ARMCPU *cpu, int n)
     int bt;
     int flags = BP_CPU;
 
-    if (env->cpu_breakpoint[n]) {
-        cpu_breakpoint_remove_by_ref(CPU(cpu), env->cpu_breakpoint[n]);
-        env->cpu_breakpoint[n] = NULL;
-    }
-
     if (!extract64(bcr, 0, 1)) {
+        cpu_breakpoint_remove_by_ref(CPU(cpu), n);
         /* E bit clear : watchpoint disabled */
         return;
     }
@@ -4125,21 +4121,19 @@ void hw_breakpoint_update(ARMCPU *cpu, int n)
         return;
     }
 
-    cpu_breakpoint_insert(CPU(cpu), addr, flags, &env->cpu_breakpoint[n]);
+    cpu_breakpoint_insert_with_ref(CPU(cpu), addr, flags, n);
 }
 
 void hw_breakpoint_update_all(ARMCPU *cpu)
 {
     int i;
-    CPUARMState *env = &cpu->env;
 
     /* Completely clear out existing QEMU breakpoints and our array, to
      * avoid possible stale entries following migration load.
      */
     cpu_breakpoint_remove_all(CPU(cpu), BP_CPU);
-    memset(env->cpu_breakpoint, 0, sizeof(env->cpu_breakpoint));
 
-    for (i = 0; i < ARRAY_SIZE(cpu->env.cpu_breakpoint); i++) {
+    for (i = 0; i < 16; i++) {
         hw_breakpoint_update(cpu, i);
     }
 }

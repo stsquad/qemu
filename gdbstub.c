@@ -676,7 +676,7 @@ static int gdb_breakpoint_insert(target_ulong addr, target_ulong len, int type)
     case GDB_BREAKPOINT_SW:
     case GDB_BREAKPOINT_HW:
         CPU_FOREACH(cpu) {
-            err = cpu_breakpoint_insert(cpu, addr, BP_GDB, NULL);
+            err = cpu_breakpoint_insert(cpu, addr, BP_GDB);
             if (err) {
                 break;
             }

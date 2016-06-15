@@ -56,13 +56,11 @@ static int hw_breakpoint_insert(CPUX86State *env, int index)
     CPUState *cs = CPU(x86_env_get_cpu(env));
     target_ulong dr7 = env->dr[7];
     target_ulong drN = env->dr[index];
-    int err = 0;
 
     switch (hw_breakpoint_type(dr7, index)) {
     case DR7_TYPE_BP_INST:
         if (hw_breakpoint_enabled(dr7, index)) {
-            err = cpu_breakpoint_insert(cs, drN, BP_CPU,
-                                        &env->cpu_breakpoint[index]);
+            cpu_breakpoint_insert_with_ref(cs, drN, BP_CPU, index);
         }
         break;
 
@@ -73,23 +71,21 @@ static int hw_breakpoint_insert(CPUX86State *env, int index)
 
     case DR7_TYPE_DATA_WR:
         if (hw_breakpoint_enabled(dr7, index)) {
-            err = cpu_watchpoint_insert_with_ref(cs, drN,
-                                                 hw_breakpoint_len(dr7, index),
-                                                 BP_CPU | BP_MEM_WRITE, index);
+            cpu_watchpoint_insert_with_ref(cs, drN,
+                                           hw_breakpoint_len(dr7, index),
+                                           BP_CPU | BP_MEM_WRITE, index);
         }
         break;
 
     case DR7_TYPE_DATA_RW:
         if (hw_breakpoint_enabled(dr7, index)) {
-            err = cpu_watchpoint_insert_with_ref(cs, drN,
-                                                 hw_breakpoint_len(dr7, index),
-                                                 BP_CPU | BP_MEM_ACCESS, index);
+            cpu_watchpoint_insert_with_ref(cs, drN,
+                                           hw_breakpoint_len(dr7, index),
+                                           BP_CPU | BP_MEM_ACCESS, index);
         }
         break;
     }
-    if (err) {
-        env->cpu_breakpoint[index] = NULL;
-    }
+
     return 0;
 }
 
@@ -99,10 +95,7 @@ static void hw_breakpoint_remove(CPUX86State *env, int index)
 
     switch (hw_breakpoint_type(env->dr[7], index)) {
     case DR7_TYPE_BP_INST:
-        if (env->cpu_breakpoint[index]) {
-            cpu_breakpoint_remove_by_ref(cs, env->cpu_breakpoint[index]);
-            env->cpu_breakpoint[index] = NULL;
-        }
+        cpu_breakpoint_remove_by_ref(cs, index);
         break;
 
     case DR7_TYPE_DATA_WR:
