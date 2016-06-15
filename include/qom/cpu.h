@@ -326,8 +326,11 @@ struct CPUState {
     /* Debugging support:
      *
      * Both the gdbstub and architectural debug support will add
-     * references to these arrays.
+     * references to these arrays. The list of breakpoints and
+     * watchpoints are updated with RCU. The update_debug_lock is only
+     * required for updating, not just reading.
      */
+    QemuMutex update_debug_lock;
     GArray *breakpoints;
     GArray *watchpoints;
     CPUWatchpoint *watchpoint_hit;
@@ -849,12 +852,13 @@ int cpu_breakpoint_insert_with_ref(CPUState *cpu, vaddr pc, int flags, int ref);
  * @cpu: CPU to monitor
  * @ref: unique reference
  *
- * @return: a pointer to working copy of the breakpoint.
+ * @return: a pointer to working copy of the breakpoint or NULL.
  *
- * Return a working copy of the current referenced breakpoint. This
- * obviously only works for breakpoints inserted with a reference. The
- * lifetime of this objected will be limited and should not be kept
- * beyond its immediate use. Otherwise return NULL.
+ * Return short term working copy of the a breakpoint marked with an
+ * external reference. This obviously only works for breakpoints
+ * inserted with a reference. The lifetime of this object is the
+ * duration of the rcu_read_lock() and it may be released when
+ * rcu_synchronize is called.
  */
 CPUBreakpoint *cpu_breakpoint_get_by_ref(CPUState *cpu, int ref);
 
@@ -871,14 +875,32 @@ void cpu_breakpoint_remove_by_ref(CPUState *cpu, int ref);
 
 void cpu_breakpoint_remove_all(CPUState *cpu, int mask);
 
-/* Return true if PC matches an installed breakpoint.  */
+#ifdef CONFIG_USER_ONLY
+/**
+ * cpu_breakpoints_clone:
+ *
+ * @old_cpu: source of breakpoints
+ * @new_cpu: destination for breakpoints
+ *
+ * When a new user-mode thread is created the CPU structure behind it
+ * needs a copy of the exiting breakpoint conditions. This helper does
+ * the copying.
+ */
+void cpu_breakpoints_clone(CPUState *old_cpu, CPUState *new_cpu);
+#endif
+
+/* Return true if PC matches an installed breakpoint.
+ * Called while the RCU read lock is held.
+ */
 static inline bool cpu_breakpoint_test(CPUState *cpu, vaddr pc, int mask)
 {
-    if (unlikely(cpu->breakpoints) && unlikely(cpu->breakpoints->len)) {
+    GArray *bkpts = atomic_rcu_read(&cpu->breakpoints);
+
+    if (unlikely(bkpts) && unlikely(bkpts->len)) {
         CPUBreakpoint *bp;
         int i;
-        for (i = 0; i < cpu->breakpoints->len; i++) {
-            bp = &g_array_index(cpu->breakpoints, CPUBreakpoint, i);
+        for (i = 0; i < bkpts->len; i++) {
+            bp = &g_array_index(bkpts, CPUBreakpoint, i);
             if (bp->pc == pc && (bp->flags & mask)) {
                 return true;
             }

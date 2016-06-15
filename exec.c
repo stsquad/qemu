@@ -919,31 +919,94 @@ static inline bool cpu_watchpoint_address_matches(CPUWatchpoint *wp,
 }
 
 #endif
-/* Find watchpoint with external reference */
+
+/* Create a working copy of the breakpoints.
+ *
+ * The rcu_read_lock() may already be held depending on where this
+ * update has been triggered from. However it is safe to nest
+ * rcu_read_locks() so we do the copy under the lock here.
+ */
+
+static GArray *rcu_copy_breakpoints(CPUState *cpu)
+{
+    GArray *old, *new;
+
+    rcu_read_lock();
+    old = atomic_rcu_read(&cpu->breakpoints);
+    if (old) {
+        new = g_array_sized_new(false, false, sizeof(CPUBreakpoint), old->len);
+        memcpy(new->data, old->data, old->len * sizeof(CPUBreakpoint));
+        new->len = old->len;
+    } else {
+        new = g_array_new(false, false, sizeof(CPUBreakpoint));
+    }
+    rcu_read_unlock();
+
+    return new;
+}
+
+struct BreakRCU {
+    struct rcu_head rcu;
+    GArray *bkpts;
+};
+
+/* RCU reclaim step */
+static void rcu_free_breakpoints(struct BreakRCU *rcu_free)
+{
+    g_array_free(rcu_free->bkpts, false);
+    g_free(rcu_free);
+}
+
+/* Called with update lock held */
+static void rcu_update_breakpoints(CPUState *cpu, GArray *new_bkpts)
+{
+    GArray *bpts = atomic_rcu_read(&cpu->breakpoints);
+    atomic_rcu_set(&cpu->breakpoints, new_bkpts);
+
+    if (bpts) {
+        struct BreakRCU *rcu_free = g_malloc(sizeof(*rcu_free));
+        rcu_free->bkpts = bpts;
+        call_rcu(rcu_free, rcu_free_breakpoints, rcu);
+    }
+}
+
+/* Find watchpoint with external reference, only valid for duration of
+ * rcu_read_lock */
+static CPUBreakpoint *find_bkpt_with_ref(GArray *bkpts, int ref)
+{
+    CPUBreakpoint *bp;
+    int i = 0;
+
+    do {
+        bp = &g_array_index(bkpts, CPUBreakpoint, i);
+        if (bp->ref == ref) {
+            return bp;
+        }
+    } while (i++ < bkpts->len);
+
+    return NULL;
+}
+
 CPUBreakpoint *cpu_breakpoint_get_by_ref(CPUState *cpu, int ref)
 {
-    CPUBreakpoint *bp = NULL;
-    int i = 0;
-    do {
-        bp = &g_array_index(cpu->breakpoints, CPUBreakpoint, i++);
-    } while (i < cpu->breakpoints->len && bp && bp->ref != ref);
-
-    return bp;
+    GArray *bkpts = atomic_rcu_read(&cpu->breakpoints);
+    return find_bkpt_with_ref(bkpts, ref);
 }
 
 /* Add a breakpoint.  */
 int cpu_breakpoint_insert_with_ref(CPUState *cpu, vaddr pc, int flags, int ref)
 {
+    GArray *bkpts;
     CPUBreakpoint *bp = NULL;
 
-    /* Allocate if no previous breakpoints */
-    if (!cpu->breakpoints) {
-        cpu->breakpoints = g_array_new(false, true, sizeof(CPUBreakpoint));
-    }
+    qemu_mutex_lock(&cpu->update_debug_lock);
+
+    /* This will allocate if no previous breakpoints */
+    bkpts = rcu_copy_breakpoints(cpu);
 
     /* Find old watchpoint */
     if (ref != BPWP_NOREF) {
-        bp = cpu_breakpoint_get_by_ref(cpu, ref);
+        bp = find_bkpt_with_ref(bkpts, ref);
     }
 
     if (bp) {
@@ -958,13 +1021,16 @@ int cpu_breakpoint_insert_with_ref(CPUState *cpu, vaddr pc, int flags, int ref)
 
         /* keep all GDB-injected breakpoints in front */
         if (flags & BP_GDB) {
-            g_array_prepend_val(cpu->breakpoints, brk);
+            g_array_prepend_val(bkpts, brk);
         } else {
-            g_array_append_val(cpu->breakpoints, brk);
+            g_array_append_val(bkpts, brk);
         }
     }
 
     breakpoint_invalidate(cpu, pc);
+
+    rcu_update_breakpoints(cpu, bkpts);
+    qemu_mutex_unlock(&cpu->update_debug_lock);
 
     return 0;
 }
@@ -974,67 +1040,110 @@ int cpu_breakpoint_insert(CPUState *cpu, vaddr pc, int flags)
     return cpu_breakpoint_insert_with_ref(cpu, pc, flags, BPWP_NOREF);
 }
 
-static void cpu_breakpoint_delete(CPUState *cpu, int index)
+/* Called with update_debug_lock held */
+static void cpu_breakpoint_delete(CPUState *cpu, GArray *bkpts, int index)
 {
     CPUBreakpoint *bp;
-    bp = &g_array_index(cpu->breakpoints, CPUBreakpoint, index);
+    bp = &g_array_index(bkpts, CPUBreakpoint, index);
     breakpoint_invalidate(cpu, bp->pc);
-    g_array_remove_index(cpu->breakpoints, index);
+    g_array_remove_index(bkpts, index);
 }
 
 /* Remove a specific breakpoint.  */
 int cpu_breakpoint_remove(CPUState *cpu, vaddr pc, int flags)
 {
+    GArray *bkpts = atomic_rcu_read(&cpu->breakpoints);
     CPUBreakpoint *bp;
+    int retval = -ENOENT;
 
-    if (unlikely(cpu->breakpoints) && unlikely(cpu->breakpoints->len)) {
+    if (unlikely(bkpts) && unlikely(bkpts->len)) {
         int i = 0;
+
+        qemu_mutex_lock(&cpu->update_debug_lock);
+        bkpts = rcu_copy_breakpoints(cpu);
+
         do {
-            bp = &g_array_index(cpu->breakpoints, CPUBreakpoint, i);
+            bp = &g_array_index(bkpts, CPUBreakpoint, i);
             if (bp && bp->pc == pc && bp->flags == flags) {
-                cpu_breakpoint_delete(cpu, i);
+                cpu_breakpoint_delete(cpu, bkpts, i);
+                retval = 0;
             } else {
                 i++;
             }
-        } while (i < cpu->breakpoints->len);
+        } while (i < bkpts->len);
+
+        rcu_update_breakpoints(cpu, bkpts);
+        qemu_mutex_unlock(&cpu->update_debug_lock);
+
     }
 
-    return -ENOENT;
+    return retval;
 }
+
+#ifdef CONFIG_USER_ONLY
+void cpu_breakpoints_clone(CPUState *old_cpu, CPUState *new_cpu)
+{
+   GArray *bkpts = atomic_rcu_read(&old_cpu->breakpoints);
+
+   if (unlikely(bkpts) && unlikely(bkpts->len)) {
+        qemu_mutex_lock(&new_cpu->update_debug_lock);
+        bkpts = rcu_copy_breakpoints(old_cpu);
+        rcu_update_breakpoints(new_cpu, bkpts);
+        qemu_mutex_unlock(&new_cpu->update_debug_lock);
+   }
+}
+#endif
+
 
 /* Remove a specific breakpoint by reference.  */
 void cpu_breakpoint_remove_by_ref(CPUState *cpu, int ref)
 {
+    GArray *bkpts = atomic_rcu_read(&cpu->breakpoints);
     CPUBreakpoint *bp;
 
-    if (unlikely(cpu->breakpoints) && unlikely(cpu->breakpoints->len)) {
+    if (unlikely(bkpts) && unlikely(bkpts->len)) {
         int i = 0;
+
+        qemu_mutex_lock(&cpu->update_debug_lock);
+        bkpts = rcu_copy_breakpoints(cpu);
+
         do {
-            bp = &g_array_index(cpu->breakpoints, CPUBreakpoint, i);
+            bp = &g_array_index(bkpts, CPUBreakpoint, i);
             if (bp && bp->ref == ref) {
-                cpu_breakpoint_delete(cpu, i);
+                cpu_breakpoint_delete(cpu, bkpts, i);
             } else {
                 i++;
             }
-        } while (i < cpu->breakpoints->len);
+        } while (i < bkpts->len);
+
+        rcu_update_breakpoints(cpu, bkpts);
+        qemu_mutex_unlock(&cpu->update_debug_lock);
     }
 }
 
 /* Remove all matching breakpoints. */
 void cpu_breakpoint_remove_all(CPUState *cpu, int mask)
 {
+    GArray *bkpts = atomic_rcu_read(&cpu->breakpoints);
     CPUBreakpoint *bp;
 
-    if (unlikely(cpu->breakpoints) && unlikely(cpu->breakpoints->len)) {
+    if (unlikely(bkpts) && unlikely(bkpts->len)) {
         int i = 0;
+
+        qemu_mutex_lock(&cpu->update_debug_lock);
+        bkpts = rcu_copy_breakpoints(cpu);
+
         do {
-            bp = &g_array_index(cpu->breakpoints, CPUBreakpoint, i);
+            bp = &g_array_index(bkpts, CPUBreakpoint, i);
             if (bp->flags & mask) {
-                cpu_breakpoint_delete(cpu, i);
+                cpu_breakpoint_delete(cpu, bkpts, i);
             } else {
                 i++;
             }
-        } while (i < cpu->breakpoints->len);
+        } while (i < bkpts->len);
+
+        rcu_update_breakpoints(cpu, bkpts);
+        qemu_mutex_unlock(&cpu->update_debug_lock);
     }
 }
 

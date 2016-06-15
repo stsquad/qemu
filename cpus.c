@@ -1441,6 +1441,9 @@ void qemu_init_vcpu(CPUState *cpu)
         cpu_address_space_init(cpu, as, 0);
     }
 
+    /* protects updates to debug info */
+    qemu_mutex_init(&cpu->update_debug_lock);
+
     if (kvm_enabled()) {
         qemu_kvm_start_vcpu(cpu);
     } else if (tcg_enabled()) {
