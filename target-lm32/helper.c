@@ -134,7 +134,7 @@ void lm32_debug_excp_handler(CPUState *cs)
         CPUBreakpoint *bp;
         int i;
         for (i = 0; i < cs->breakpoints->len; i++) {
-            bp = g_array_index(cs->breakpoints, CPUBreakpoint *, i);
+            bp = &g_array_index(cs->breakpoints, CPUBreakpoint, i);
             if (bp->pc == env->pc) {
                 if (bp->flags & BP_CPU) {
                     raise_exception(env, EXCP_BREAKPOINT);

@@ -3815,7 +3815,7 @@ CPUArchState *cpu_copy(CPUArchState *env)
         CPUBreakpoint *bp;
         int i;
         for (i = 0; i < cpu->breakpoints->len; i++) {
-            bp = g_array_index(cpu->breakpoints, CPUBreakpoint *, i);
+            bp = &g_array_index(cpu->breakpoints, CPUBreakpoint, i);
             cpu_breakpoint_insert(new_cpu, bp->pc, bp->flags);
         }
     }
@@ -3823,7 +3823,7 @@ CPUArchState *cpu_copy(CPUArchState *env)
         CPUWatchpoint *wp;
         int i;
         for (i = 0; i < cpu->watchpoints->len; i++) {
-            wp = g_array_index(cpu->watchpoints, CPUWatchpoint *, i);
+            wp = &g_array_index(cpu->watchpoints, CPUWatchpoint, i);
             cpu_watchpoint_insert(new_cpu, wp->vaddr, wp->len, wp->flags);
         }
     }

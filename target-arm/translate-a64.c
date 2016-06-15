@@ -11205,7 +11205,7 @@ void gen_intermediate_code_a64(ARMCPU *cpu, TranslationBlock *tb)
             CPUBreakpoint *bp;
             int i;
             for (i = 0; i < cs->breakpoints->len; i++) {
-                bp = g_array_index(cs->breakpoints, CPUBreakpoint *, i);
+                bp = &g_array_index(cs->breakpoints, CPUBreakpoint, i);
                 if (bp->pc == dc->pc) {
                     if (bp->flags & BP_CPU) {
                         gen_a64_set_pc_im(dc->pc);

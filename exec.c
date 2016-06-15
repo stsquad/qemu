@@ -772,8 +772,8 @@ CPUWatchpoint *cpu_watchpoint_get_by_ref(CPUState *cpu, int ref)
     CPUWatchpoint *wp = NULL;
     int i = 0;
     do {
-        wp = g_array_index(cpu->watchpoints, CPUWatchpoint *, i++);
-    } while (wp && wp->ref != ref);
+        wp = &g_array_index(cpu->watchpoints, CPUWatchpoint, i++);
+    } while (i < cpu->watchpoints->len && wp && wp->ref != ref);
 
     return wp;
 }
@@ -793,7 +793,7 @@ int cpu_watchpoint_insert_with_ref(CPUState *cpu, vaddr addr, vaddr len,
 
     /* Allocate if no previous watchpoints */
     if (!cpu->watchpoints) {
-        cpu->watchpoints = g_array_new(true, false, sizeof(CPUWatchpoint *));
+        cpu->watchpoints = g_array_new(false, true, sizeof(CPUWatchpoint));
     }
 
     /* Find old watchpoint */
@@ -807,18 +807,17 @@ int cpu_watchpoint_insert_with_ref(CPUState *cpu, vaddr addr, vaddr len,
         wp->flags = flags;
         wp->ref = ref;
     } else {
-        wp = g_malloc(sizeof(*wp));
-
-        wp->vaddr = addr;
-        wp->len = len;
-        wp->flags = flags;
-        wp->ref = ref;
+        CPUWatchpoint watch;
+        watch.vaddr = addr;
+        watch.len = len;
+        watch.flags = flags;
+        watch.ref = ref;
 
         /* keep all GDB-injected watchpoints in front */
         if (flags & BP_GDB) {
-            g_array_prepend_val(cpu->watchpoints, wp);
+            g_array_prepend_val(cpu->watchpoints, watch);
         } else {
-            g_array_append_val(cpu->watchpoints, wp);
+            g_array_append_val(cpu->watchpoints, watch);
         }
     }
 
@@ -836,10 +835,9 @@ int cpu_watchpoint_insert(CPUState *cpu, vaddr addr, vaddr len, int flags)
 static void cpu_watchpoint_delete(CPUState *cpu, int index)
 {
     CPUWatchpoint *wp;
-    wp = g_array_index(cpu->watchpoints, CPUWatchpoint *, index);
-    g_array_remove_index(cpu->watchpoints, index);
+    wp = &g_array_index(cpu->watchpoints, CPUWatchpoint, index);
     tlb_flush_page(cpu, wp->vaddr);
-    g_free(wp);
+    g_array_remove_index(cpu->watchpoints, index);
 }
 
 /* Remove a specific watchpoint.  */
@@ -851,7 +849,7 @@ int cpu_watchpoint_remove(CPUState *cpu, vaddr addr, vaddr len,
 
     if (unlikely(cpu->watchpoints) && unlikely(cpu->watchpoints->len)) {
         do {
-            wp = g_array_index(cpu->watchpoints, CPUWatchpoint *, i);
+            wp = &g_array_index(cpu->watchpoints, CPUWatchpoint, i);
             if (wp && addr == wp->vaddr && len == wp->len
                 && flags == (wp->flags & ~BP_WATCHPOINT_HIT)) {
                 cpu_watchpoint_delete(cpu, i);
@@ -871,7 +869,7 @@ int cpu_watchpoint_remove_by_ref(CPUState *cpu, int ref)
 
     if (unlikely(cpu->watchpoints) && unlikely(cpu->watchpoints->len)) {
         do {
-            wp = g_array_index(cpu->watchpoints, CPUWatchpoint *, i);
+            wp = &g_array_index(cpu->watchpoints, CPUWatchpoint, i);
             if (wp && wp->ref == ref) {
                 cpu_watchpoint_delete(cpu, i);
                 return 0;
@@ -890,7 +888,7 @@ void cpu_watchpoint_remove_all(CPUState *cpu, int mask)
     if (unlikely(cpu->watchpoints) && unlikely(cpu->watchpoints->len)) {
         int i = cpu->watchpoints->len;
         do {
-            wp = g_array_index(cpu->watchpoints, CPUWatchpoint *, i);
+            wp = &g_array_index(cpu->watchpoints, CPUWatchpoint, i);
             if (wp->flags & mask) {
                 cpu_watchpoint_delete(cpu, i);
             } else {
@@ -927,8 +925,8 @@ CPUBreakpoint *cpu_breakpoint_get_by_ref(CPUState *cpu, int ref)
     CPUBreakpoint *bp = NULL;
     int i = 0;
     do {
-        bp = g_array_index(cpu->breakpoints, CPUBreakpoint *, i++);
-    } while (bp && bp->ref != ref);
+        bp = &g_array_index(cpu->breakpoints, CPUBreakpoint, i++);
+    } while (i < cpu->breakpoints->len && bp && bp->ref != ref);
 
     return bp;
 }
@@ -936,11 +934,11 @@ CPUBreakpoint *cpu_breakpoint_get_by_ref(CPUState *cpu, int ref)
 /* Add a breakpoint.  */
 int cpu_breakpoint_insert_with_ref(CPUState *cpu, vaddr pc, int flags, int ref)
 {
-    CPUBreakpoint *bp;
+    CPUBreakpoint *bp = NULL;
 
     /* Allocate if no previous breakpoints */
     if (!cpu->breakpoints) {
-        cpu->breakpoints = g_array_new(false, false, sizeof(CPUBreakpoint *));
+        cpu->breakpoints = g_array_new(false, true, sizeof(CPUBreakpoint));
     }
 
     /* Find old watchpoint */
@@ -953,17 +951,16 @@ int cpu_breakpoint_insert_with_ref(CPUState *cpu, vaddr pc, int flags, int ref)
         bp->flags = flags;
         bp->ref = ref;
     } else {
-        bp = g_malloc(sizeof(*bp));
-
-        bp->pc = pc;
-        bp->flags = flags;
-        bp->ref = ref;
+        CPUBreakpoint brk;
+        brk.pc = pc;
+        brk.flags = flags;
+        brk.ref = ref;
 
         /* keep all GDB-injected breakpoints in front */
         if (flags & BP_GDB) {
-            g_array_prepend_val(cpu->breakpoints, bp);
+            g_array_prepend_val(cpu->breakpoints, brk);
         } else {
-            g_array_append_val(cpu->breakpoints, bp);
+            g_array_append_val(cpu->breakpoints, brk);
         }
     }
 
@@ -980,10 +977,9 @@ int cpu_breakpoint_insert(CPUState *cpu, vaddr pc, int flags)
 static void cpu_breakpoint_delete(CPUState *cpu, int index)
 {
     CPUBreakpoint *bp;
-    bp = g_array_index(cpu->breakpoints, CPUBreakpoint *, index);
-    g_array_remove_index(cpu->breakpoints, index);
+    bp = &g_array_index(cpu->breakpoints, CPUBreakpoint, index);
     breakpoint_invalidate(cpu, bp->pc);
-    g_free(bp);
+    g_array_remove_index(cpu->breakpoints, index);
 }
 
 /* Remove a specific breakpoint.  */
@@ -994,7 +990,7 @@ int cpu_breakpoint_remove(CPUState *cpu, vaddr pc, int flags)
     if (unlikely(cpu->breakpoints) && unlikely(cpu->breakpoints->len)) {
         int i = 0;
         do {
-            bp = g_array_index(cpu->breakpoints, CPUBreakpoint *, i);
+            bp = &g_array_index(cpu->breakpoints, CPUBreakpoint, i);
             if (bp && bp->pc == pc && bp->flags == flags) {
                 cpu_breakpoint_delete(cpu, i);
             } else {
@@ -1014,7 +1010,7 @@ void cpu_breakpoint_remove_by_ref(CPUState *cpu, int ref)
     if (unlikely(cpu->breakpoints) && unlikely(cpu->breakpoints->len)) {
         int i = 0;
         do {
-            bp = g_array_index(cpu->breakpoints, CPUBreakpoint *, i);
+            bp = &g_array_index(cpu->breakpoints, CPUBreakpoint, i);
             if (bp && bp->ref == ref) {
                 cpu_breakpoint_delete(cpu, i);
             } else {
@@ -1032,7 +1028,7 @@ void cpu_breakpoint_remove_all(CPUState *cpu, int mask)
     if (unlikely(cpu->breakpoints) && unlikely(cpu->breakpoints->len)) {
         int i = 0;
         do {
-            bp = g_array_index(cpu->breakpoints, CPUBreakpoint *, i);
+            bp = &g_array_index(cpu->breakpoints, CPUBreakpoint, i);
             if (bp->flags & mask) {
                 cpu_breakpoint_delete(cpu, i);
             } else {
@@ -1222,7 +1218,7 @@ hwaddr memory_region_section_get_iotlb(CPUState *cpu,
         CPUWatchpoint *wp;
         int i;
         for (i = 0; i < cpu->watchpoints->len; i++) {
-            wp = g_array_index(cpu->watchpoints, CPUWatchpoint *, i);
+            wp = &g_array_index(cpu->watchpoints, CPUWatchpoint, i);
             if (cpu_watchpoint_address_matches(wp, vaddr, TARGET_PAGE_SIZE)) {
                 /* Avoid trapping reads of pages with a write breakpoint. */
                 if ((prot & PAGE_WRITE) || (wp->flags & BP_MEM_READ)) {
@@ -2205,7 +2201,7 @@ static void check_watchpoint(int offset, int len, MemTxAttrs attrs, int flags)
         CPUWatchpoint *wp;
         int i;
         for (i = 0; i < cpu->watchpoints->len; i++) {
-            wp = g_array_index(cpu->watchpoints, CPUWatchpoint *, i);
+            wp = &g_array_index(cpu->watchpoints, CPUWatchpoint, i);
             if (cpu_watchpoint_address_matches(wp, vaddr, len)
                 && (wp->flags & flags)) {
                 if (flags == BP_MEM_READ) {

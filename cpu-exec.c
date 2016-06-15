@@ -392,7 +392,7 @@ static inline void cpu_handle_debug_exception(CPUState *cpu)
 
     if (!cpu->watchpoint_hit && cpu->watchpoints) {
         for (i = 0; i < cpu->watchpoints->len; i++) {
-            wp = g_array_index(cpu->watchpoints, CPUWatchpoint *, i);
+            wp = &g_array_index(cpu->watchpoints, CPUWatchpoint, i);
             wp->flags &= ~BP_WATCHPOINT_HIT;
         }
     }

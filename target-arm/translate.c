@@ -11787,7 +11787,7 @@ void gen_intermediate_code(CPUARMState *env, TranslationBlock *tb)
             CPUBreakpoint *bp;
             int i;
             for (i = 0; i < cs->breakpoints->len; i++) {
-                bp = g_array_index(cs->breakpoints, CPUBreakpoint *, i);
+                bp = &g_array_index(cs->breakpoints, CPUBreakpoint, i);
                 if (bp->pc == dc->pc) {
                     if (bp->flags & BP_CPU) {
                         gen_set_condexec(dc);

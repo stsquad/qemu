@@ -878,7 +878,7 @@ static inline bool cpu_breakpoint_test(CPUState *cpu, vaddr pc, int mask)
         CPUBreakpoint *bp;
         int i;
         for (i = 0; i < cpu->breakpoints->len; i++) {
-            bp = g_array_index(cpu->breakpoints, CPUBreakpoint *, i);
+            bp = &g_array_index(cpu->breakpoints, CPUBreakpoint, i);
             if (bp->pc == pc && (bp->flags & mask)) {
                 return true;
             }
