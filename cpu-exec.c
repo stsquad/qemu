@@ -387,12 +387,13 @@ static inline bool cpu_handle_halt(CPUState *cpu)
 static inline void cpu_handle_debug_exception(CPUState *cpu)
 {
     CPUClass *cc = CPU_GET_CLASS(cpu);
+    GArray *wpts = atomic_rcu_read(&cpu->watchpoints);
     CPUWatchpoint *wp;
     int i;
 
-    if (!cpu->watchpoint_hit && cpu->watchpoints) {
-        for (i = 0; i < cpu->watchpoints->len; i++) {
-            wp = &g_array_index(cpu->watchpoints, CPUWatchpoint, i);
+    if (!cpu->watchpoint_hit && wpts) {
+        for (i = 0; i < wpts->len; i++) {
+            wp = &g_array_index(wpts, CPUWatchpoint, i);
             wp->flags &= ~BP_WATCHPOINT_HIT;
         }
     }

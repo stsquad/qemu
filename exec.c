@@ -735,6 +735,18 @@ static void breakpoint_invalidate(CPUState *cpu, target_ulong pc)
 }
 #endif
 
+struct FreeDebugRCU {
+    struct rcu_head rcu;
+    GArray *debug;
+};
+
+/* RCU reclaim step */
+static void rcu_debug_free(struct FreeDebugRCU *rcu_free)
+{
+    g_array_free(rcu_free->debug, false);
+    g_free(rcu_free);
+}
+
 #if defined(CONFIG_USER_ONLY)
 void cpu_watchpoint_remove_all(CPUState *cpu, int mask)
 
@@ -766,22 +778,72 @@ CPUWatchpoint *cpu_watchpoint_get_by_ref(CPUState *cpu, int ref)
     return NULL;
 }
 #else
+/* Create a working copy of the watchpoints.
+ *
+ * The rcu_read_lock() may already be held depending on where this
+ * update has been triggered from. However it is safe to nest
+ * rcu_read_locks() so we do the copy under the lock here.
+ */
+
+static GArray *rcu_copy_watchpoints(CPUState *cpu)
+{
+    GArray *old, *new;
+
+    rcu_read_lock();
+    old = atomic_rcu_read(&cpu->watchpoints);
+    if (old) {
+        new = g_array_sized_new(false, false, sizeof(CPUWatchpoint), old->len);
+        memcpy(new->data, old->data, old->len * sizeof(CPUWatchpoint));
+        new->len = old->len;
+    } else {
+        new = g_array_new(false, false, sizeof(CPUWatchpoint));
+    }
+    rcu_read_unlock();
+
+    return new;
+}
+
+/* Called with update lock held */
+static void rcu_update_watchpoints(CPUState *cpu, GArray *new_watchpts)
+{
+    GArray *wpts = atomic_rcu_read(&cpu->watchpoints);
+    atomic_rcu_set(&cpu->watchpoints, new_watchpts);
+    if (wpts) {
+        struct FreeDebugRCU *rcu_free = g_malloc(sizeof(*rcu_free));
+        rcu_free->debug = wpts;
+        call_rcu(rcu_free, rcu_debug_free, rcu);
+    }
+}
+
+/* Find watchpoint with external reference, only valid for duration of
+ * rcu_read_lock */
+static CPUWatchpoint *find_watch_with_ref(GArray *wpts, int ref)
+{
+    CPUWatchpoint *wp;
+    int i = 0;
+
+    do {
+        wp = &g_array_index(wpts, CPUWatchpoint, i);
+        if (wp->ref == ref) {
+            return wp;
+        }
+    } while (i++ < wpts->len);
+
+    return NULL;
+}
+
 /* Find watchpoint with external reference */
 CPUWatchpoint *cpu_watchpoint_get_by_ref(CPUState *cpu, int ref)
 {
-    CPUWatchpoint *wp = NULL;
-    int i = 0;
-    do {
-        wp = &g_array_index(cpu->watchpoints, CPUWatchpoint, i++);
-    } while (i < cpu->watchpoints->len && wp && wp->ref != ref);
-
-    return wp;
+    GArray *wpts = atomic_rcu_read(&cpu->watchpoints);
+    return find_watch_with_ref(wpts, ref);
 }
 
 /* Add a watchpoint.  */
 int cpu_watchpoint_insert_with_ref(CPUState *cpu, vaddr addr, vaddr len,
                                    int flags, int ref)
 {
+    GArray *wpts;
     CPUWatchpoint *wp = NULL;
 
     /* forbid ranges which are empty or run off the end of the address space */
@@ -791,14 +853,14 @@ int cpu_watchpoint_insert_with_ref(CPUState *cpu, vaddr addr, vaddr len,
         return -EINVAL;
     }
 
-    /* Allocate if no previous watchpoints */
-    if (!cpu->watchpoints) {
-        cpu->watchpoints = g_array_new(false, true, sizeof(CPUWatchpoint));
-    }
+    qemu_mutex_lock(&cpu->update_debug_lock);
+
+    /* This will allocate if no previous breakpoints */
+    wpts = rcu_copy_watchpoints(cpu);
 
     /* Find old watchpoint */
     if (ref != BPWP_NOREF) {
-        wp = cpu_watchpoint_get_by_ref(cpu, ref);
+        wp = find_watch_with_ref(wpts, ref);
     }
 
     if (wp) {
@@ -815,14 +877,17 @@ int cpu_watchpoint_insert_with_ref(CPUState *cpu, vaddr addr, vaddr len,
 
         /* keep all GDB-injected watchpoints in front */
         if (flags & BP_GDB) {
-            g_array_prepend_val(cpu->watchpoints, watch);
+            g_array_prepend_val(wpts, watch);
         } else {
-            g_array_append_val(cpu->watchpoints, watch);
+            g_array_append_val(wpts, watch);
         }
     }
 
 
     tlb_flush_page(cpu, addr);
+
+    rcu_update_watchpoints(cpu, wpts);
+    qemu_mutex_unlock(&cpu->update_debug_lock);
 
     return 0;
 }
@@ -832,69 +897,101 @@ int cpu_watchpoint_insert(CPUState *cpu, vaddr addr, vaddr len, int flags)
     return cpu_watchpoint_insert_with_ref(cpu, addr, len, flags, BPWP_NOREF);
 }
 
-static void cpu_watchpoint_delete(CPUState *cpu, int index)
+static void cpu_watchpoint_delete(CPUState *cpu, GArray *wpts, int index)
 {
     CPUWatchpoint *wp;
-    wp = &g_array_index(cpu->watchpoints, CPUWatchpoint, index);
+    wp = &g_array_index(wpts, CPUWatchpoint, index);
     tlb_flush_page(cpu, wp->vaddr);
-    g_array_remove_index(cpu->watchpoints, index);
+    g_array_remove_index(wpts, index);
 }
 
 /* Remove a specific watchpoint.  */
 int cpu_watchpoint_remove(CPUState *cpu, vaddr addr, vaddr len,
                           int flags)
 {
+    GArray *wpts = atomic_rcu_read(&cpu->watchpoints);
     CPUWatchpoint *wp;
-    int i = 0;
+    int retval = -ENOENT;
 
-    if (unlikely(cpu->watchpoints) && unlikely(cpu->watchpoints->len)) {
+    if (unlikely(wpts) && unlikely(wpts->len)) {
+        int i = 0;
+
+        qemu_mutex_lock(&cpu->update_debug_lock);
+        wpts = rcu_copy_watchpoints(cpu);
+
         do {
             wp = &g_array_index(cpu->watchpoints, CPUWatchpoint, i);
             if (wp && addr == wp->vaddr && len == wp->len
                 && flags == (wp->flags & ~BP_WATCHPOINT_HIT)) {
-                cpu_watchpoint_delete(cpu, i);
-                return 0;
+                cpu_watchpoint_delete(cpu, wpts, i);
+                retval = 0;
+            } else {
+                i++;
             }
-        } while (i++ < cpu->watchpoints->len);
+        } while (i < wpts->len);
+
+        rcu_update_watchpoints(cpu, wpts);
+        qemu_mutex_unlock(&cpu->update_debug_lock);
+
     }
 
-    return -ENOENT;
+    return retval;
 }
 
 /* Remove a specific watchpoint by external reference.  */
 int cpu_watchpoint_remove_by_ref(CPUState *cpu, int ref)
 {
+    GArray *wpts = atomic_rcu_read(&cpu->watchpoints);
     CPUWatchpoint *wp;
-    int i = 0;
+    int retval = -ENOENT;
 
-    if (unlikely(cpu->watchpoints) && unlikely(cpu->watchpoints->len)) {
+    if (unlikely(wpts) && unlikely(wpts->len)) {
+        int i = 0;
+
+        qemu_mutex_lock(&cpu->update_debug_lock);
+        wpts = rcu_copy_watchpoints(cpu);
+
         do {
-            wp = &g_array_index(cpu->watchpoints, CPUWatchpoint, i);
+            wp = &g_array_index(wpts, CPUWatchpoint, i);
             if (wp && wp->ref == ref) {
-                cpu_watchpoint_delete(cpu, i);
-                return 0;
+                cpu_watchpoint_delete(cpu, wpts, i);
+                retval = 0;
+            } else {
+                i++;
             }
-        } while (wp && i++ < cpu->watchpoints->len);
+        } while (i < wpts->len);
+
+        rcu_update_watchpoints(cpu, wpts);
+        qemu_mutex_unlock(&cpu->update_debug_lock);
+
     }
 
-    return -ENOENT;
+    return retval;
 }
 
 /* Remove all matching watchpoints.  */
 void cpu_watchpoint_remove_all(CPUState *cpu, int mask)
 {
+    GArray *wpts = atomic_rcu_read(&cpu->watchpoints);
     CPUWatchpoint *wp;
 
-    if (unlikely(cpu->watchpoints) && unlikely(cpu->watchpoints->len)) {
-        int i = cpu->watchpoints->len;
+    if (unlikely(wpts) && unlikely(wpts->len)) {
+        int i = 0;
+
+        qemu_mutex_lock(&cpu->update_debug_lock);
+        wpts = rcu_copy_watchpoints(cpu);
+
         do {
-            wp = &g_array_index(cpu->watchpoints, CPUWatchpoint, i);
+            wp = &g_array_index(wpts, CPUWatchpoint, i);
             if (wp->flags & mask) {
-                cpu_watchpoint_delete(cpu, i);
+                cpu_watchpoint_delete(cpu, wpts, i);
             } else {
-                i--;
+                i++;
             }
-        } while (cpu->watchpoints->len && i >= 0);
+        } while (i < wpts->len);
+
+        rcu_update_watchpoints(cpu, wpts);
+        qemu_mutex_unlock(&cpu->update_debug_lock);
     }
 }
 
@@ -945,18 +1042,6 @@ static GArray *rcu_copy_breakpoints(CPUState *cpu)
     return new;
 }
 
-struct BreakRCU {
-    struct rcu_head rcu;
-    GArray *bkpts;
-};
-
-/* RCU reclaim step */
-static void rcu_free_breakpoints(struct BreakRCU *rcu_free)
-{
-    g_array_free(rcu_free->bkpts, false);
-    g_free(rcu_free);
-}
-
 /* Called with update lock held */
 static void rcu_update_breakpoints(CPUState *cpu, GArray *new_bkpts)
 {
@@ -964,9 +1049,9 @@ static void rcu_update_breakpoints(CPUState *cpu, GArray *new_bkpts)
     atomic_rcu_set(&cpu->breakpoints, new_bkpts);
 
     if (bpts) {
-        struct BreakRCU *rcu_free = g_malloc(sizeof(*rcu_free));
-        rcu_free->bkpts = bpts;
-        call_rcu(rcu_free, rcu_free_breakpoints, rcu);
+        struct FreeDebugRCU *rcu_free = g_malloc(sizeof(*rcu_free));
+        rcu_free->debug = bpts;
+        call_rcu(rcu_free, rcu_debug_free, rcu);
     }
 }
 
@@ -2296,6 +2381,7 @@ static void check_watchpoint(int offset, int len, MemTxAttrs attrs, int flags)
     target_ulong pc, cs_base;
     target_ulong vaddr;
     uint32_t cpu_flags;
+    GArray *wpts;
 
     if (cpu->watchpoint_hit) {
         /* We re-entered the check after replacing the TB. Now raise
@@ -2306,11 +2392,12 @@ static void check_watchpoint(int offset, int len, MemTxAttrs attrs, int flags)
     }
     vaddr = (cpu->mem_io_vaddr & TARGET_PAGE_MASK) + offset;
 
-    if (unlikely(cpu->watchpoints) && unlikely(cpu->watchpoints->len)) {
+    wpts = atomic_rcu_read(&cpu->watchpoints);
+    if (unlikely(wpts) && unlikely(wpts->len)) {
         CPUWatchpoint *wp;
         int i;
-        for (i = 0; i < cpu->watchpoints->len; i++) {
-            wp = &g_array_index(cpu->watchpoints, CPUWatchpoint, i);
+        for (i = 0; i < wpts->len; i++) {
+            wp = &g_array_index(wpts, CPUWatchpoint, i);
             if (cpu_watchpoint_address_matches(wp, vaddr, len)
                 && (wp->flags & flags)) {
                 if (flags == BP_MEM_READ) {
