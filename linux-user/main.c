@@ -3812,14 +3812,6 @@ CPUArchState *cpu_copy(CPUArchState *env)
        Note: Once we support ptrace with hw-debug register access, make sure
        BP_CPU break/watchpoints are handled correctly on clone. */
     cpu_breakpoints_clone(cpu, new_cpu);
-    if (unlikely(cpu->watchpoints) && unlikely(cpu->watchpoints->len)) {
-        CPUWatchpoint *wp;
-        int i;
-        for (i = 0; i < cpu->watchpoints->len; i++) {
-            wp = &g_array_index(cpu->watchpoints, CPUWatchpoint, i);
-            cpu_watchpoint_insert(new_cpu, wp->vaddr, wp->len, wp->flags);
-        }
-    }
 
     return new_env;
 }
