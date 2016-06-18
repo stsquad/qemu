@@ -121,6 +121,16 @@ static bool have_cmov;
 # define have_cmov 0
 #endif
 
+/* For 32-bit, we are going to attempt to determine at runtime whether
+   sse2 support is available.  */
+#if TCG_TARGET_REG_BITS == 64 || defined(__SSE2__)
+# define have_sse2 1
+#elif defined(CONFIG_CPUID_H) && defined(bit_SSE2)
+static bool have_sse2;
+#else
+# define have_sse2 0
+#endif
+
 /* If bit_MOVBE is defined in cpuid.h (added in GCC version 4.6), we are
    going to attempt to determine at runtime whether movbe is available.  */
 #if defined(CONFIG_CPUID_H) && defined(bit_MOVBE)
@@ -683,6 +693,32 @@ static inline void tcg_out_pushi(TCGContext *s, tcg_target_long val)
         tcg_out32(s, val);
     } else {
         tcg_abort();
+    }
+}
+
+static inline void tcg_out_mb(TCGContext *s, TCGArg a0)
+{
+    if (have_sse2) {
+        tcg_out16(s, 0xae0f);
+        switch (a0 & TCG_MO_ALL) {
+        case TCG_MO_LD_LD:
+            /* lfence */
+            tcg_out8(s, 0xe8);
+            break;
+        case TCG_MO_ST_ST:
+            /* sfence */
+            tcg_out8(s, 0xf8);
+            break;
+        default:
+            /* mfence */
+            tcg_out8(s, 0xf0);
+            break;
+        }
+    } else {
+        /* lock orl $0,0(%esp) */
+        tcg_out8(s, 0xf0);
+        tcg_out_modrm_offset(s, OPC_ARITH_EvIb, ARITH_OR, TCG_REG_ESP, 0);
+        tcg_out8(s, 0);
     }
 }
 
@@ -2120,6 +2156,10 @@ static inline void tcg_out_op(TCGContext *s, TCGOpcode opc,
         }
         break;
 
+    case INDEX_op_mb:
+        assert(args[0] != 0);
+        tcg_out_mb(s, args[0]);
+        break;
     case INDEX_op_mov_i32:  /* Always emitted via tcg_out_mov.  */
     case INDEX_op_mov_i64:
     case INDEX_op_movi_i32: /* Always emitted via tcg_out_movi.  */
@@ -2184,6 +2224,8 @@ static const TCGTargetOpDef x86_op_defs[] = {
     { INDEX_op_muls2_i32, { "a", "d", "a", "r" } },
     { INDEX_op_add2_i32, { "r", "r", "0", "1", "ri", "ri" } },
     { INDEX_op_sub2_i32, { "r", "r", "0", "1", "ri", "ri" } },
+
+    { INDEX_op_mb, { } },
 
 #if TCG_TARGET_REG_BITS == 32
     { INDEX_op_brcond2_i32, { "r", "r", "ri", "ri" } },
@@ -2361,6 +2403,11 @@ static void tcg_target_init(TCGContext *s)
            supports cmov, but we still need to check.  In case cmov is not
            available, we'll use a small forward branch.  */
         have_cmov = (d & bit_CMOV) != 0;
+#endif
+#ifndef have_sse2
+        /* Likewise, almost all hardware supports SSE2, but we do
+           have a locked memory operation to use as a substitute.  */
+        have_sse2 = (d & bit_SSE2) != 0;
 #endif
 #ifndef have_movbe
         /* MOVBE is only available on Intel Atom and Haswell CPUs, so we
