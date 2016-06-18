@@ -408,6 +408,20 @@ static inline intptr_t QEMU_ARTIFICIAL GET_TCGV_PTR(TCGv_ptr t)
 #define TCG_CALL_DUMMY_TCGV     MAKE_TCGV_I32(-1)
 #define TCG_CALL_DUMMY_ARG      ((TCGArg)(-1))
 
+typedef enum {
+    TCG_MO_LD_LD    = 1,
+    TCG_MO_ST_LD    = 2,
+    TCG_MO_LD_ST    = 4,
+    TCG_MO_ST_ST    = 8,
+    TCG_MO_ALL      = 0xF, // OR of all above
+} TCGOrder;
+
+typedef enum {
+    TCG_BAR_ACQ     = 32,
+    TCG_BAR_REL     = 64,
+    TCG_BAR_SC      = 128,
+} TCGBar;
+
 /* Conditions.  Note that these are laid out for easy manipulation by
    the functions below:
      bit 0 is used for inverting;
