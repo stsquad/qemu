@@ -932,6 +932,18 @@ static void qemu_tcg_destroy_vcpu(CPUState *cpu)
 {
 }
 
+static void tcg_cpu_exec_start(CPUState *cpu)
+{
+    tcg_pending_cpus++;
+}
+
+static void tcg_cpu_exec_end(CPUState *cpu)
+{
+    if (--tcg_pending_cpus) {
+        signal_cpu_work();
+    }
+}
+
 static void qemu_wait_io_event_common(CPUState *cpu)
 {
     if (cpu->stop) {
@@ -956,6 +968,8 @@ static void qemu_tcg_wait_io_event(CPUState *cpu)
     CPU_FOREACH(cpu) {
         qemu_wait_io_event_common(cpu);
     }
+
+    wait_safe_cpu_work();
 }
 
 static void qemu_kvm_wait_io_event(CPUState *cpu)
@@ -1491,7 +1505,9 @@ static void tcg_exec_all(void)
                           (cpu->singlestep_enabled & SSTEP_NOTIMER) == 0);
 
         if (cpu_can_run(cpu)) {
+            tcg_cpu_exec_start(cpu);
             r = tcg_cpu_exec(cpu);
+            tcg_cpu_exec_end(cpu);
             if (r == EXCP_DEBUG) {
                 cpu_handle_guest_debug(cpu);
                 break;

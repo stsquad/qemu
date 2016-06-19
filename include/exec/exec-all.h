@@ -405,10 +405,12 @@ extern int singlestep;
 
 /* cpu-exec.c, accessed with atomic_mb_read/atomic_mb_set */
 extern CPUState *tcg_current_cpu;
+extern int tcg_pending_cpus;
 extern bool exit_request;
 
 void wait_cpu_work(void);
 void signal_cpu_work(void);
 void flush_queued_work(CPUState *cpu);
+void wait_safe_cpu_work(void);
 
 #endif

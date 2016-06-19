@@ -114,7 +114,6 @@ static pthread_cond_t exclusive_cond = PTHREAD_COND_INITIALIZER;
 static pthread_cond_t exclusive_resume = PTHREAD_COND_INITIALIZER;
 static pthread_cond_t work_cond = PTHREAD_COND_INITIALIZER;
 static bool exclusive_pending;
-static int tcg_pending_cpus;
 
 /* Make sure everything is in a consistent state for calling fork().  */
 void fork_start(void)
@@ -220,6 +219,7 @@ static inline void cpu_exec_end(CPUState *cpu)
     }
     exclusive_idle();
     flush_queued_work(cpu);
+    wait_safe_cpu_work();
     pthread_mutex_unlock(&exclusive_lock);
 }
 
