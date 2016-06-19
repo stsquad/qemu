@@ -112,7 +112,8 @@ static pthread_mutex_t cpu_list_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t exclusive_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t exclusive_cond = PTHREAD_COND_INITIALIZER;
 static pthread_cond_t exclusive_resume = PTHREAD_COND_INITIALIZER;
-static int pending_cpus;
+static bool exclusive_pending;
+static int tcg_pending_cpus;
 
 /* Make sure everything is in a consistent state for calling fork().  */
 void fork_start(void)
@@ -134,7 +135,8 @@ void fork_end(int child)
                 QTAILQ_REMOVE(&cpus, cpu, node);
             }
         }
-        pending_cpus = 0;
+        tcg_pending_cpus = 0;
+        exclusive_pending = false;
         pthread_mutex_init(&exclusive_lock, NULL);
         pthread_mutex_init(&cpu_list_mutex, NULL);
         pthread_cond_init(&exclusive_cond, NULL);
@@ -151,7 +153,7 @@ void fork_end(int child)
    must be held.  */
 static inline void exclusive_idle(void)
 {
-    while (pending_cpus) {
+    while (exclusive_pending) {
         pthread_cond_wait(&exclusive_resume, &exclusive_lock);
     }
 }
@@ -165,15 +167,14 @@ static inline void start_exclusive(void)
     pthread_mutex_lock(&exclusive_lock);
     exclusive_idle();
 
-    pending_cpus = 1;
+    exclusive_pending = true;
     /* Make all other cpus stop executing.  */
     CPU_FOREACH(other_cpu) {
         if (other_cpu->running) {
-            pending_cpus++;
             cpu_exit(other_cpu);
         }
     }
-    if (pending_cpus > 1) {
+    while (tcg_pending_cpus) {
         pthread_cond_wait(&exclusive_cond, &exclusive_lock);
     }
 }
@@ -181,7 +182,7 @@ static inline void start_exclusive(void)
 /* Finish an exclusive operation.  */
 static inline void __attribute__((unused)) end_exclusive(void)
 {
-    pending_cpus = 0;
+    exclusive_pending = false;
     pthread_cond_broadcast(&exclusive_resume);
     pthread_mutex_unlock(&exclusive_lock);
 }
@@ -192,6 +193,7 @@ static inline void cpu_exec_start(CPUState *cpu)
     pthread_mutex_lock(&exclusive_lock);
     exclusive_idle();
     cpu->running = true;
+    tcg_pending_cpus++;
     pthread_mutex_unlock(&exclusive_lock);
 }
 
@@ -200,11 +202,9 @@ static inline void cpu_exec_end(CPUState *cpu)
 {
     pthread_mutex_lock(&exclusive_lock);
     cpu->running = false;
-    if (pending_cpus > 1) {
-        pending_cpus--;
-        if (pending_cpus == 1) {
-            pthread_cond_signal(&exclusive_cond);
-        }
+    tcg_pending_cpus--;
+    if (!tcg_pending_cpus) {
+        pthread_cond_broadcast(&exclusive_cond);
     }
     exclusive_idle();
     pthread_mutex_unlock(&exclusive_lock);
