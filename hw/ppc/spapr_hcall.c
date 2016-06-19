@@ -13,19 +13,18 @@
 #include "kvm_ppc.h"
 
 struct SPRSyncState {
-    CPUState *cs;
     int spr;
     target_ulong value;
     target_ulong mask;
 };
 
-static void do_spr_sync(void *arg)
+static void do_spr_sync(CPUState *cs, void *arg)
 {
     struct SPRSyncState *s = arg;
-    PowerPCCPU *cpu = POWERPC_CPU(s->cs);
+    PowerPCCPU *cpu = POWERPC_CPU(cs);
     CPUPPCState *env = &cpu->env;
 
-    cpu_synchronize_state(s->cs);
+    cpu_synchronize_state(cs);
     env->spr[s->spr] &= ~s->mask;
     env->spr[s->spr] |= s->value;
 }
@@ -34,7 +33,6 @@ static void set_spr(CPUState *cs, int spr, target_ulong value,
                     target_ulong mask)
 {
     struct SPRSyncState s = {
-        .cs = cs,
         .spr = spr,
         .value = value,
         .mask = mask
@@ -912,11 +910,11 @@ typedef struct {
     Error *err;
 } SetCompatState;
 
-static void do_set_compat(void *arg)
+static void do_set_compat(CPUState *cs, void *arg)
 {
     SetCompatState *s = arg;
 
-    cpu_synchronize_state(CPU(s->cpu));
+    cpu_synchronize_state(cs);
     ppc_set_compat(s->cpu, s->cpu_version, &s->err);
 }
 
