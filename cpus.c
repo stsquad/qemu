@@ -910,69 +910,14 @@ void qemu_init_cpu_loop(void)
     qemu_thread_get_self(&io_thread);
 }
 
-static void wait_cpu_work(void)
+void wait_cpu_work(void)
 {
     qemu_cond_wait(&qemu_work_cond, &qemu_global_mutex);
 }
 
-static void signal_cpu_work(void)
+void signal_cpu_work(void)
 {
     qemu_cond_broadcast(&qemu_work_cond);
-}
-
-static void queue_work_on_cpu(CPUState *cpu, struct qemu_work_item *wi)
-{
-    qemu_mutex_lock(&cpu->work_mutex);
-    if (cpu->queued_work_first == NULL) {
-        cpu->queued_work_first = wi;
-    } else {
-        cpu->queued_work_last->next = wi;
-    }
-    cpu->queued_work_last = wi;
-    wi->next = NULL;
-    wi->done = false;
-    qemu_mutex_unlock(&cpu->work_mutex);
-
-    qemu_cpu_kick(cpu);
-}
-
-void run_on_cpu(CPUState *cpu, run_on_cpu_func func, void *data)
-{
-    struct qemu_work_item wi;
-
-    if (qemu_cpu_is_self(cpu)) {
-        func(cpu, data);
-        return;
-    }
-
-    wi.func = func;
-    wi.data = data;
-    wi.free = false;
-
-    queue_work_on_cpu(cpu, &wi);
-    while (!atomic_mb_read(&wi.done)) {
-        CPUState *self_cpu = current_cpu;
-
-        wait_cpu_work();
-        current_cpu = self_cpu;
-    }
-}
-
-void async_run_on_cpu(CPUState *cpu, run_on_cpu_func func, void *data)
-{
-    struct qemu_work_item *wi;
-
-    if (qemu_cpu_is_self(cpu)) {
-        func(cpu, data);
-        return;
-    }
-
-    wi = g_malloc0(sizeof(struct qemu_work_item));
-    wi->func = func;
-    wi->data = data;
-    wi->free = true;
-
-    queue_work_on_cpu(cpu, wi);
 }
 
 static void qemu_kvm_destroy_vcpu(CPUState *cpu)
@@ -985,34 +930,6 @@ static void qemu_kvm_destroy_vcpu(CPUState *cpu)
 
 static void qemu_tcg_destroy_vcpu(CPUState *cpu)
 {
-}
-
-static void flush_queued_work(CPUState *cpu)
-{
-    struct qemu_work_item *wi;
-
-    if (cpu->queued_work_first == NULL) {
-        return;
-    }
-
-    qemu_mutex_lock(&cpu->work_mutex);
-    while (cpu->queued_work_first != NULL) {
-        wi = cpu->queued_work_first;
-        cpu->queued_work_first = wi->next;
-        if (!cpu->queued_work_first) {
-            cpu->queued_work_last = NULL;
-        }
-        qemu_mutex_unlock(&cpu->work_mutex);
-        wi->func(cpu, wi->data);
-        qemu_mutex_lock(&cpu->work_mutex);
-        if (wi->free) {
-            g_free(wi);
-        } else {
-            atomic_mb_set(&wi->done, true);
-        }
-    }
-    qemu_mutex_unlock(&cpu->work_mutex);
-    signal_cpu_work();
 }
 
 static void qemu_wait_io_event_common(CPUState *cpu)

@@ -407,4 +407,8 @@ extern int singlestep;
 extern CPUState *tcg_current_cpu;
 extern bool exit_request;
 
+void wait_cpu_work(void);
+void signal_cpu_work(void);
+void flush_queued_work(CPUState *cpu);
+
 #endif

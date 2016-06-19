@@ -112,6 +112,7 @@ static pthread_mutex_t cpu_list_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t exclusive_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t exclusive_cond = PTHREAD_COND_INITIALIZER;
 static pthread_cond_t exclusive_resume = PTHREAD_COND_INITIALIZER;
+static pthread_cond_t work_cond = PTHREAD_COND_INITIALIZER;
 static bool exclusive_pending;
 static int tcg_pending_cpus;
 
@@ -141,12 +142,23 @@ void fork_end(int child)
         pthread_mutex_init(&cpu_list_mutex, NULL);
         pthread_cond_init(&exclusive_cond, NULL);
         pthread_cond_init(&exclusive_resume, NULL);
+        pthread_cond_init(&work_cond, NULL);
         qemu_mutex_init(&tcg_ctx.tb_ctx.tb_lock);
         gdbserver_fork(thread_cpu);
     } else {
         pthread_mutex_unlock(&exclusive_lock);
         qemu_mutex_unlock(&tcg_ctx.tb_ctx.tb_lock);
     }
+}
+
+void wait_cpu_work(void)
+{
+    pthread_cond_wait(&work_cond, &exclusive_lock);
+}
+
+void signal_cpu_work(void)
+{
+    pthread_cond_broadcast(&work_cond);
 }
 
 /* Wait for pending exclusive operations to complete.  The exclusive lock
@@ -207,6 +219,7 @@ static inline void cpu_exec_end(CPUState *cpu)
         pthread_cond_broadcast(&exclusive_cond);
     }
     exclusive_idle();
+    flush_queued_work(cpu);
     pthread_mutex_unlock(&exclusive_lock);
 }
 
