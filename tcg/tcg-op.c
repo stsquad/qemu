@@ -152,11 +152,17 @@ void tcg_gen_op6(TCGContext *ctx, TCGOpcode opc, TCGArg a1, TCGArg a2,
 
 void tcg_gen_mb(TCGArg mb_type)
 {
-#ifndef CONFIG_USER_ONLY
-    if (qemu_tcg_mttcg_enabled() && smp_cpus > 1) {
+#ifdef CONFIG_USER_ONLY
+    const bool emit_barriers = true;
+#else
+    /* TODO: When MTTCG is available for system mode
+     * we will enable when qemu_tcg_mttcg_enabled() && smp_cpus > 1
+     */
+    bool emit_barriers = false;
+#endif
+    if (emit_barriers) {
         tcg_gen_op1(&tcg_ctx, INDEX_op_mb, mb_type);
     }
-#endif
 }
 
 /* 32 bit ops */
