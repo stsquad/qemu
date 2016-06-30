@@ -20,6 +20,9 @@
 #include <windows.h>
 #endif
 #include "qemu/osdep.h"
+#include <sys/types.h>
+#include <unistd.h>
+#include <sys/syscall.h>
 
 
 #include "qemu-common.h"
@@ -57,7 +60,7 @@
 #include "exec/log.h"
 
 //#define DEBUG_TB_INVALIDATE
-//#define DEBUG_FLUSH
+#define DEBUG_FLUSH
 /* make various TB consistency checks */
 //#define DEBUG_TB_CHECK
 
@@ -106,6 +109,7 @@ typedef struct PageDesc {
 #else
 #define V_L1_BITS  V_L1_BITS_REM
 #endif
+
 
 #define V_L1_SIZE  ((target_ulong)1 << V_L1_BITS)
 
@@ -456,7 +460,8 @@ static inline PageDesc *page_find(tb_page_addr_t index)
    indicated, this is constrained by the range of direct branches on the
    host cpu, as used by the TCG implementation of goto_tb.  */
 #if defined(__x86_64__)
-# define MAX_CODE_GEN_BUFFER_SIZE  (2ul * 1024 * 1024 * 1024)
+/* # define MAX_CODE_GEN_BUFFER_SIZE  (2ul * 1024 * 1024 * 1024) */
+# define MAX_CODE_GEN_BUFFER_SIZE  (256 * 1024)
 #elif defined(__sparc__)
 # define MAX_CODE_GEN_BUFFER_SIZE  (2ul * 1024 * 1024 * 1024)
 #elif defined(__powerpc64__)
@@ -835,7 +840,8 @@ static void page_flush_tb(void)
 static void do_tb_flush(CPUState *cpu, void *data)
 {
 #if defined(DEBUG_FLUSH)
-    printf("qemu: flush code_size=%ld nb_tbs=%d avg_tb_size=%ld\n",
+    printf("qemu %d/%ld: flush code_size=%ld nb_tbs=%d avg_tb_size=%ld\n",
+           getpid(), syscall(SYS_gettid),
            (unsigned long)(tcg_ctx.code_gen_ptr - tcg_ctx.code_gen_buffer),
            tcg_ctx.tb_ctx.nb_tbs, tcg_ctx.tb_ctx.nb_tbs > 0 ?
            ((unsigned long)(tcg_ctx.code_gen_ptr - tcg_ctx.code_gen_buffer)) /
