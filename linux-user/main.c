@@ -112,7 +112,6 @@ static pthread_mutex_t cpu_list_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t exclusive_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t exclusive_cond = PTHREAD_COND_INITIALIZER;
 static pthread_cond_t exclusive_resume = PTHREAD_COND_INITIALIZER;
-static pthread_cond_t work_cond = PTHREAD_COND_INITIALIZER;
 static bool exclusive_pending;
 
 /* Make sure everything is in a consistent state for calling fork().  */
@@ -141,7 +140,6 @@ void fork_end(int child)
         pthread_mutex_init(&cpu_list_mutex, NULL);
         pthread_cond_init(&exclusive_cond, NULL);
         pthread_cond_init(&exclusive_resume, NULL);
-        pthread_cond_init(&work_cond, NULL);
         qemu_mutex_init(&tcg_ctx.tb_ctx.tb_lock);
         gdbserver_fork(thread_cpu);
     } else {
@@ -152,12 +150,12 @@ void fork_end(int child)
 
 void wait_cpu_work(void)
 {
-    pthread_cond_wait(&work_cond, &exclusive_lock);
+    pthread_cond_wait(&exclusive_cond, &exclusive_lock);
 }
 
 void signal_cpu_work(void)
 {
-    pthread_cond_broadcast(&work_cond);
+    pthread_cond_broadcast(&exclusive_cond);
 }
 
 /* Wait for pending exclusive operations to complete.  The exclusive lock
@@ -215,7 +213,7 @@ static inline void cpu_exec_end(CPUState *cpu)
     cpu->running = false;
     tcg_pending_cpus--;
     if (!tcg_pending_cpus) {
-        pthread_cond_broadcast(&exclusive_cond);
+        signal_cpu_work();
     }
     exclusive_idle();
     flush_queued_work(cpu);
