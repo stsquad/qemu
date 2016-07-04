@@ -278,6 +278,40 @@ static TranslationBlock *tb_find_physical(CPUState *cpu,
     return qht_lookup(&tcg_ctx.tb_ctx.htable, tb_cmp, &desc, h);
 }
 
+/*
+ * Patch the last TB with a jump to the current TB.
+ *
+ * Modification of the TB has to be protected with tb_lock.
+ */
+static inline void maybe_patch_last_tb(CPUState *cpu,
+                                       TranslationBlock *tb,
+                                       TranslationBlock **last_tb,
+                                       int tb_exit)
+{
+    if (cpu->tb_flushed) {
+        /* Ensure that no TB jump will be modified as the
+         * translation buffer has been flushed.
+         */
+        *last_tb = NULL;
+        cpu->tb_flushed = false;
+    }
+#ifndef CONFIG_USER_ONLY
+    /* We don't take care of direct jumps when address mapping changes in
+     * system emulation. So it's not safe to make a direct jump to a TB
+     * spanning two pages because the mapping for the second page can change.
+     */
+    if (tb->page_addr[1] != -1) {
+        *last_tb = NULL;
+    }
+#endif
+    /* See if we can patch the calling TB. */
+    if (*last_tb && !qemu_loglevel_mask(CPU_LOG_TB_NOCHAIN)) {
+        tb_lock();
+        tb_add_jump(*last_tb, tb_exit, tb);
+        tb_unlock();
+    }
+}
+
 static TranslationBlock *tb_find_slow(CPUState *cpu,
                                       target_ulong pc,
                                       target_ulong cs_base,
@@ -336,28 +370,9 @@ static inline TranslationBlock *tb_find_fast(CPUState *cpu,
                  tb->flags != flags)) {
         tb = tb_find_slow(cpu, pc, cs_base, flags);
     }
-    if (cpu->tb_flushed) {
-        /* Ensure that no TB jump will be modified as the
-         * translation buffer has been flushed.
-         */
-        *last_tb = NULL;
-        cpu->tb_flushed = false;
-    }
-#ifndef CONFIG_USER_ONLY
-    /* We don't take care of direct jumps when address mapping changes in
-     * system emulation. So it's not safe to make a direct jump to a TB
-     * spanning two pages because the mapping for the second page can change.
-     */
-    if (tb->page_addr[1] != -1) {
-        *last_tb = NULL;
-    }
-#endif
-    /* See if we can patch the calling TB. */
-    if (*last_tb && !qemu_loglevel_mask(CPU_LOG_TB_NOCHAIN)) {
-        tb_lock();
-        tb_add_jump(*last_tb, tb_exit, tb);
-        tb_unlock();
-    }
+
+    maybe_patch_last_tb(cpu, tb, last_tb, tb_exit);
+
     return tb;
 }
 
