@@ -281,7 +281,8 @@ static TranslationBlock *tb_find_physical(CPUState *cpu,
 /*
  * Patch the last TB with a jump to the current TB.
  *
- * Modification of the TB has to be protected with tb_lock.
+ * Modification of the TB has to be protected with tb_lock which can
+ * either be already held or taken here.
  */
 static inline void maybe_patch_last_tb(CPUState *cpu,
                                        TranslationBlock *tb,
@@ -306,72 +307,86 @@ static inline void maybe_patch_last_tb(CPUState *cpu,
 #endif
     /* See if we can patch the calling TB. */
     if (*last_tb && !qemu_loglevel_mask(CPU_LOG_TB_NOCHAIN)) {
-        tb_lock();
+        bool locked = tb_lock_recursive();
         tb_add_jump(*last_tb, tb_exit, tb);
-        tb_unlock();
-    }
-}
-
-static TranslationBlock *tb_find_slow(CPUState *cpu,
-                                      target_ulong pc,
-                                      target_ulong cs_base,
-                                      uint32_t flags)
-{
-    TranslationBlock *tb;
-
-    /* Ensure that we won't find a TB in the shared hash table
-     * if it is being invalidated by some other thread.
-     * Otherwise we'd put it back to CPU's local cache.
-     * Pairs with smp_wmb() in tb_phys_invalidate(). */
-    smp_rmb();
-    tb = tb_find_physical(cpu, pc, cs_base, flags);
-    if (!tb) {
-
-        /* mmap_lock is needed by tb_gen_code, and mmap_lock must be
-         * taken outside tb_lock. As system emulation is currently
-         * single threaded the locks are NOPs.
-         */
-        mmap_lock();
-        tb_lock();
-
-        /* There's a chance that our desired tb has been translated while
-         * taking the locks so we check again inside the lock.
-         */
-        tb = tb_find_physical(cpu, pc, cs_base, flags);
-        if (!tb) {
-            /* if no translated code available, then translate it now */
-            tb = tb_gen_code(cpu, pc, cs_base, flags, 0);
+        if (locked) {
+            tb_unlock();
         }
-
-        tb_unlock();
-        mmap_unlock();
     }
-
-    /* We add the TB in the virtual pc hash table for the fast lookup */
-    atomic_set(&cpu->tb_jmp_cache[tb_jmp_cache_hash_func(pc)], tb);
-    return tb;
 }
 
-static inline TranslationBlock *tb_find_fast(CPUState *cpu,
-                                             TranslationBlock **last_tb,
-                                             int tb_exit)
+/*
+ * tb_find - find next TB, possibly generating it
+ *
+ * There is a multi-level lookup for finding the next TB which avoids
+ * locks unless generation is required.
+ *
+ * 1. Lookup via the per-vcpu tb_jmp_cache
+ * 2. Lookup via tb_find_physical (using QHT)
+ *
+ * If both of those fail then we need to grab the mmap_lock and
+ * tb_lock and do code generation.
+ *
+ * As the jump patching of code also needs to be protected by locks we
+ * have multiple paths into maybe_patch_last_tb taking advantage of
+ * the fact we may already have locks held for code generation.
+ */
+static TranslationBlock *tb_find(CPUState *cpu,
+                                 TranslationBlock **last_tb,
+                                 int tb_exit)
 {
     CPUArchState *env = (CPUArchState *)cpu->env_ptr;
     TranslationBlock *tb;
     target_ulong cs_base, pc;
+    unsigned int h;
     uint32_t flags;
 
     /* we record a subset of the CPU state. It will
        always be the same before a given translated block
        is executed. */
     cpu_get_tb_cpu_state(env, &pc, &cs_base, &flags);
-    tb = atomic_read(&cpu->tb_jmp_cache[tb_jmp_cache_hash_func(pc)]);
+    h = tb_jmp_cache_hash_func(pc);
+    tb = atomic_read(&cpu->tb_jmp_cache[h]);
+
     if (unlikely(!tb || tb->pc != pc || tb->cs_base != cs_base ||
                  tb->flags != flags)) {
-        tb = tb_find_slow(cpu, pc, cs_base, flags);
-    }
 
-    maybe_patch_last_tb(cpu, tb, last_tb, tb_exit);
+        /* Ensure that we won't find a TB in the shared hash table
+         * if it is being invalidated by some other thread.
+         * Otherwise we'd put it back to CPU's local cache.
+         * Pairs with smp_wmb() in tb_phys_invalidate(). */
+        smp_rmb();
+        tb = tb_find_physical(cpu, pc, cs_base, flags);
+
+        if (!tb) {
+            /* mmap_lock is needed by tb_gen_code, and mmap_lock must be
+             * taken outside tb_lock. As system emulation is currently
+             * single threaded the locks are NOPs.
+             */
+            mmap_lock();
+            tb_lock();
+
+            /* There's a chance that our desired tb has been translated while
+             * taking the locks so we check again inside the lock.
+             */
+            tb = tb_find_physical(cpu, pc, cs_base, flags);
+            if (!tb) {
+                /* if no translated code available, then translate it now */
+                tb = tb_gen_code(cpu, pc, cs_base, flags, 0);
+            }
+            maybe_patch_last_tb(cpu, tb, last_tb, tb_exit);
+
+            tb_unlock();
+            mmap_unlock();
+        } else {
+            maybe_patch_last_tb(cpu, tb, last_tb, tb_exit);
+        }
+
+        /* We update the TB in the virtual pc hash table for the fast lookup */
+        atomic_set(&cpu->tb_jmp_cache[h], tb);
+    } else {
+        maybe_patch_last_tb(cpu, tb, last_tb, tb_exit);
+    }
 
     return tb;
 }
@@ -452,7 +467,7 @@ static inline bool cpu_handle_exception(CPUState *cpu, int *ret)
                && cpu->icount_decr.u16.low + cpu->icount_extra == 0) {
         /* try to cause an exception pending in the log */
         TranslationBlock *last_tb = NULL; /* Avoid chaining TBs */
-        cpu_exec_nocache(cpu, 1, tb_find_fast(cpu, &last_tb, 0), true);
+        cpu_exec_nocache(cpu, 1, tb_find(cpu, &last_tb, 0), true);
         *ret = -1;
         return true;
 #endif
@@ -636,7 +651,7 @@ int cpu_exec(CPUState *cpu)
             cpu->tb_flushed = false; /* reset before first TB lookup */
             for(;;) {
                 cpu_handle_interrupt(cpu, &last_tb);
-                tb = tb_find_fast(cpu, &last_tb, tb_exit);
+                tb = tb_find(cpu, &last_tb, tb_exit);
                 cpu_loop_exec_tb(cpu, tb, &last_tb, &tb_exit, &sc);
                 /* Try to align the host and virtual clocks
                    if the guest is in advance */
