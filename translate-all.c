@@ -134,6 +134,17 @@ void tb_lock(void)
 #endif
 }
 
+bool tb_lock_recursive(void)
+{
+#ifdef CONFIG_USER_ONLY
+    if (have_tb_lock) {
+        return false;
+    }
+    tb_lock();
+#endif
+    return true;
+}
+
 void tb_unlock(void)
 {
 #ifdef CONFIG_USER_ONLY
