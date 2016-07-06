@@ -407,4 +407,21 @@ extern int singlestep;
 extern CPUState *tcg_current_cpu;
 extern bool exit_request;
 
+/**
+ * qemu_work_cond - condition to wait for CPU work items completion
+ */
+extern QemuCond qemu_work_cond;
+
+/**
+ * qemu_get_cpu_work_mutex() - get the mutex which protects CPU work execution
+ *
+ * Return: A pointer to the mutex.
+ */
+QemuMutex *qemu_get_cpu_work_mutex(void);
+/**
+ * process_queued_cpu_work() - process all items on CPU work queue
+ * @cpu: The CPU which work queue to process.
+ */
+void process_queued_cpu_work(CPUState *cpu);
+
 #endif
