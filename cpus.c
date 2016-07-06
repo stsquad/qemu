@@ -903,6 +903,8 @@ void qemu_init_cpu_loop(void)
     qemu_cond_init(&qemu_cpu_cond);
     qemu_cond_init(&qemu_pause_cond);
     qemu_cond_init(&qemu_work_cond);
+    qemu_cond_init(&qemu_safe_work_cond);
+    qemu_cond_init(&qemu_exclusive_cond);
     qemu_cond_init(&qemu_io_proceeded_cond);
     qemu_mutex_init(&qemu_global_mutex);
 
@@ -924,6 +926,20 @@ static void qemu_kvm_destroy_vcpu(CPUState *cpu)
 
 static void qemu_tcg_destroy_vcpu(CPUState *cpu)
 {
+}
+
+/* called with qemu_global_mutex held */
+static inline void tcg_cpu_exec_start(CPUState *cpu)
+{
+    tcg_pending_threads++;
+}
+
+/* called with qemu_global_mutex held */
+static inline void tcg_cpu_exec_end(CPUState *cpu)
+{
+    if (--tcg_pending_threads) {
+        qemu_cond_broadcast(&qemu_exclusive_cond);
+    }
 }
 
 static void qemu_wait_io_event_common(CPUState *cpu)
@@ -950,6 +966,8 @@ static void qemu_tcg_wait_io_event(CPUState *cpu)
     CPU_FOREACH(cpu) {
         qemu_wait_io_event_common(cpu);
     }
+
+    wait_safe_cpu_work();
 }
 
 static void qemu_kvm_wait_io_event(CPUState *cpu)
@@ -1485,7 +1503,9 @@ static void tcg_exec_all(void)
                           (cpu->singlestep_enabled & SSTEP_NOTIMER) == 0);
 
         if (cpu_can_run(cpu)) {
+            tcg_cpu_exec_start(cpu);
             r = tcg_cpu_exec(cpu);
+            tcg_cpu_exec_end(cpu);
             if (r == EXCP_DEBUG) {
                 cpu_handle_guest_debug(cpu);
                 break;
