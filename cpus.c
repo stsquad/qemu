@@ -910,6 +910,11 @@ void qemu_init_cpu_loop(void)
     qemu_thread_get_self(&io_thread);
 }
 
+static QemuMutex *qemu_get_cpu_work_mutex(void)
+{
+    return &qemu_global_mutex;
+}
+
 static void queue_work_on_cpu(CPUState *cpu, struct qemu_work_item *wi)
 {
     qemu_mutex_lock(&cpu->work_mutex);
@@ -943,7 +948,7 @@ void run_on_cpu(CPUState *cpu, run_on_cpu_func func, void *data)
     while (!atomic_mb_read(&wi.done)) {
         CPUState *self_cpu = current_cpu;
 
-        qemu_cond_wait(&qemu_work_cond, &qemu_global_mutex);
+        qemu_cond_wait(&qemu_work_cond, qemu_get_cpu_work_mutex());
         current_cpu = self_cpu;
     }
 }
