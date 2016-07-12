@@ -466,8 +466,10 @@ void *qht_lookup__slowpath(struct qht_bucket *b, qht_lookup_func_t func,
     void *ret;
 
     do {
+        /* seqlock_read_begin() also serves as the gaurantee of smp_rmb() */
         version = seqlock_read_begin(&b->sequence);
         ret = qht_do_lookup(b, func, userp, hash);
+    /* seqlock_read_retry() also serves as the gaurantee of smp_rmb() */
     } while (seqlock_read_retry(&b->sequence, version));
     return ret;
 }
@@ -483,8 +485,10 @@ void *qht_lookup(struct qht *ht, qht_lookup_func_t func, const void *userp,
     map = atomic_rcu_read(&ht->map);
     b = qht_map_to_bucket(map, hash);
 
+    /* seqlock_read_begin() also serves as the gaurantee of smp_rmb() */
     version = seqlock_read_begin(&b->sequence);
     ret = qht_do_lookup(b, func, userp, hash);
+    /* seqlock_read_retry() also serves as the gaurantee of smp_rmb() */
     if (likely(!seqlock_read_retry(&b->sequence, version))) {
         return ret;
     }
@@ -530,6 +534,7 @@ static bool qht_insert__locked(struct qht *ht, struct qht_map *map,
 
  found:
     /* found an empty key: acquire the seqlock and write */
+    /* seqlock_write_begin() also serves as the guarantee of smp_wmb() */
     seqlock_write_begin(&head->sequence);
     if (new) {
         atomic_rcu_set(&prev->next, b);
@@ -661,6 +666,9 @@ bool qht_remove__locked(struct qht_map *map, struct qht_bucket *head,
                 qht_debug_assert(b->hashes[i] == hash);
                 seqlock_write_begin(&head->sequence);
                 qht_bucket_remove_entry(b, i);
+                /* seqlock_write_end() also serves as the guarantee of
+                 * smp_wmb()
+                 */
                 seqlock_write_end(&head->sequence);
                 return true;
             }

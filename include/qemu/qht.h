@@ -69,6 +69,9 @@ void qht_destroy(struct qht *ht);
  * Attempting to insert a NULL @p is a bug.
  * Inserting the same pointer @p with different @hash values is a bug.
  *
+ * In case of successful operation, smp_wmb() is implied before the pointer is
+ * inserted into the hash table.
+ *
  * Returns true on sucess.
  * Returns false if the @p-@hash pair already exists in the hash table.
  */
@@ -85,6 +88,9 @@ bool qht_insert(struct qht *ht, void *p, uint32_t hash);
  *
  * The user-provided @func compares pointers in QHT against @userp.
  * If the function returns true, a match has been found.
+ *
+ * smp_rmb() is implied before and after the pointer is looked up and retrieved
+ * from the hash table.
  *
  * Returns the corresponding pointer when a match is found.
  * Returns NULL otherwise.
@@ -104,6 +110,9 @@ void *qht_lookup(struct qht *ht, qht_lookup_func_t func, const void *userp,
  * valid until the end of the RCU grace period in which qht_remove() is called.
  * This guarantees that concurrent lookups will always compare against valid
  * data.
+ *
+ * In case of successful operation, smp_wmb() is implied after the pointer is
+ * removed from the hash table.
  *
  * Returns true on success.
  * Returns false if the @p-@hash pair was not found.
