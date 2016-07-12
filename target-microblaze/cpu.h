@@ -372,6 +372,20 @@ static inline void cpu_get_tb_cpu_state(CPUMBState *env, target_ulong *pc,
                  (env->sregs[SR_MSR] & (MSR_UM | MSR_VM | MSR_EE));
 }
 
+static inline void cpu_get_invalid_tb_cpu_state(target_ulong *pc,
+                                                target_ulong *cs_base,
+                                                uint32_t *flags)
+{
+    *cs_base = -1;
+}
+
+static inline bool cpu_tb_cpu_state_is_invalidated(target_ulong pc,
+                                                   target_ulong cs_base,
+                                                   uint32_t flags)
+{
+    return cs_base == -1;
+}
+
 #if !defined(CONFIG_USER_ONLY)
 void mb_cpu_unassigned_access(CPUState *cpu, hwaddr addr,
                               bool is_write, bool is_exec, int is_asi,

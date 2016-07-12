@@ -38,6 +38,7 @@
 #define DYNAMIC_PC  1 /* dynamic pc value */
 #define JUMP_PC     2 /* dynamic pc value which takes only two values
                          according to jump_pc[T2] */
+/* NOTE: -1 is reserved for cpu_get_invalid_tb_cpu_state() */
 
 /* global register indexes */
 static TCGv_env cpu_env;

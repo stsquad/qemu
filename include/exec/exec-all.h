@@ -256,6 +256,16 @@ void tb_free(TranslationBlock *tb);
 void tb_flush(CPUState *cpu);
 void tb_phys_invalidate(TranslationBlock *tb, tb_page_addr_t page_addr);
 
+static inline void tb_mark_invalid(TranslationBlock *tb)
+{
+    cpu_get_invalid_tb_cpu_state(&tb->pc, &tb->cs_base, &tb->flags);
+}
+
+static inline bool tb_is_invalid(TranslationBlock *tb)
+{
+    return cpu_tb_cpu_state_is_invalidated(tb->pc, tb->cs_base, tb->flags);
+}
+
 #if defined(USE_DIRECT_JUMP)
 
 #if defined(CONFIG_TCG_INTERPRETER)
