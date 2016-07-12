@@ -986,10 +986,12 @@ static inline void tb_jmp_unlink(TranslationBlock *tb)
 /* invalidate one TB */
 void tb_phys_invalidate(TranslationBlock *tb, tb_page_addr_t page_addr)
 {
-    CPUState *cpu;
     PageDesc *p;
     uint32_t h;
     tb_page_addr_t phys_pc;
+
+    tb_mark_invalid(tb);
+    smp_wmb();
 
     /* remove the TB from the hash list */
     phys_pc = tb->page_addr[0] + (tb->pc & ~TARGET_PAGE_MASK);
@@ -1006,14 +1008,6 @@ void tb_phys_invalidate(TranslationBlock *tb, tb_page_addr_t page_addr)
         p = page_find(tb->page_addr[1] >> TARGET_PAGE_BITS);
         tb_page_remove(&p->first_tb, tb);
         invalidate_page_bitmap(p);
-    }
-
-    /* remove the TB from the hash list */
-    h = tb_jmp_cache_hash_func(tb->pc);
-    CPU_FOREACH(cpu) {
-        if (atomic_read(&cpu->tb_jmp_cache[h]) == tb) {
-            atomic_set(&cpu->tb_jmp_cache[h], NULL);
-        }
     }
 
     /* suppress this TB from the two jump lists */
