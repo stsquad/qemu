@@ -901,6 +901,20 @@ static inline void cpu_get_tb_cpu_state(CPUMIPSState *env, target_ulong *pc,
                             MIPS_HFLAG_HWRENA_ULR);
 }
 
+static inline void cpu_get_invalid_tb_cpu_state(target_ulong *pc,
+                                                target_ulong *cs_base,
+                                                uint32_t *flags)
+{
+    *cs_base = -1;
+}
+
+static inline bool cpu_tb_cpu_state_is_invalidated(target_ulong pc,
+                                                   target_ulong cs_base,
+                                                   uint32_t flags)
+{
+    return cs_base == -1;
+}
+
 static inline int mips_vpe_active(CPUMIPSState *env)
 {
     int active = 1;

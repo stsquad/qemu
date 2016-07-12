@@ -296,6 +296,20 @@ static inline void cpu_get_tb_cpu_state(CPUCRISState *env, target_ulong *pc,
 				     | X_FLAG | PFIX_FLAG));
 }
 
+static inline void cpu_get_invalid_tb_cpu_state(target_ulong *pc,
+                                                target_ulong *cs_base,
+                                                uint32_t *flags)
+{
+    *cs_base = -1;
+}
+
+static inline bool cpu_tb_cpu_state_is_invalidated(target_ulong pc,
+                                                   target_ulong cs_base,
+                                                   uint32_t flags)
+{
+    return cs_base == -1;
+}
+
 #define cpu_list cris_cpu_list
 void cris_cpu_list(FILE *f, fprintf_function cpu_fprintf);
 

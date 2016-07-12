@@ -411,6 +411,20 @@ static inline void cpu_get_tb_cpu_state(CPUTriCoreState *env, target_ulong *pc,
     *flags = 0;
 }
 
+static inline void cpu_get_invalid_tb_cpu_state(target_ulong *pc,
+                                                target_ulong *cs_base,
+                                                uint32_t *flags)
+{
+    *cs_base = -1;
+}
+
+static inline bool cpu_tb_cpu_state_is_invalidated(target_ulong pc,
+                                                   target_ulong cs_base,
+                                                   uint32_t flags)
+{
+    return cs_base == -1;
+}
+
 TriCoreCPU *cpu_tricore_init(const char *cpu_model);
 
 #define cpu_init(cpu_model) CPU(cpu_tricore_init(cpu_model))
