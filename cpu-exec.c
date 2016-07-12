@@ -352,7 +352,7 @@ static inline TranslationBlock *tb_find_fast(CPUState *cpu,
         /* Check if translation buffer has been flushed */
         if (cpu->tb_flushed) {
             cpu->tb_flushed = false;
-        } else {
+        } else if (!tb_is_invalid(tb)) {
             tb_add_jump(last_tb, tb_exit, tb);
         }
     }
