@@ -67,6 +67,19 @@ int cpu_get_pic_interrupt(CPUX86State *env)
 }
 #endif
 
+void qemu_init_cpu_loop(void)
+{
+    /* We need to do this becuase process_queued_cpu_work() calls
+     * qemu_cond_broadcast() on it
+     */
+    qemu_cond_init(&qemu_work_cond);
+}
+
+QemuMutex *qemu_get_cpu_work_mutex(void)
+{
+    return NULL; /* it will never be used */
+}
+
 /* These are no-ops because we are not threadsafe.  */
 static inline void cpu_exec_start(CPUArchState *env)
 {
@@ -74,6 +87,7 @@ static inline void cpu_exec_start(CPUArchState *env)
 
 static inline void cpu_exec_end(CPUArchState *env)
 {
+    process_queued_cpu_work(cpu);
 }
 
 static inline void start_exclusive(void)
@@ -748,6 +762,7 @@ int main(int argc, char **argv)
     if (argc <= 1)
         usage();
 
+    qemu_init_cpu_loop();
     module_call_init(MODULE_INIT_QOM);
 
     if ((envlist = envlist_create()) == NULL) {
