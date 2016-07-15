@@ -115,7 +115,8 @@ static QemuMutex cpu_list_mutex;
 static QemuMutex exclusive_lock;
 static QemuCond exclusive_cond;
 static QemuCond exclusive_resume;
-static int pending_cpus;
+static bool exclusive_pending;
+static int tcg_pending_threads;
 
 void qemu_init_cpu_loop(void)
 {
@@ -145,7 +146,8 @@ void fork_end(int child)
                 QTAILQ_REMOVE(&cpus, cpu, node);
             }
         }
-        pending_cpus = 0;
+        tcg_pending_threads = 0;
+        exclusive_pending = false;
         qemu_mutex_init(&exclusive_lock);
         qemu_mutex_init(&cpu_list_mutex);
         qemu_cond_init(&exclusive_cond);
@@ -162,7 +164,7 @@ void fork_end(int child)
    must be held.  */
 static inline void exclusive_idle(void)
 {
-    while (pending_cpus) {
+    while (exclusive_pending) {
         qemu_cond_wait(&exclusive_resume, &exclusive_lock);
     }
 }
@@ -176,15 +178,14 @@ static inline void start_exclusive(void)
     qemu_mutex_lock(&exclusive_lock);
     exclusive_idle();
 
-    pending_cpus = 1;
+    exclusive_pending = true;
     /* Make all other cpus stop executing.  */
     CPU_FOREACH(other_cpu) {
         if (other_cpu->running) {
-            pending_cpus++;
             cpu_exit(other_cpu);
         }
     }
-    if (pending_cpus > 1) {
+    while (tcg_pending_threads) {
         qemu_cond_wait(&exclusive_cond, &exclusive_lock);
     }
 }
@@ -192,7 +193,7 @@ static inline void start_exclusive(void)
 /* Finish an exclusive operation.  */
 static inline void __attribute__((unused)) end_exclusive(void)
 {
-    pending_cpus = 0;
+    exclusive_pending = false;
     qemu_cond_broadcast(&exclusive_resume);
     qemu_mutex_unlock(&exclusive_lock);
 }
@@ -203,6 +204,7 @@ static inline void cpu_exec_start(CPUState *cpu)
     qemu_mutex_lock(&exclusive_lock);
     exclusive_idle();
     cpu->running = true;
+    tcg_pending_threads++;
     qemu_mutex_unlock(&exclusive_lock);
 }
 
@@ -211,11 +213,9 @@ static inline void cpu_exec_end(CPUState *cpu)
 {
     qemu_mutex_lock(&exclusive_lock);
     cpu->running = false;
-    if (pending_cpus > 1) {
-        pending_cpus--;
-        if (pending_cpus == 1) {
-            qemu_cond_signal(&exclusive_cond);
-        }
+    tcg_pending_threads--;
+    if (!tcg_pending_threads) {
+        qemu_cond_signal(&exclusive_cond);
     }
     exclusive_idle();
     qemu_mutex_unlock(&exclusive_lock);
