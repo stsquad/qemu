@@ -113,18 +113,17 @@ int cpu_get_pic_interrupt(CPUX86State *env)
    which requires quite a lot of per host/target work.  */
 static QemuMutex cpu_list_mutex;
 static QemuMutex exclusive_lock;
-static QemuCond exclusive_cond;
 static QemuCond exclusive_resume;
 static bool exclusive_pending;
-static int tcg_pending_threads;
 
 void qemu_init_cpu_loop(void)
 {
     qemu_mutex_init(&cpu_list_mutex);
     qemu_mutex_init(&exclusive_lock);
-    qemu_cond_init(&exclusive_cond);
     qemu_cond_init(&exclusive_resume);
     qemu_cond_init(&qemu_work_cond);
+    qemu_cond_init(&qemu_safe_work_cond);
+    qemu_cond_init(&qemu_exclusive_cond);
 }
 
 /* Make sure everything is in a consistent state for calling fork().  */
@@ -151,9 +150,10 @@ void fork_end(int child)
         exclusive_pending = false;
         qemu_mutex_init(&exclusive_lock);
         qemu_mutex_init(&cpu_list_mutex);
-        qemu_cond_init(&exclusive_cond);
         qemu_cond_init(&exclusive_resume);
         qemu_cond_init(&qemu_work_cond);
+        qemu_cond_init(&qemu_safe_work_cond);
+        qemu_cond_init(&qemu_exclusive_cond);
         qemu_mutex_init(&tcg_ctx.tb_ctx.tb_lock);
         gdbserver_fork(thread_cpu);
     } else {
@@ -193,7 +193,7 @@ static inline void start_exclusive(void)
         }
     }
     while (tcg_pending_threads) {
-        qemu_cond_wait(&exclusive_cond, &exclusive_lock);
+        qemu_cond_wait(&qemu_exclusive_cond, &exclusive_lock);
     }
 }
 
@@ -222,10 +222,11 @@ static inline void cpu_exec_end(CPUState *cpu)
     cpu->running = false;
     tcg_pending_threads--;
     if (!tcg_pending_threads) {
-        qemu_cond_signal(&exclusive_cond);
+        qemu_cond_broadcast(&qemu_exclusive_cond);
     }
     exclusive_idle();
     process_queued_cpu_work(cpu);
+    wait_safe_cpu_work();
     qemu_mutex_unlock(&exclusive_lock);
 }
 
