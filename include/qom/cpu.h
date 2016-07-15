@@ -240,6 +240,7 @@ struct qemu_work_item {
     void *data;
     int done;
     bool free;
+    bool safe;
 };
 
 /**
@@ -636,6 +637,19 @@ void run_on_cpu(CPUState *cpu, run_on_cpu_func func, void *data);
  * Schedules the function @func for execution on the vCPU @cpu asynchronously.
  */
 void async_run_on_cpu(CPUState *cpu, run_on_cpu_func func, void *data);
+
+/**
+ * async_safe_run_on_cpu:
+ * @cpu: The vCPU to run on.
+ * @func: The function to be executed.
+ * @data: Data to pass to the function.
+ *
+ * Schedules the function @func for execution on the vCPU @cpu asynchronously
+ * and in quiescent state. Quiescent state means: (1) all other vCPUs are
+ * halted and (2) #qemu_global_mutex (a.k.a. BQL) in system-mode or
+ * #exclusive_lock in user-mode emulation is held while @func is executing.
+ */
+void async_safe_run_on_cpu(CPUState *cpu, run_on_cpu_func func, void *data);
 
 /**
  * qemu_get_cpu:

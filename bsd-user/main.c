@@ -69,9 +69,10 @@ int cpu_get_pic_interrupt(CPUX86State *env)
 void qemu_init_cpu_loop(void)
 {
     /* We need to do this becuase process_queued_cpu_work() calls
-     * qemu_cond_broadcast() on it
+     * qemu_cond_broadcast() on them
      */
     qemu_cond_init(&qemu_work_cond);
+    qemu_cond_init(&qemu_safe_work_cond);
 }
 
 QemuMutex *qemu_get_cpu_work_mutex(void)

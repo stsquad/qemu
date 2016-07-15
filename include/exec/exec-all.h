@@ -407,12 +407,22 @@ extern int singlestep;
 
 /* cpu-exec.c, accessed with atomic_mb_read/atomic_mb_set */
 extern CPUState *tcg_current_cpu;
+extern int tcg_pending_threads;
 extern bool exit_request;
 
 /**
  * qemu_work_cond - condition to wait for CPU work items completion
  */
 extern QemuCond qemu_work_cond;
+/**
+ * qemu_safe_work_cond - condition to wait for safe CPU work items completion
+ */
+extern QemuCond qemu_safe_work_cond;
+/**
+ * qemu_exclusive_cond - condition to wait for all TCG threads to be out of
+ *                       guest code execution loop
+ */
+extern QemuCond qemu_exclusive_cond;
 
 /**
  * qemu_get_cpu_work_mutex() - get the mutex which protects CPU work execution
@@ -425,5 +435,9 @@ QemuMutex *qemu_get_cpu_work_mutex(void);
  * @cpu: The CPU which work queue to process.
  */
 void process_queued_cpu_work(CPUState *cpu);
+/**
+ * wait_safe_cpu_work() - wait until all safe CPU work items has processed
+ */
+void wait_safe_cpu_work(void);
 
 #endif
