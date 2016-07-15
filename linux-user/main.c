@@ -124,6 +124,7 @@ void qemu_init_cpu_loop(void)
     qemu_mutex_init(&exclusive_lock);
     qemu_cond_init(&exclusive_cond);
     qemu_cond_init(&exclusive_resume);
+    qemu_cond_init(&qemu_work_cond);
 }
 
 /* Make sure everything is in a consistent state for calling fork().  */
@@ -152,12 +153,18 @@ void fork_end(int child)
         qemu_mutex_init(&cpu_list_mutex);
         qemu_cond_init(&exclusive_cond);
         qemu_cond_init(&exclusive_resume);
+        qemu_cond_init(&qemu_work_cond);
         qemu_mutex_init(&tcg_ctx.tb_ctx.tb_lock);
         gdbserver_fork(thread_cpu);
     } else {
         qemu_mutex_unlock(&exclusive_lock);
         qemu_mutex_unlock(&tcg_ctx.tb_ctx.tb_lock);
     }
+}
+
+QemuMutex *qemu_get_cpu_work_mutex(void)
+{
+    return &exclusive_lock;
 }
 
 /* Wait for pending exclusive operations to complete.  The exclusive lock
@@ -218,6 +225,7 @@ static inline void cpu_exec_end(CPUState *cpu)
         qemu_cond_signal(&exclusive_cond);
     }
     exclusive_idle();
+    process_queued_cpu_work(cpu);
     qemu_mutex_unlock(&exclusive_lock);
 }
 
