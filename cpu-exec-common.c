@@ -113,17 +113,17 @@ void wait_safe_cpu_work(void)
 static void queue_work_on_cpu(CPUState *cpu, struct qemu_work_item *wi)
 {
     qemu_mutex_lock(&cpu->work_mutex);
-    if (cpu->queued_work_first == NULL) {
-        cpu->queued_work_first = wi;
-    } else {
-        cpu->queued_work_last->next = wi;
+
+    if (!cpu->queued_work) {
+        cpu->queued_work = g_array_sized_new(true, true,
+                             sizeof(struct qemu_work_item), 16);
     }
-    cpu->queued_work_last = wi;
-    wi->next = NULL;
-    wi->done = false;
+
+    g_array_append_val(cpu->queued_work, *wi);
     if (wi->safe) {
         atomic_inc(&safe_work_pending);
     }
+
     qemu_mutex_unlock(&cpu->work_mutex);
 
     if (!wi->safe) {
@@ -138,6 +138,7 @@ static void queue_work_on_cpu(CPUState *cpu, struct qemu_work_item *wi)
 void run_on_cpu(CPUState *cpu, run_on_cpu_func func, void *data)
 {
     struct qemu_work_item wi;
+    bool done = false;
 
     if (qemu_cpu_is_self(cpu)) {
         func(cpu, data);
@@ -146,11 +147,11 @@ void run_on_cpu(CPUState *cpu, run_on_cpu_func func, void *data)
 
     wi.func = func;
     wi.data = data;
-    wi.free = false;
     wi.safe = false;
+    wi.done = &done;
 
     queue_work_on_cpu(cpu, &wi);
-    while (!atomic_mb_read(&wi.done)) {
+    while (!atomic_mb_read(&done)) {
         CPUState *self_cpu = current_cpu;
 
         qemu_cond_wait(&qemu_work_cond, qemu_get_cpu_work_mutex());
@@ -160,70 +161,74 @@ void run_on_cpu(CPUState *cpu, run_on_cpu_func func, void *data)
 
 void async_run_on_cpu(CPUState *cpu, run_on_cpu_func func, void *data)
 {
-    struct qemu_work_item *wi;
+    struct qemu_work_item wi;
 
     if (qemu_cpu_is_self(cpu)) {
         func(cpu, data);
         return;
     }
 
-    wi = g_malloc0(sizeof(struct qemu_work_item));
-    wi->func = func;
-    wi->data = data;
-    wi->free = true;
-    wi->safe = false;
+    wi.func = func;
+    wi.data = data;
+    wi.safe = false;
+    wi.done = NULL;
 
-    queue_work_on_cpu(cpu, wi);
+    queue_work_on_cpu(cpu, &wi);
 }
 
 void async_safe_run_on_cpu(CPUState *cpu, run_on_cpu_func func, void *data)
 {
-    struct qemu_work_item *wi;
+    struct qemu_work_item wi;
 
-    wi = g_malloc0(sizeof(struct qemu_work_item));
-    wi->func = func;
-    wi->data = data;
-    wi->free = true;
-    wi->safe = true;
+    wi.func = func;
+    wi.data = data;
+    wi.safe = true;
+    wi.done = NULL;
 
-    queue_work_on_cpu(cpu, wi);
+    queue_work_on_cpu(cpu, &wi);
 }
 
 void process_queued_cpu_work(CPUState *cpu)
 {
     struct qemu_work_item *wi;
-
-    if (cpu->queued_work_first == NULL) {
-        return;
-    }
+    GArray *work_list = NULL;
+    int i;
 
     qemu_mutex_lock(&cpu->work_mutex);
-    while (cpu->queued_work_first != NULL) {
-        wi = cpu->queued_work_first;
-        cpu->queued_work_first = wi->next;
-        if (!cpu->queued_work_first) {
-            cpu->queued_work_last = NULL;
-        }
-        if (wi->safe) {
-            while (tcg_pending_threads) {
-                qemu_cond_wait(&qemu_exclusive_cond,
-                               qemu_get_cpu_work_mutex());
-            }
-        }
-        qemu_mutex_unlock(&cpu->work_mutex);
-        wi->func(cpu, wi->data);
-        qemu_mutex_lock(&cpu->work_mutex);
-        if (wi->safe) {
-            if (!atomic_dec_fetch(&safe_work_pending)) {
-                qemu_cond_broadcast(&qemu_safe_work_cond);
-            }
-        }
-        if (wi->free) {
-            g_free(wi);
-        } else {
-            atomic_mb_set(&wi->done, true);
-        }
-    }
+
+    work_list = cpu->queued_work;
+    cpu->queued_work = NULL;
+
     qemu_mutex_unlock(&cpu->work_mutex);
-    qemu_cond_broadcast(&qemu_work_cond);
+
+    if (work_list) {
+
+        g_assert(work_list->len > 0);
+
+        for (i = 0; i < work_list->len; i++) {
+            wi = &g_array_index(work_list, struct qemu_work_item, i);
+
+            if (wi->safe) {
+                while (tcg_pending_threads) {
+                    qemu_cond_wait(&qemu_exclusive_cond,
+                                   qemu_get_cpu_work_mutex());
+                }
+            }
+
+            wi->func(cpu, wi->data);
+
+            if (wi->safe) {
+                if (!atomic_dec_fetch(&safe_work_pending)) {
+                    qemu_cond_broadcast(&qemu_safe_work_cond);
+                }
+            }
+
+            if (wi->done) {
+                atomic_mb_set(wi->done, true);
+            }
+        }
+
+        qemu_cond_broadcast(&qemu_work_cond);
+        g_array_free(work_list, true);
+    }
 }

@@ -235,11 +235,9 @@ struct kvm_run;
 typedef void (*run_on_cpu_func)(CPUState *cpu, void *data);
 
 struct qemu_work_item {
-    struct qemu_work_item *next;
     run_on_cpu_func func;
     void *data;
-    int done;
-    bool free;
+    bool *done;
     bool safe;
 };
 
@@ -318,7 +316,7 @@ struct CPUState {
     sigjmp_buf jmp_env;
 
     QemuMutex work_mutex;
-    struct qemu_work_item *queued_work_first, *queued_work_last;
+    GArray *queued_work;
 
     CPUAddressSpace *cpu_ases;
     int num_ases;
