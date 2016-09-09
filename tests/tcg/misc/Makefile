@@ -1,28 +1,33 @@
-BUILD_DIR=../../../build/
-SRC_PATH=../../../
-include $(BUILD_DIR)/config-host.mak
+# -*- Mode: makefile -*-
+#
+# Generic linux-user TCG tests
+#
+# These tests all use standard non-architecture specific APIs so can
+# be built for all TCG targets. The Make is expected to be called in
+# the ${BUILD_DIR}/$(TARGET_NAME_ARCH)-linux-user/tests directory
+#
+# To build for other architectures call make with CROSS_CC set
+#
+
+BUILD_DIR=../..
+include $(BUILD_DIR)/config-host.mak	# brings in SRC_PATH
+include ../config-target.mak		# TARGET_NAME
 include $(SRC_PATH)/rules.mak
 
 $(call set-vpath, $(SRC_PATH)/tests/tcg/misc)
 
-QEMU=$(BUILD_DIR)/$(ARCH)-linux-user/qemu-$(ARCH)
+QEMU=$(BUILD_DIR)/$(TARGET_NAME)-linux-user/qemu-$(TARGET_NAME)
 
-QEMU_INCLUDES += -I$(BUILD_DIR)
-CFLAGS=-Wall -O2 -g -fno-strict-aliasing -I$(SRC_PATH)/include -I$(BUILD_DIR)
-#CFLAGS+=-msse2
+# Compiler set-up, default to system compiler if not set
+CROSS_CC?=$(CC)
+
+CFLAGS=-Wall -O2 -g -fno-strict-aliasing -static
 LDFLAGS=
-
-# TODO: automatically detect ARM and MIPS compilers, and run those too
-
-# runcom maps page 0, so it requires root privileges
-# also, pi_10.com runs indefinitely
 
 TESTS=linux-test \
       testthread \
       sha1 \
-      test-mmap \
-      test_path
-      # runcom
+      test-mmap
 
 all: $(patsubst %,run-%,$(TESTS))
 test: all
@@ -47,25 +52,27 @@ run-test_path: test_path
 
 # rules to compile tests
 
-test_path: test_path.o
-	$(CC) $^ -o $@ -lglib-2.0
 
-test_path.o: test_path.c
-	$(CC) $^ -c -o $@ $(QEMU_INCLUDES) `pkg-config --cflags --libs glib-2.0`
+# These two need to be re-written as relying on glib (rather than just glibc)
+# test_path: test_path.o
+# 	$(CROSS_CC) $^ -o $@ -lglib-2.0
+
+# test_path.o: test_path.c
+# 	$(CROSS_CC) $^ -c -o $@ $(QEMU_INCLUDES) `pkg-config --cflags --libs glib-2.0`
 
 testthread: testthread.c
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< -lpthread
+	$(CROSS_CC) $(CFLAGS) $(LDFLAGS) -o $@ $< -lpthread
 
 # generic Linux and CPU test
 linux-test: linux-test.c
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< -lm
+	$(CROSS_CC) $(CFLAGS) -I$(SRC_PATH)/include $(LDFLAGS) -o $@ $< -lm
 
 test-mmap: test-mmap.c
-	$(CC) $(CFLAGS) -Wall -O2 $(LDFLAGS) -o $@ $< -static
+	$(CROSS_CC) $(CFLAGS) -Wall -O2 $(LDFLAGS) -o $@ $< -static
 
 # speed test
 sha1: sha1.c
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $<
+	$(CROSS_CC) $(CFLAGS) $(LDFLAGS) -o $@ $<
 
 speed: sha1
 	time ./sha1
