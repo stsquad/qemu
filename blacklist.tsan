@@ -1,2 +1,5 @@
 # the vector intrinsics upset tsan
 src:bufferiszero.c
+# co-routines are special...
+src:util/coroutine-gthread.c
+src:util/qemu-coroutine.c
