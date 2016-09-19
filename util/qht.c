@@ -436,8 +436,8 @@ bool qht_reset_size(struct qht *ht, size_t n_elems)
 }
 
 static inline
-void *qht_do_lookup(struct qht_bucket *head, qht_lookup_func_t func,
-                    const void *userp, uint32_t hash)
+void *qht_do_lookup(struct qht_bucket *head, unsigned int version,
+                    qht_lookup_func_t func, const void *userp, uint32_t hash)
 {
     struct qht_bucket *b = head;
     int i;
@@ -450,9 +450,12 @@ void *qht_do_lookup(struct qht_bucket *head, qht_lookup_func_t func,
                  * atomic_rcu_read here.
                  */
                 void *p = atomic_rcu_read(&b->pointers[i]);
-
-                if (likely(p) && likely(func(p, userp))) {
-                    return p;
+                if (likely(!seqlock_read_retry(&b->sequence, version))) {
+                    if (likely(p) && likely(func(p, userp))) {
+                        return p;
+                    }
+                } else {
+                    return NULL;
                 }
             }
         }
@@ -471,7 +474,7 @@ void *qht_lookup__slowpath(struct qht_bucket *b, qht_lookup_func_t func,
 
     do {
         version = seqlock_read_begin(&b->sequence);
-        ret = qht_do_lookup(b, func, userp, hash);
+        ret = qht_do_lookup(b, version, func, userp, hash);
     } while (seqlock_read_retry(&b->sequence, version));
     return ret;
 }
@@ -488,7 +491,7 @@ void *qht_lookup(struct qht *ht, qht_lookup_func_t func, const void *userp,
     b = qht_map_to_bucket(map, hash);
 
     version = seqlock_read_begin(&b->sequence);
-    ret = qht_do_lookup(b, func, userp, hash);
+    ret = qht_do_lookup(b, version, func, userp, hash);
     if (likely(!seqlock_read_retry(&b->sequence, version))) {
         return ret;
     }
@@ -607,11 +610,11 @@ qht_entry_move(struct qht_bucket *to, int i, struct qht_bucket *from, int j)
     qht_debug_assert(to->pointers[i]);
     qht_debug_assert(from->pointers[j]);
 
-    atomic_set(&to->hashes[i], from->hashes[j]);
     atomic_set(&to->pointers[i], from->pointers[j]);
+    atomic_set(&to->hashes[i], from->hashes[j]);
 
-    atomic_set(&from->hashes[j], 0);
     atomic_set(&from->pointers[j], NULL);
+    atomic_set(&from->hashes[j], 0);
 }
 
 /*
@@ -625,8 +628,8 @@ static inline void qht_bucket_remove_entry(struct qht_bucket *orig, int pos)
     int i;
 
     if (qht_entry_is_last(orig, pos)) {
-        orig->hashes[pos] = 0;
         atomic_set(&orig->pointers[pos], NULL);
+        atomic_set(&orig->hashes[pos], 0);
         return;
     }
     do {
