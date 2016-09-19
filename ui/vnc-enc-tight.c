@@ -711,6 +711,7 @@ static bool check_solid_tile(VncState *vs, int x, int y, int w, int h,
     case 4:
         return check_solid_tile32(vs, x, y, w, h, color, samecolor);
     }
+    return false;
 }
 
 static void find_best_solid_area(VncState *vs, int x, int y, int w, int h,
