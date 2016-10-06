@@ -117,7 +117,7 @@ static void queue_work_on_cpu(CPUState *cpu, struct qemu_work_item *wi)
 {
     qemu_mutex_lock(&cpu->work_mutex);
     if (cpu->queued_work_first == NULL) {
-        cpu->queued_work_first = wi;
+        atomic_set(&cpu->queued_work_first, wi);
     } else {
         cpu->queued_work_last->next = wi;
     }
@@ -313,7 +313,7 @@ void process_queued_cpu_work(CPUState *cpu)
 {
     struct qemu_work_item *wi;
 
-    if (cpu->queued_work_first == NULL) {
+    if (atomic_read(&cpu->queued_work_first) == NULL) {
         return;
     }
 
