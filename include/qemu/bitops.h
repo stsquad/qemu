@@ -154,6 +154,10 @@ unsigned long find_next_bit(const unsigned long *addr,
                             unsigned long size,
                             unsigned long offset);
 
+unsigned long find_next_bit_atomically(const unsigned long *addr,
+                            unsigned long size,
+                            unsigned long offset);
+
 /**
  * find_next_zero_bit - find the next cleared bit in a memory region
  * @addr: The address to base the search on

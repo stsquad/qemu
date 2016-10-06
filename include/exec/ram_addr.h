@@ -137,7 +137,7 @@ static inline bool cpu_physical_memory_get_dirty(ram_addr_t start,
     while (page < end) {
         unsigned long next = MIN(end, base + DIRTY_MEMORY_BLOCK_SIZE);
         unsigned long num = next - base;
-        unsigned long found = find_next_bit(blocks->blocks[idx], num, offset);
+        unsigned long found = find_next_bit_atomically(blocks->blocks[idx], num, offset);
         if (found < num) {
             dirty = true;
             break;
