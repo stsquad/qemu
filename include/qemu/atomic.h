@@ -151,20 +151,27 @@
 
 /* All the remaining operations are fully sequentially consistent */
 
+#define atomic_xchg__nocheck(ptr, i)    ({                  \
+    __atomic_exchange_n(ptr, (i), __ATOMIC_SEQ_CST);        \
+})
+
 #define atomic_xchg(ptr, i)    ({                           \
     QEMU_BUILD_BUG_ON(sizeof(*ptr) > sizeof(void *));       \
-    __atomic_exchange_n(ptr, i, __ATOMIC_SEQ_CST);          \
+    atomic_xchg__nocheck(ptr, i);                           \
 })
 
 /* Returns the eventual value, failed or not */
-#define atomic_cmpxchg(ptr, old, new)                                   \
-    ({                                                                  \
-    QEMU_BUILD_BUG_ON(sizeof(*ptr) > sizeof(void *));                   \
+#define atomic_cmpxchg__nocheck(ptr, old, new)    ({                    \
     typeof_strip_qual(*ptr) _old = (old);                               \
     __atomic_compare_exchange_n(ptr, &_old, new, false,                 \
                               __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);      \
     _old;                                                               \
-    })
+})
+
+#define atomic_cmpxchg(ptr, old, new)    ({                             \
+    QEMU_BUILD_BUG_ON(sizeof(*ptr) > sizeof(void *));                   \
+    atomic_cmpxchg__nocheck(ptr, old, new);                             \
+})
 
 /* Provide shorter names for GCC atomic builtins, return old value */
 #define atomic_fetch_inc(ptr)  __atomic_fetch_add(ptr, 1, __ATOMIC_SEQ_CST)
@@ -341,25 +348,27 @@
 #define atomic_xchg(ptr, i)    (smp_mb(), __sync_lock_test_and_set(ptr, i))
 #endif
 #endif
+#define atomic_xchg__nocheck  atomic_xchg
 
 /* Provide shorter names for GCC atomic builtins.  */
 #define atomic_fetch_inc(ptr)  __sync_fetch_and_add(ptr, 1)
 #define atomic_fetch_dec(ptr)  __sync_fetch_and_add(ptr, -1)
-#define atomic_fetch_add       __sync_fetch_and_add
-#define atomic_fetch_sub       __sync_fetch_and_sub
-#define atomic_fetch_and       __sync_fetch_and_and
-#define atomic_fetch_or        __sync_fetch_and_or
-#define atomic_fetch_xor       __sync_fetch_and_xor
+#define atomic_fetch_add(ptr, n)  __sync_fetch_and_add(ptr, n)
+#define atomic_fetch_sub(ptr, n)  __sync_fetch_and_sub(ptr, n)
+#define atomic_fetch_and(ptr, n)  __sync_fetch_and_and(ptr, n)
+#define atomic_fetch_or(ptr, n)  __sync_fetch_and_or(ptr, n)
+#define atomic_fetch_xor(ptr, n)  __sync_fetch_and_xor(ptr, n)
 
 #define atomic_inc_fetch(ptr)  __sync_add_and_fetch(ptr, 1)
 #define atomic_dec_fetch(ptr)  __sync_add_and_fetch(ptr, -1)
-#define atomic_add_fetch       __sync_add_and_fetch
-#define atomic_sub_fetch       __sync_sub_and_fetch
-#define atomic_and_fetch       __sync_and_and_fetch
-#define atomic_or_fetch        __sync_or_and_fetch
-#define atomic_xor_fetch       __sync_xor_and_fetch
+#define atomic_add_fetch(ptr, n)  __sync_add_and_fetch(ptr, n)
+#define atomic_sub_fetch(ptr, n)  __sync_sub_and_fetch(ptr, n)
+#define atomic_and_fetch(ptr, n)  __sync_and_and_fetch(ptr, n)
+#define atomic_or_fetch(ptr, n)  __sync_or_and_fetch(ptr, n)
+#define atomic_xor_fetch(ptr, n)  __sync_xor_and_fetch(ptr, n)
 
-#define atomic_cmpxchg         __sync_val_compare_and_swap
+#define atomic_cmpxchg(ptr, old, new) __sync_val_compare_and_swap(ptr, old, new)
+#define atomic_cmpxchg__nocheck(ptr, old, new)  atomic_cmpxchg(ptr, old, new)
 
 /* And even shorter names that return void.  */
 #define atomic_inc(ptr)        ((void) __sync_fetch_and_add(ptr, 1))
