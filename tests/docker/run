@@ -68,15 +68,20 @@ echo "* Hit Ctrl-D to continue, or type 'exit 1' to abort"
 echo
 $SHELL
 
-if "$CMD"; then
-    exit 0
-elif test -n "$DEBUG"; then
-    echo "* Command failed:"
+"$CMD"
+RES=$?
+
+if test -n "$DEBUG"; then
+    if test "$RES" -ge 1; then
+        echo "* Command failed ($RES):"
+    else
+        echo "* Command passed:"
+    fi
     echo "  $CMD"
     echo "* Hit Ctrl-D to exit"
     echo
-    # Force error after shell exits
-    $SHELL && exit 1
+    # Exit with command status unless we crash out of the shell
+    $SHELL && exit $RES
 else
-    exit 1
+    exit $RES
 fi
