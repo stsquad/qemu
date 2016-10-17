@@ -7704,7 +7704,6 @@ static void gen_load_exclusive(DisasContext *s, int rt, int rt2,
         tcg_temp_free_i64(t64);
 
         store_reg(s, rt2, tmp2);
-        tcg_temp_free_i32(tmp2);
     } else {
         gen_aa32_ld_i32(s, tmp, addr, get_mem_index(s), opc);
         tcg_gen_extu_i32_i64(cpu_exclusive_val, tmp);
