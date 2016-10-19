@@ -99,15 +99,15 @@ static void *worker_thread(void *opaque)
 
         req = QTAILQ_FIRST(&pool->request_list);
         QTAILQ_REMOVE(&pool->request_list, req, reqs);
-        req->state = THREAD_ACTIVE;
+        atomic_set(&req->state, THREAD_ACTIVE);
         qemu_mutex_unlock(&pool->lock);
 
         ret = req->func(req->arg);
 
-        req->ret = ret;
+        atomic_set(&req->ret, ret);
         /* Write ret before state.  */
         smp_wmb();
-        req->state = THREAD_DONE;
+        atomic_set(&req->state, THREAD_DONE);
 
         qemu_mutex_lock(&pool->lock);
 
@@ -167,12 +167,12 @@ static void thread_pool_completion_bh(void *opaque)
 
 restart:
     QLIST_FOREACH_SAFE(elem, &pool->head, all, next) {
-        if (elem->state != THREAD_DONE) {
+        if (atomic_read(&elem->state) != THREAD_DONE) {
             continue;
         }
 
         trace_thread_pool_complete(pool, elem, elem->common.opaque,
-                                   elem->ret);
+                                   atomic_read(&elem->ret));
         QLIST_REMOVE(elem, all);
 
         if (elem->common.cb) {
