@@ -626,7 +626,7 @@ static inline void qht_bucket_remove_entry(struct qht_bucket *orig, int pos)
     int i;
 
     if (qht_entry_is_last(orig, pos)) {
-        orig->hashes[pos] = 0;
+        atomic_set(&orig->hashes[pos], 0);
         atomic_set(&orig->pointers[pos], NULL);
         return;
     }
