@@ -50,7 +50,7 @@ static void tcg_handle_interrupt(CPUState *cpu, int mask)
             cpu_abort(cpu, "Raised interrupt while not in I/O function");
         }
     } else {
-        cpu->tcg_exit_req = 1;
+        atomic_set(&cpu->tcg_exit_req, 1);
     }
 }
 
