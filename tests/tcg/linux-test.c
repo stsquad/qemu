@@ -17,6 +17,7 @@
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 #define _GNU_SOURCE
+#include <stdbool.h>
 #include <stdarg.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -31,6 +32,7 @@
 #include <utime.h>
 #include <time.h>
 #include <sys/time.h>
+#include <sys/resource.h>
 #include <sys/uio.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -39,6 +41,7 @@
 #include <dirent.h>
 #include <setjmp.h>
 #include <sys/shm.h>
+#include "qemu/compiler.h"
 #include "qemu/cutils.h"
 
 #define TESTPATH "/tmp/linux-test.tmp"

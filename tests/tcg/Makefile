@@ -106,7 +106,7 @@ test-x86_64: test-i386.c \
 
 # generic Linux and CPU test
 linux-test: linux-test.c
-	$(CC_I386) $(CFLAGS) $(LDFLAGS) -o $@ $< -lm
+	$(CC_I386) $(QEMU_INCLUDES) $(CFLAGS) $(LDFLAGS) -o $@ $< -lm
 
 # vm86 test
 runcom: runcom.c
