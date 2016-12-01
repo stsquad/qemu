@@ -41,6 +41,8 @@
 #include <dirent.h>
 #include <setjmp.h>
 #include <sys/shm.h>
+#include <stdbool.h>
+#include <sys/resource.h>
 #include "qemu/compiler.h"
 #include "qemu/cutils.h"
 
