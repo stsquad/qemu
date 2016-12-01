@@ -3220,8 +3220,9 @@ static void disas_bitfield(DisasContext *s, uint32_t insn)
     tcg_tmp = read_cpu_reg(s, rn, 1);
 
     /* Recognize simple(r) extractions.  */
-    if (ri <= si) {
-        int len = (si - ri) + 1;
+    if (si >= ri) {
+        /* Wd<s-r:0> = Wn<s:r> */
+        len = (si - ri) + 1;
         if (opc == 0) { /* SBFM: ASR, SBFX, SXTB, SXTH, SXTW */
             tcg_gen_sextract_i64(tcg_rd, tcg_tmp, ri, len);
             goto done;
@@ -3229,13 +3230,16 @@ static void disas_bitfield(DisasContext *s, uint32_t insn)
             tcg_gen_extract_i64(tcg_rd, tcg_tmp, ri, len);
             return;
         }
+        /* opc == 1, BXFIL fall through to deposit */
+        tcg_gen_extract_i64(tcg_tmp, tcg_tmp, ri, len);
+        pos = 0;
+    } else {
+        /* Handle the ri > si case with a deposit
+         * Wd<32+s-r,32-r> = Wn<s:0>
+         */
+        len = si + 1;
+        pos = (bitsize - ri) & (bitsize - 1);
     }
-
-    /* Do the bit move operation.  Note that above we handled ri <= si,
-       Wd<s-r:0> = Wn<s:r>, via tcg_gen_*extract_i64.  Now we handle
-       the ri > si case, Wd<32+s-r,32-r> = Wn<s:0>, via deposit.  */
-    pos = (bitsize - ri) & (bitsize - 1);
-    len = si + 1;
 
     if (opc == 0 && len < ri) {
         /* SBFM: sign extend the destination field from len to fill
@@ -3245,7 +3249,7 @@ static void disas_bitfield(DisasContext *s, uint32_t insn)
         len = ri;
     }
 
-    if (opc == 1) { /* BFM */
+    if (opc == 1) { /* BFM, BXFIL */
         tcg_gen_deposit_i64(tcg_rd, tcg_rd, tcg_tmp, pos, len);
     } else {
         /* SBFM or UBFM: We start with zero, and we haven't modified
