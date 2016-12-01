@@ -20,13 +20,13 @@ LDFLAGS=
 # also, pi_10.com runs indefinitely
 
 I386_TESTS=hello-i386 \
-	   test-i386 \
 	   test-i386-fprem
 	   # runcom
 
 # native i386 compilers sometimes are not biarch.  assume cross-compilers are
 ifneq ($(ARCH),i386)
-I386_TESTS+=run-test-x86_64
+I386_TESTS+=test-i386 \
+	    run-test-x86_64
 endif
 
 all: $(patsubst %,run-%,$(I386_TESTS))
@@ -44,7 +44,7 @@ run-hello-i386: hello-i386
 
 run-test-i386: test-i386
 	./test-i386 > test-i386.ref
-	-$(QEMU) test-i386 > test-i386.out
+	-$(QEMU_X86_64) test-i386 > test-i386.out
 	@if cmp -s test-i386.ref test-i386.out ; then echo "Auto Test OK"; fi
 
 run-test-i386-fprem: test-i386-fprem
@@ -69,7 +69,7 @@ hello-i386: hello-i386.c
 # i386/x86_64 emulation test (test various opcodes) */
 test-i386: test-i386.c test-i386-code16.S test-i386-vm86.S \
            test-i386.h test-i386-shift.h test-i386-muldiv.h
-	$(CC_I386) $(QEMU_INCLUDES) $(CFLAGS) $(LDFLAGS) -o $@ \
+	$(CC) $(QEMU_INCLUDES) $(CFLAGS) $(LDFLAGS) -o $@ \
               $(<D)/test-i386.c $(<D)/test-i386-code16.S $(<D)/test-i386-vm86.S -lm
 
 test-i386-fprem: test-i386-fprem.c
