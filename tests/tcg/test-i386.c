@@ -2107,15 +2107,14 @@ static void test_enter(void)
 
 #ifdef TEST_SSE
 
-typedef int __m64 __attribute__ ((__mode__ (__V2SI__)));
-typedef float __m128 __attribute__ ((__mode__(__V4SF__)));
+typedef float v4sf __attribute__ ((vector_size(4 * sizeof(float))));
 
 typedef union {
     double d[2];
     float s[4];
     uint32_t l[4];
     uint64_t q[2];
-    __m128 dq;
+    v4sf dq;
 } XMMReg;
 
 static uint64_t __attribute__((aligned(16))) test_values[4][2] = {
