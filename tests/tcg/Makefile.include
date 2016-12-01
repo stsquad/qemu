@@ -1,0 +1,33 @@
+#
+# linux-user TCG tests
+#
+# The Make is expected to be invoked in the ${BUILD_DIR} directory
+# using the tests-tcg target
+#
+BUILD_DIR?=$(CURDIR)
+include $(BUILD_DIR)/config-host.mak	# brings in SRC_PATH
+
+UNAME_M := $(shell uname -m)
+
+tests-tcg: prepare $(UNAME_M)
+
+prepare:
+	mkdir -p $(BUILD_DIR)/$(UNAME_M)-linux-user/tests/
+
+x86_64:
+	cd $(BUILD_DIR)/x86_64-linux-user/tests/ && \
+	make -f $(SRC_PATH)/tests/tcg/i386/Makefile
+
+i386:
+	cd $(BUILD_DIR)/i386-linux-user/tests/ && \
+	make -f $(SRC_PATH)/tests/tcg/i386/Makefile
+
+arm:
+	cd $(BUILD_DIR)/arm-linux-user/tests/ && \
+	make -f $(SRC_PATH)/tests/tcg/arm/Makefile
+
+aarch64:
+	cd $(BUILD_DIR)/aarch64-linux-user/tests/ && \
+	make -f $(SRC_PATH)/tests/tcg/arm/Makefile
+
+.PHONY: tests-tcg

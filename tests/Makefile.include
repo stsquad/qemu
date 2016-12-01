@@ -836,3 +836,4 @@ all: $(QEMU_IOTESTS_HELPERS-y)
 
 -include $(wildcard tests/*.d)
 -include $(wildcard tests/libqos/*.d)
+-include $(SRC_PATH)/tests/tcg/Makefile.include
