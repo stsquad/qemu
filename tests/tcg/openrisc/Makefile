@@ -1,8 +1,21 @@
--include ../../config-host.mak
+# -*- Mode: makefile -*-
+#
+# openrisc linux-user TCG tests
+#
+# The Make is expected to be called in the
+# ${BUILD_DIR}/or32-linux-user/tests directory
+#
+
+BUILD_DIR=../..
+include $(BUILD_DIR)/config-host.mak	# brings in SRC_PATH
+include ../config-target.mak		# TARGET_NAME
+include $(SRC_PATH)/rules.mak
+
+$(call set-vpath, $(SRC_PATH)/tests/tcg/openrisc)
+
+SIM=$(BUILD_DIR)/or32-linux-user/qemu-mips
 
 CROSS = or32-linux-
-
-SIM = qemu-or32
 
 CC = $(CROSS)gcc
 

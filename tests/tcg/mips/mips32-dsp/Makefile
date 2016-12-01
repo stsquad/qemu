@@ -1,8 +1,21 @@
--include ../../config-host.mak
+# -*- Mode: makefile -*-
+#
+# mipsel linux-user TCG tests
+#
+# The Make is expected to be called in the
+# ${BUILD_DIR}/mipsel-linux-user/tests directory
+#
+
+BUILD_DIR=../..
+include $(BUILD_DIR)/config-host.mak	# brings in SRC_PATH
+include ../config-target.mak		# TARGET_NAME
+include $(SRC_PATH)/rules.mak
+
+$(call set-vpath, $(SRC_PATH)/tests/tcg/mips/mips32-dsp)
 
 CROSS=mips64el-unknown-linux-gnu-
 
-SIM=qemu-mipsel
+SIM=$(BUILD_DIR)/mipsel-linux-user/qemu-mipsel
 SIM_FLAGS=-cpu 74Kf
 
 CC      = $(CROSS)gcc

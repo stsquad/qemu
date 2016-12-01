@@ -1,7 +1,20 @@
--include ../../../config-host.mak
+# -*- Mode: makefile -*-
+#
+# Cris linux-user TCG tests
+#
+# The Make is expected to be called in the
+# ${BUILD_DIR}/cris-linux-user/tests directory
+#
+
+BUILD_DIR=../..
+include $(BUILD_DIR)/config-host.mak	# brings in SRC_PATH
+include ../config-target.mak		# TARGET_NAME
+include $(SRC_PATH)/rules.mak
+
+$(call set-vpath, $(SRC_PATH)/tests/tcg/arm)
 
 CROSS=crisv32-axis-linux-gnu-
-SIM=../../../cris-linux-user/qemu-cris -L ./
+SIM=$(BUILD_DIR)/cris-linux-user/qemu-cris -L ./
 SIMG=cris-axis-linux-gnu-run --sysroot=./
 
 CC      = $(CROSS)gcc

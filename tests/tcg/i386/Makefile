@@ -1,6 +1,14 @@
-BUILD_DIR=../../../build/
-SRC_PATH=../../../
-include $(BUILD_DIR)/config-host.mak
+# -*- Mode: makefile -*-
+#
+# i386 linux-user TCG tests
+#
+# The Make is expected to be called in the
+# ${BUILD_DIR}/i386-linux-user/tests directory
+#
+
+BUILD_DIR=../..
+include $(BUILD_DIR)/config-host.mak	# brings in SRC_PATH
+include ../config-target.mak		# TARGET_NAME
 include $(SRC_PATH)/rules.mak
 
 $(call set-vpath, $(SRC_PATH)/tests/tcg/i386)
@@ -14,14 +22,8 @@ CFLAGS=-Wall -O2 -g -fno-strict-aliasing
 #CFLAGS+=-msse2
 LDFLAGS=
 
-# TODO: automatically detect ARM and MIPS compilers, and run those too
-
-# runcom maps page 0, so it requires root privileges
-# also, pi_10.com runs indefinitely
-
 I386_TESTS=hello-i386 \
 	   test-i386-fprem
-	   # runcom
 
 # native i386 compilers sometimes are not biarch.  assume cross-compilers are
 ifneq ($(ARCH),i386)
@@ -56,9 +58,6 @@ run-test-x86_64: test-x86_64
 	./test-x86_64 > test-x86_64.ref
 	-$(QEMU_X86_64) test-x86_64 > test-x86_64.out
 	@if diff -u test-x86_64.ref test-x86_64.out ; then echo "Auto Test OK"; fi
-
-run-runcom: runcom
-	-$(QEMU) ./runcom $(SRC_PATH)/tests/pi_10.com
 
 # rules to compile tests
 

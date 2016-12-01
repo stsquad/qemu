@@ -1,8 +1,21 @@
--include ../../../config-host.mak
+# -*- Mode: makefile -*-
+#
+# lm32 linux-system TCG tests
+#
+# The Make is expected to be called in the
+# ${BUILD_DIR}/lm32-softmmu/tests directory
+#
+
+BUILD_DIR=../..
+include $(BUILD_DIR)/config-host.mak	# brings in SRC_PATH
+include ../config-target.mak		# TARGET_NAME
+include $(SRC_PATH)/rules.mak
+
+$(call set-vpath, $(SRC_PATH)/tests/tcg/lm32)
 
 CROSS=lm32-elf-
 
-SIM = qemu-system-lm32
+QEMU=$(BUILD_DIR)/lm32-softmmu/qemu-system-lm32
 SIMFLAGS = -M lm32-evr -nographic -semihosting -net none -kernel
 
 CC      = $(CROSS)gcc

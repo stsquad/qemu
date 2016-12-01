@@ -1,10 +1,23 @@
--include ../../../config-host.mak
+# -*- Mode: makefile -*-
+#
+# xtensa linux TCG tests
+#
+# The Make is expected to be called in the
+# ${BUILD_DIR}/xtensa-softmmu/tests directory
+#
+
+BUILD_DIR=../..
+include $(BUILD_DIR)/config-host.mak	# brings in SRC_PATH
+include ../config-target.mak		# TARGET_NAME
+include $(SRC_PATH)/rules.mak
+
+$(call set-vpath, $(SRC_PATH)/tests/tcg/xtensa)
 
 CORE=dc232b
 CROSS=xtensa-$(CORE)-elf-
 
 ifndef XT
-SIM = ../../../xtensa-softmmu/qemu-system-xtensa
+SIM = $(BUILD_DIR)/xtensa-softmmu/qemu-system-xtensa
 SIMFLAGS = -M sim -cpu $(CORE) -nographic -semihosting $(EXTFLAGS) -kernel
 SIMDEBUG = -s -S
 else
