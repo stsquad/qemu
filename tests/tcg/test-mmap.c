@@ -429,7 +429,7 @@ void check_file_fixed_mmaps(void)
 	fprintf (stderr, " passed\n");
 }
 
-void checked_write(int fd, const void *buf, size_t count)
+static void checked_write(int fd, const void *buf, size_t count)
 {
     ssize_t rc = write(fd, buf, count);
     fail_unless(rc == count);
