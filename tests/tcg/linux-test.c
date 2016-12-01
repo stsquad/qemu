@@ -350,6 +350,7 @@ void test_socket(void)
 
 #define WCOUNT_MAX 512
 
+#if 0
 void test_pipe(void)
 {
     fd_set rfds, wfds;
@@ -421,11 +422,13 @@ void test_clone(void)
 
     stack1 = malloc(STACK_SIZE);
     pid1 = chk_error(clone(thread1_func, stack1 + STACK_SIZE,
-                           CLONE_VM | CLONE_FS | CLONE_FILES | SIGCHLD, "hello1"));
+                           CLONE_VM | CLONE_FS | CLONE_FILES |
+                           SIGCHLD, (void *)"hello1"));
 
     stack2 = malloc(STACK_SIZE);
     pid2 = chk_error(clone(thread2_func, stack2 + STACK_SIZE,
-                           CLONE_VM | CLONE_FS | CLONE_FILES | SIGCHLD, "hello2"));
+                           CLONE_VM | CLONE_FS | CLONE_FILES | SIGCHLD,
+                           (void *)"hello2"));
 
     while (waitpid(pid1, &status1, 0) != pid1);
     free(stack1);
@@ -435,6 +438,7 @@ void test_clone(void)
         thread2_res != 6)
         error("clone");
 }
+#endif
 
 /***********************************/
 

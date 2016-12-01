@@ -54,6 +54,7 @@ union float80u {
 
 #define IEEE854_LONG_DOUBLE_BIAS 0x3fff
 
+#if 0
 static const union float80u q_nan = {
     .ieee_nan.negative = 0,  /* X */
     .ieee_nan.exponent = 0x7fff,
@@ -61,6 +62,7 @@ static const union float80u q_nan = {
     .ieee_nan.quiet_nan = 1,
     .ieee_nan.mantissa = 0,
 };
+#endif
 
 static const union float80u s_nan = {
     .ieee_nan.negative = 0,  /* X */
@@ -91,12 +93,14 @@ static const union float80u pos_denorm = {
     .ieee.mantissa = 1,
 };
 
+#if 0
 static const union float80u smallest_positive_norm = {
     .ieee.negative = 0,
     .ieee.exponent = 1,
     .ieee.one = 1,
     .ieee.mantissa = 0,
 };
+#endif
 
 static void fninit()
 {
