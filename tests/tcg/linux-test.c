@@ -482,9 +482,12 @@ static void test_signal(void)
     it.it_value.tv_usec = 10 * 1000;
     chk_error(setitimer(ITIMER_REAL, &it, NULL));
     chk_error(getitimer(ITIMER_REAL, &oit));
-    if (oit.it_value.tv_sec != it.it_value.tv_sec ||
-        oit.it_value.tv_usec != it.it_value.tv_usec)
+    if (oit.it_value.tv_sec != it.it_interval.tv_sec ||
+        oit.it_value.tv_usec > it.it_interval.tv_usec ||
+        oit.it_interval.tv_sec != it.it_interval.tv_sec ||
+        oit.it_interval.tv_usec != it.it_interval.tv_usec) {
         error("itimer");
+    }
 
     while (alarm_count < 5) {
         usleep(10 * 1000);
@@ -497,8 +500,11 @@ static void test_signal(void)
     memset(&oit, 0xff, sizeof(oit));
     chk_error(setitimer(ITIMER_REAL, &it, &oit));
     if (oit.it_value.tv_sec != 0 ||
-        oit.it_value.tv_usec != 10 * 1000)
+        oit.it_value.tv_usec > 10 * 1000 ||
+        oit.it_interval.tv_sec != 0 ||
+        oit.it_interval.tv_usec != 10 * 1000) {
         error("setitimer");
+    }
 
     /* SIGSEGV test */
     act.sa_sigaction = sig_segv;
