@@ -29,7 +29,7 @@ TESTS=linux-test \
       sha1 \
       test-mmap
 
-all: $(patsubst %,run-%,$(TESTS))
+all: $(TESTS)
 test: all
 
 # rules to run tests
@@ -64,7 +64,7 @@ testthread: testthread.c
 
 # generic Linux and CPU test
 linux-test: linux-test.c
-	$(CROSS_CC) $(CFLAGS) $(LDFLAGS) -o $@ $< -lm
+	$(CROSS_CC) ${QEMU_INCLUDES} $(CFLAGS) $(LDFLAGS) -o $@ $< -lm
 
 test-mmap: test-mmap.c
 	$(CROSS_CC) $(CFLAGS) -Wall -O2 $(LDFLAGS) -o $@ $< -static
