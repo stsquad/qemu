@@ -8,6 +8,7 @@ BUILD_DIR?=$(CURDIR)
 include $(BUILD_DIR)/config-host.mak	# brings in SRC_PATH
 
 UNAME_M := $(shell uname -m)
+BUILD_UID = $(shell id -u)
 
 tests-tcg: prepare $(UNAME_M)
 
@@ -22,9 +23,22 @@ i386:
 	cd $(BUILD_DIR)/i386-linux-user/tests/ && \
 	make -f $(SRC_PATH)/tests/tcg/i386/Makefile
 
-arm:
-	cd $(BUILD_DIR)/arm-linux-user/tests/ && \
-	make -f $(SRC_PATH)/tests/tcg/arm/Makefile
+arm-tcg-tests: docker-image-debian-multiarch-cross
+	mkdir -p $(BUILD_DIR)/arm-linux-user/tests
+	docker run --rm -it -v $(SRC_PATH):$(SRC_PATH) \
+		-v $(BUILD_DIR):$(BUILD_DIR) \
+		--user $(BUILD_ID):$(BUILD_ID) \
+		-w $(BUILD_DIR)/arm-linux-user/tests \
+		-e CROSS_CC="arm-linux-gnueabihf-gcc" \
+		qemu:debian-multiarch-cross \
+		make -f ../../tests/tcg/misc/Makefile
+	docker run --rm -it -v $(SRC_PATH):$(SRC_PATH) \
+		-v $(BUILD_DIR):$(BUILD_DIR) \
+		--user $(BUILD_ID):$(BUILD_ID) \
+		-w $(BUILD_DIR)/arm-linux-user/tests \
+		-e CROSS_CC="arm-linux-gnueabihf-gcc" \
+		qemu:debian-multiarch-cross \
+		make -f ../../tests/tcg/arm/Makefile
 
 aarch64:
 	cd $(BUILD_DIR)/aarch64-linux-user/tests/ && \
