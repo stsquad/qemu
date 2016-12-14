@@ -1,0 +1,45 @@
+#
+# Docker multiarch cross-compiler target
+#
+# This docker target is builds on Debian and Emdebian's cross compiler targets
+# to build distro with a selection of cross compilers for building test binaries.
+#
+# This does not include the build dependancies for QEMU as there are
+# so many there are unresolvable clashes.
+#
+FROM debian:stable-slim
+
+# Setup some basic tools we need
+RUN apt update
+RUN apt install -yy curl aptitude
+
+# Setup Emdebian
+RUN echo "deb http://emdebian.org/tools/debian/ jessie main" >> /etc/apt/sources.list
+RUN curl http://emdebian.org/tools/debian/emdebian-toolchain-archive.key | apt-key add -
+
+# Duplicate deb line as deb-src
+RUN cat /etc/apt/sources.list | sed "s/deb/deb-src/" >> /etc/apt/sources.list
+
+# Add the foriegn architectures we want
+RUN dpkg --add-architecture armhf
+RUN dpkg --add-architecture arm64
+RUN dpkg --add-architecture mipsel
+RUN dpkg --add-architecture ppc64el
+
+#FIXME: Currently these cause clashes due to multi-arch being an ongoig process
+#RUN dpkg --add-architecture mips
+#RUN dpkg --add-architecture powerpc
+
+# Final update
+RUN apt update
+
+# Install the crossbuild essential packages
+# FIXME: crossbuild-essential-powerpc has a clash with '/lib/ld.so.1'
+RUN apt install -yy clang crossbuild-essential-arm64 crossbuild-essential-armhf crossbuild-essential-mipsel crossbuild-essential-ppc64el
+
+# Before you can actually build something you need to install its build dependancies.
+# This is best done in a child container as architecture specific -dev packages have a habit of clashing with
+# each other because not everything is fully complient with the multiarch specififcation.
+#
+# To install the QEMU build dependacnies you need to run:
+# RUN apt-get build-dep -yy -a armhf qemu
