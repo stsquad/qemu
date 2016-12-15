@@ -2811,10 +2811,35 @@ static abi_long do_setsockopt(int sockfd, int level, int optname,
         break;
     case SOL_IPV6:
         switch (optname) {
-        case IPV6_MTU_DISCOVER:
-        case IPV6_MTU:
         case IPV6_V6ONLY:
         case IPV6_RECVPKTINFO:
+        case IPV6_2292PKTINFO:
+        case IPV6_RECVHOPLIMIT:
+        case IPV6_2292HOPLIMIT:
+        case IPV6_RECVRTHDR:
+        case IPV6_2292RTHDR:
+        case IPV6_RECVHOPOPTS:
+        case IPV6_2292HOPOPTS:
+        case IPV6_RECVDSTOPTS:
+        case IPV6_2292DSTOPTS:
+        case IPV6_TCLASS:
+        case IPV6_RECVTCLASS:
+        case IPV6_RECVPATHMTU:
+        case IPV6_TRANSPARENT:
+        case IPV6_RECVORIGDSTADDR:
+        case IPV6_UNICAST_HOPS:
+        case IPV6_MULTICAST_HOPS:
+        case IPV6_MULTICAST_LOOP:
+        case IPV6_UNICAST_IF:
+        case IPV6_MULTICAST_IF:
+        case IPV6_ROUTER_ALERT:
+        case IPV6_MTU_DISCOVER:
+        case IPV6_MTU:
+        case IPV6_RECVERR:
+        case IPV6_ADDR_PREFERENCES:
+        case IPV6_MINHOPCOUNT:
+        case IPV6_DONTFRAG:
+        case IPV6_AUTOFLOWLABEL:
             val = 0;
             if (optlen < sizeof(uint32_t)) {
                 return -TARGET_EINVAL;
