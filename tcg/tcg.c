@@ -576,6 +576,8 @@ int tcg_global_mem_new_internal(TCGType type, TCGv_ptr base,
         ts->mem_offset = offset;
         ts->name = name;
     }
+    ts->sub_temps = NULL;
+    ts->overlap_temps = NULL;
     return temp_idx(s, ts);
 }
 
@@ -1478,6 +1480,35 @@ static int tcg_temp_overlap(TCGContext *s, const TCGTemp *tmp,
     }
 }
 
+static void tcg_temp_arr_apply(const TCGArg *arr, uint8_t *temp_state,
+                               uint8_t temp_val)
+{
+    TCGArg i;
+    if (!arr) {
+        return ;
+    }
+    for (i = 0; arr[i] != (TCGArg)-1; i++) {
+        temp_state[arr[i]] = temp_val;
+    }
+}
+
+static void tcg_sub_temps_dead(TCGContext *s, TCGArg tmp, uint8_t *temp_state)
+{
+    tcg_temp_arr_apply(s->temps[tmp].sub_temps, temp_state, TS_DEAD);
+}
+
+static void tcg_sub_temps_sync(TCGContext *s, TCGArg tmp, uint8_t *temp_state)
+{
+    tcg_temp_arr_apply(s->temps[tmp].sub_temps, temp_state, TS_MEM | TS_DEAD);
+}
+
+static void tcg_overlap_temps_sync(TCGContext *s, TCGArg tmp,
+                                   uint8_t *temp_state)
+{
+    tcg_temp_arr_apply(s->temps[tmp].overlap_temps, temp_state,
+                       TS_MEM | TS_DEAD);
+}
+
 /* Liveness analysis : update the opc_arg_life array to tell if a
    given input arguments is dead. Instructions updating dead
    temporaries are removed. */
@@ -1532,6 +1563,11 @@ static void liveness_pass_1(TCGContext *s, uint8_t *temp_state)
                         if (temp_state[arg] & TS_MEM) {
                             arg_life |= SYNC_ARG << i;
                         }
+                        /* sub_temps are also dead */
+                        tcg_sub_temps_dead(&tcg_ctx, arg, temp_state);
+                        /* overlap_temps need to go to memory */
+                        tcg_overlap_temps_sync(&tcg_ctx, arg, temp_state);
+
                         temp_state[arg] = TS_DEAD;
                     }
 
@@ -1559,6 +1595,11 @@ static void liveness_pass_1(TCGContext *s, uint8_t *temp_state)
                     for (i = nb_oargs; i < nb_iargs + nb_oargs; i++) {
                         arg = args[i];
                         if (arg != TCG_CALL_DUMMY_ARG) {
+                            /* both sub_temps and overlap_temps need to go
+                               to memory */
+                            tcg_sub_temps_sync(&tcg_ctx, arg, temp_state);
+                            tcg_overlap_temps_sync(&tcg_ctx, arg, temp_state);
+
                             temp_state[arg] &= ~TS_DEAD;
                         }
                     }
@@ -1677,6 +1718,11 @@ static void liveness_pass_1(TCGContext *s, uint8_t *temp_state)
                     if (temp_state[arg] & TS_MEM) {
                         arg_life |= SYNC_ARG << i;
                     }
+                    /* sub_temps are also dead */
+                    tcg_sub_temps_dead(&tcg_ctx, arg, temp_state);
+                    /* overlap_temps need to go to memory */
+                    tcg_overlap_temps_sync(&tcg_ctx, arg, temp_state);
+
                     temp_state[arg] = TS_DEAD;
                 }
 
@@ -1717,6 +1763,9 @@ static void liveness_pass_1(TCGContext *s, uint8_t *temp_state)
                 /* input arguments are live for preceding opcodes */
                 for (i = nb_oargs; i < nb_oargs + nb_iargs; i++) {
                     temp_state[args[i]] &= ~TS_DEAD;
+                    /* both sub_temps and overlap_temps need to go to memory */
+                    tcg_sub_temps_sync(&tcg_ctx, arg, temp_state);
+                    tcg_overlap_temps_sync(&tcg_ctx, arg, temp_state);
                 }
             }
             break;
