@@ -4525,8 +4525,6 @@ int main(int argc, char **argv, char **envp)
 
     audio_init();
 
-    cpu_synchronize_all_post_init();
-
     if (hax_enabled()) {
         hax_sync_vcpus();
     }
@@ -4553,6 +4551,8 @@ int main(int argc, char **argv, char **envp)
     }
 
     numa_post_machine_init();
+
+    cpu_synchronize_all_post_init();
 
     rom_reset_order_override();
 
