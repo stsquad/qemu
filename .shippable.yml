@@ -3,19 +3,10 @@ compiler:
   - gcc
 env:
   matrix:
-    - CROSS_PREFIX=none
-    - CROSS_ARCH=none
-matrix:
-  exclude:
-    - env: CROSS_PREFIX=none
-    - env: CROSS_ARCH=none
-  include:
-    - env:
-        - CROSS_ARCH=armhf
-        - CROSS_PREFIX=arm-linux-gnueabihf-
-    - env:
-        - CROSS_ARCH=ppc64el
-        - CROSS_PREFIX=powerpc64le-linux-gnu-
+    - CROSS_ARCH=armhf CROSS_PREFIX=arm-linux-gnueabihf-
+    - CROSS_ARCH=aarch64 CROSS_PREFIX=aarch64-linux-gnu-
+    - CROSS_ARCH=mipsel CROSS_PREFIX= mipsel-linux-gnu-
+    - CROSS_ARCH=ppc64el CROSS_PREFIX=powerpc64le-linux-gnu-
 build:
   pre_ci:
     - mkdir -p docker-build
@@ -29,7 +20,6 @@ build:
     options: "-e HOME=/root"
   ci:
     - env
-    - sudo apt-get update -qq
     - apt-get build-dep -a ${CROSS_ARCH} -qq qemu
     - ./configure --cross-prefix=${CROSS_PREFIX}
-    - make -j3
+    - make -j2
