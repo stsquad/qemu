@@ -1,17 +1,10 @@
 language: c
 build:
+  - pre_ci:
+    - docker build ./tests/docker/dockerfiles/debian-multiarch-cross.docker
   ci:
     - sudo apt-get update -qq
-    - sudo apt-get build-dep -qq qemu
-    - ./configure
+    - apt-get build-dep -a armhf -qq qemu
+    - ./configure --cross-prefix=arm-linux-gnueabihf-
     - make -j3
     - make test
-matrix:
-  include:
-    - pre_ci:
-        - docker build ./tests/docker/dockerfiles/debian-multiarch-cross.docker
-      ci:
-        - apt-get update -qq
-        - apt-get build-dep -a armhf -qq qemu
-        - ./configure --cross-prefix=arm-linux-gnueabihf-
-        - make -j3
