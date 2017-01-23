@@ -1,7 +1,11 @@
 language: c
 build:
-  - pre_ci:
-    - docker build ./tests/docker/dockerfiles/debian-multiarch-cross.docker
+  pre_ci:
+    - docker build -t qemu:debian-multiarch-cross ./tests/docker/dockerfiles/debian-multiarch-cross.docker
+  pre_ci_boot:
+    image_tag: qemu:debian-multiarch-cross
+    pull: false
+    options: "-e HOME=/root"
   ci:
     - sudo apt-get update -qq
     - apt-get build-dep -a armhf -qq qemu
