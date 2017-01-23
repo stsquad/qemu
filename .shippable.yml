@@ -1,0 +1,6 @@
+language: c
+build:
+  ci:
+    - ./configure
+    - make -j3
+    - make test
