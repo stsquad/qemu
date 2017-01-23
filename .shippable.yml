@@ -1,0 +1,24 @@
+language: c
+env:
+  matrix:
+    - CROSS_ARCH=armhf   CROSS_PREFIX=arm-linux-gnueabihf-
+    - CROSS_ARCH=arm64   CROSS_PREFIX=aarch64-linux-gnu-
+    - CROSS_ARCH=mipsel  CROSS_PREFIX=mipsel-linux-gnu-
+    - CROSS_ARCH=ppc64el CROSS_PREFIX=powerpc64le-linux-gnu-
+build:
+  pre_ci:
+    - mkdir -p docker-build
+    - cp ./tests/docker/dockerfiles/debian-multiarch-cross.docker docker-build/Dockerfile
+    - docker build -t debian-multiarch-cross:base docker-build
+    - echo -e "FROM debian-multiarch-cross:base\nRUN apt-get build-dep -a ${CROSS_ARCH} -qq qemu" | docker build -t debian-multiarch-cross:${CROSS_ARCH} -
+  pre_ci_boot:
+    image_name: debian-multiarch-cross
+    image_tag: ${CROSS_ARCH}
+    pull: false
+    options: "-e HOME=/root"
+  ci:
+    - env
+    - apt-get build-dep -a ${CROSS_ARCH} -qq qemu
+    - unset CC
+    - ./configure --cross-prefix=${CROSS_PREFIX}
+    - make -j2
