@@ -1,7 +1,9 @@
 language: c
 build:
   pre_ci:
-    - docker build -t qemu:debian-multiarch-cross ./tests/docker/dockerfiles/debian-multiarch-cross.docker
+    - mkdir mybuild
+    - cp ./tests/docker/dockerfiles/debian-multiarch-cross.docker mybuild/Dockerfile
+    - docker build -t qemu:debian-multiarch-cross mybuild
   pre_ci_boot:
     image_tag: qemu:debian-multiarch-cross
     pull: false
