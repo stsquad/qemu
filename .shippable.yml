@@ -3,9 +3,9 @@ compiler:
   - gcc
 env:
   matrix:
-    - CROSS_ARCH=armhf CROSS_PREFIX=arm-linux-gnueabihf-
-    - CROSS_ARCH=aarch64 CROSS_PREFIX=aarch64-linux-gnu-
-    - CROSS_ARCH=mipsel CROSS_PREFIX= mipsel-linux-gnu-
+    - CROSS_ARCH=armhf   CROSS_PREFIX=arm-linux-gnueabihf-
+    - CROSS_ARCH=arm64   CROSS_PREFIX=aarch64-linux-gnu-
+    - CROSS_ARCH=mipsel  CROSS_PREFIX=mipsel-linux-gnu-
     - CROSS_ARCH=ppc64el CROSS_PREFIX=powerpc64le-linux-gnu-
 build:
   pre_ci:
