@@ -1,7 +1,7 @@
 language: c
 build:
   pre_ci:
-    - mkdir mybuild
+    - mkdir -p mybuild
     - cp ./tests/docker/dockerfiles/debian-multiarch-cross.docker mybuild/Dockerfile
     - docker build -t debian-multiarch-cross:tip mybuild
   pre_ci_boot:
