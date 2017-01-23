@@ -27,13 +27,16 @@ RUN cat /etc/apt/sources.list | sed "s/deb/deb-src/" >> /etc/apt/sources.list
 # Add the foriegn architectures we want
 RUN dpkg --add-architecture armhf
 RUN dpkg --add-architecture arm64
+RUN dpkg --add-architecture mips
+RUN dpkg --add-architecture mipsel
+RUN dpkg --add-architecture powerpc
 RUN dpkg --add-architecture ppc64el
 
 # Final update
 RUN apt update
 
 # Install the crossbuild essential packages
-RUN apt install -yy crossbuild-essential-arm64 crossbuild-essential-armhf crossbuild-essential-ppc64el
+RUN apt install -yy clang crossbuild-essential-arm64 crossbuild-essential-armhf crossbuild-essential-mipsel crossbuild-essential-powerpc crossbuild-essential-ppc64el
 
 # To install greater dependencies you do a
 # RUN apt-get build-dep -yy -a armhf qemu
