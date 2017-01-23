@@ -21,7 +21,7 @@ build:
     - mkdir -p docker-build
     - cp ./tests/docker/dockerfiles/debian-multiarch-cross.docker docker-build/Dockerfile
     - docker build -t debian-multiarch-cross:base docker-build
-    - echo "RUN apt-get build-dep -a ${CROSS_ARCH} -qq qemu" | docker build -t debian-multiarch-cross:${CROSS_ARCH}
+    - echo "RUN apt-get build-dep -a ${CROSS_ARCH} -qq qemu" | docker build -t debian-multiarch-cross:${CROSS_ARCH} -
   pre_ci_boot:
     image_name: debian-multiarch-cross
     image_tag: ${CROSS_ARCH}
