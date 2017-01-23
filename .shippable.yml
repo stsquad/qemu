@@ -3,9 +3,10 @@ build:
   pre_ci:
     - mkdir mybuild
     - cp ./tests/docker/dockerfiles/debian-multiarch-cross.docker mybuild/Dockerfile
-    - docker build -t qemu:debian-multiarch-cross mybuild
+    - docker build -t debian-multiarch-cross:tip mybuild
   pre_ci_boot:
-    image_tag: qemu:debian-multiarch-cross
+    image_name: debian-multiarch-cross
+    image_tag: tip
     pull: false
     options: "-e HOME=/root"
   ci:
