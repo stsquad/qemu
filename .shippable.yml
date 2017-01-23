@@ -1,6 +1,8 @@
 language: c
 build:
   ci:
+    - sudo apt-get update -qq
+    - sudo apt-get build-dep -qq qemu
     - ./configure
     - make -j3
     - make test
