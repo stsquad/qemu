@@ -92,6 +92,7 @@ matrix:
     - env: CONFIG=""
       os: osx
       compiler: clang
+      script: make -j3 || cat qemu-options.texi && false
     # Plain Trusty System Build
     - env: CONFIG="--disable-linux-user"
       sudo: required
