@@ -1,6 +1,4 @@
 language: c
-compiler:
-  - gcc
 env:
   matrix:
     - CROSS_ARCH=armhf   CROSS_PREFIX=arm-linux-gnueabihf-
