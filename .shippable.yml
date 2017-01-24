@@ -15,7 +15,7 @@ build:
     image_name: debian-multiarch-cross
     image_tag: ${CROSS_ARCH}
     pull: false
-    options: "-e HOME=/root -e CC= "
+    options: "-e HOME=/root -e CC=\"\" "
   ci:
     - env
     - apt-get build-dep -a ${CROSS_ARCH} -qq qemu
