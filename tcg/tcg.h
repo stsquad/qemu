@@ -396,6 +396,7 @@ typedef enum TCGMemOp {
     MO_TEQ   = MO_TE | MO_Q,
 
     MO_SSIZE = MO_SIZE | MO_SIGN,
+    MO_ALL   = MO_SIZE | MO_SIGN | MO_BSWAP | MO_AMASK,
 } TCGMemOp;
 
 /**
