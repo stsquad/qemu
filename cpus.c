@@ -1897,6 +1897,9 @@ CpuInfoList *qmp_query_cpus(Error **errp)
 #elif defined(TARGET_TRICORE)
         TriCoreCPU *tricore_cpu = TRICORE_CPU(cpu);
         CPUTriCoreState *env = &tricore_cpu->env;
+#elif defined(TARGET_AARCH64) || defined (TARGET_ARM)
+        ARMCPU *arm_cpu = ARM_CPU(cpu);
+        CPUARMState *env = &arm_cpu->env;
 #endif
 
         cpu_synchronize_state(cpu);
@@ -1924,6 +1927,9 @@ CpuInfoList *qmp_query_cpus(Error **errp)
 #elif defined(TARGET_TRICORE)
         info->value->arch = CPU_INFO_ARCH_TRICORE;
         info->value->u.tricore.PC = env->PC;
+#elif defined(TARGET_AARCH64) || defined(TARGET_ARM)
+        info->value->arch = CPU_INFO_ARCH_ARM;
+        info->value->u.arm.pc = env->pc;
 #else
         info->value->arch = CPU_INFO_ARCH_OTHER;
 #endif
