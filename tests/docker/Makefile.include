@@ -70,6 +70,7 @@ DOCKER_IMAGES += debian-armhf-user
 
 docker-image-debian-ppc-user: DEB_ARCH = powerpc
 docker-image-debian-ppc-user: DEB_TYPE = stable
+docker-image-debian-ppc-user: STATIC_QEMU = y
 docker-image-debian-ppc-user: EXECUTABLE = ${BUILD_DIR}/ppc-linux-user/qemu-ppc
 DOCKER_IMAGES += debian-ppc-user
 
@@ -83,6 +84,9 @@ docker-image-debian-%-user: $(DOCKER_FILES_DIR)/debian-bootstrap.docker
 	@if test -z "$(DEB_TYPE)"; then 					\
 		echo WARNING: DEB_TYPE is not set, debootstrap may fail. 2>&1 ; \
         fi
+	@if test -n "$(STATIC_QEMU)" -a -z "$(CONFIG_QEMU_STATIC)"; then	\
+		echo WARNING: target needs a --static QEMU , debootstrap may fail. 2>&1 ; \
+	fi
 	$(call quiet-command,							\
 		$(SRC_PATH)/tests/docker/docker.py build qemu:debian-$*-user $< \
 		$(if $V,,--quiet) $(if $(NOCACHE),--no-cache) \
