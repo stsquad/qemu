@@ -16,7 +16,7 @@ RUN dpkg --add-architecture s390x
 RUN apt update
 RUN apt dist-upgrade -yy
 RUN apt-get build-dep -yy -a s390x qemu || apt-get -f install
-RUN apt install -yy gcc-multilib-s390x-linux-gnu binutils-multiarch
+RUN apt install -yy gcc-multilib-s390x-linux-gnu binutils-multiarch clang
 
 # Specify the cross prefix for this image (see tests/docker/common.rc)
 ENV QEMU_CONFIGURE_OPTS --cross-prefix=s390x-linux-gnu-
