@@ -249,9 +249,10 @@ class BuildCommand(SubCommand):
         tag = args.tag
 
         # Process env setting
-        for e in args.env:
-            (env, val) = e[0].split("=")
-            os.environ[env] = val
+        if args.env:
+            for e in args.env:
+                (env, val) = e[0].split("=")
+                os.environ[env] = val
 
         dkr = Docker()
         if dkr.image_matches_dockerfile(tag, dockerfile):
