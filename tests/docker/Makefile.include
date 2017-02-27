@@ -73,6 +73,41 @@ docker-image-debian-win32-cross: docker-image-debian8-mxe
 docker-image-debian-win64-cross: docker-image-debian8-mxe
 docker-image-travis: NOUSER=1
 
+# Rules for building linux-user powered images
+#
+# These are slower than using native cross compiler setups but can
+# work around issues with poorly working multi-arch systems and broken
+# packages. They are also useful for non-x86 hosts as the default
+# Debian images pulled from the hub are x86 only.
+#
+
+# Jessie is the last supported release for powerpc, but multi-arch is
+# broken so we need a qemu-linux-user for this target
+docker-image-debian-powerpc-user: DEB_ARCH = powerpc
+docker-image-debian-powerpc-user: DEB_TYPE = stable
+docker-image-debian-powerpc-user: EXECUTABLE = ${BUILD_DIR}/ppc-linux-user/qemu-ppc
+# FIXME: It would be nice to only offer this if static builds are enabled
+DOCKER_IMAGES += debian-powerpc-user
+
+docker-image-debian-%-user: $(DOCKER_FILES_DIR)/debian-bootstrap.docker
+	@if test -z "$(EXECUTABLE)"; then \
+		echo WARNING: EXECUTABLE is not set, debootstrap may fail. 2>&1 ; \
+	fi
+	@if test -z "$(DEB_ARCH)"; then 					\
+		echo WARNING: DEB_ARCH is not set, debootstrap may fail. 2>&1 ; \
+        fi
+	@if test -z "$(DEB_TYPE)"; then 					\
+		echo WARNING: DEB_TYPE is not set, debootstrap may fail. 2>&1 ; \
+        fi
+	$(call quiet-command,							\
+		$(SRC_PATH)/tests/docker/docker.py build qemu:debian-$*-user $< \
+		$(if $V,,--quiet) $(if $(NOCACHE),--no-cache) \
+		$(if $(NOUSER),,--add-current-user) \
+		-E DEB_ARCH=${DEB_ARCH} -E DEB_TYPE=${DEB_TYPE} \
+		--include-executable=${EXECUTABLE}, \
+		"BUILD","$*")
+
+
 # Expand all the pre-requistes for each docker image and test combination
 $(foreach i,$(DOCKER_IMAGES), \
 	$(foreach t,$(DOCKER_TESTS) $(DOCKER_TOOLS), \
