@@ -58,6 +58,40 @@ docker-image-%: $(DOCKER_FILES_DIR)/%.docker
 docker-image-debian-armhf-cross: docker-image-debian
 docker-image-debian-arm64-cross: docker-image-debian
 
+# Rules for building linux-user powered images
+docker-image-debian-s390x-user: DEB_ARCH = s390x
+docker-image-debian-s390x-user: DEB_TYPE = testing
+docker-image-debian-s390x-user: EXECUTABLE = ${BUILD_DIR}/s390x-linux-user/qemu-s390x
+
+docker-image-debian-armhf-user: DEB_ARCH = armhf
+docker-image-debian-armhf-user: DEB_TYPE = stable
+docker-image-debian-armhf-user: EXECUTABLE = ${BUILD_DIR}/arm-linux-user/qemu-arm
+DOCKER_IMAGES += debian-armhf-user
+
+docker-image-debian-ppc-user: DEB_ARCH = powerpc
+docker-image-debian-ppc-user: DEB_TYPE = stable
+docker-image-debian-ppc-user: EXECUTABLE = ${BUILD_DIR}/ppc-linux-user/qemu-ppc
+DOCKER_IMAGES += debian-ppc-user
+
+docker-image-debian-%-user: $(DOCKER_FILES_DIR)/debian-bootstrap.docker
+	@if test -z "$(EXECUTABLE)"; then \
+		echo WARNING: EXECUTABLE is not set, debootstrap may fail. 2>&1 ; \
+	fi
+	@if test -z "$(DEB_ARCH)"; then 					\
+		echo WARNING: DEB_ARCH is not set, debootstrap may fail. 2>&1 ; \
+        fi
+	@if test -z "$(DEB_TYPE)"; then 					\
+		echo WARNING: DEB_TYPE is not set, debootstrap may fail. 2>&1 ; \
+        fi
+	$(call quiet-command,							\
+		$(SRC_PATH)/tests/docker/docker.py build qemu:debian-$*-user $< \
+		$(if $V,,--quiet) $(if $(NOCACHE),--no-cache) \
+		$(if $(NOUSER),,--add-current-user) \
+		-E DEB_ARCH=${DEB_ARCH} -E DEB_TYPE=${DEB_TYPE} \
+		--include-executable=${EXECUTABLE}, \
+		"BUILD","$*")
+
+
 # Expand all the pre-requistes for each docker image and test combination
 $(foreach i,$(DOCKER_IMAGES), \
 	$(foreach t,$(DOCKER_TESTS) $(DOCKER_TOOLS), \
