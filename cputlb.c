@@ -540,8 +540,10 @@ void tlb_reset_dirty(CPUState *cpu, ram_addr_t start1, ram_addr_t length)
 
 static inline void tlb_set_dirty1(CPUTLBEntry *tlb_entry, target_ulong vaddr)
 {
-    if (tlb_entry->addr_write == (vaddr | TLB_NOTDIRTY)) {
-        tlb_entry->addr_write = vaddr;
+    uintptr_t orig_addr = atomic_mb_read(&tlb_entry->addr_write);
+
+    if (orig_addr == (vaddr | TLB_NOTDIRTY)) {
+        atomic_cmpxchg(&tlb_entry->addr_write, orig_addr, vaddr);
     }
 }
 
