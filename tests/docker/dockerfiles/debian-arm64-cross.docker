@@ -7,7 +7,7 @@ FROM qemu:debian
 
 # Add the foreign architecture we want and install dependencies
 RUN dpkg --add-architecture arm64
-RUN apt update
+RUN apt update && apt dist-upgrade -yy
 RUN apt install -yy crossbuild-essential-arm64
 RUN apt-get build-dep -yy -a arm64 qemu
 
