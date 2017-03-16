@@ -10,8 +10,7 @@
 FROM debian:stable-slim
 
 # Setup some basic tools we need
-RUN apt update
-RUN apt install -yy curl aptitude
+RUN apt update && apt install -yy curl aptitude build-essential clang
 
 # Setup Emdebian
 RUN echo "deb http://emdebian.org/tools/debian/ jessie main" >> /etc/apt/sources.list
@@ -20,6 +19,5 @@ RUN curl http://emdebian.org/tools/debian/emdebian-toolchain-archive.key | apt-k
 # Duplicate deb line as deb-src
 RUN cat /etc/apt/sources.list | sed "s/deb/deb-src/" >> /etc/apt/sources.list
 
-# Install common build utilities
-RUN apt update
-RUN apt install -yy build-essential clang
+# Run a final update with all the new sources enabled
+RUN apt update && apt dist-upgrade -yy
