@@ -1,0 +1,24 @@
+#
+# Docker recipe for building LTP on PowerPC
+#
+# This docker needs the powerpc build environment
+#
+FROM qemu:debian-powerpc-user
+
+# Need wget to fetch it
+RUN apt install -yy wget
+
+# Download an unpack the source
+ENV LTPVER=20170116
+RUN wget https://github.com/linux-test-project/ltp/releases/download/${LTPVER}/ltp-full-${LTPVER}.tar.bz2
+RUN tar -xvf ltp-full-${LTPVER}.tar.bz2
+
+# The J arg can be over-ridden with --build-arg=J=9 when building directly
+# or exporting J=n via the --env options of docker.py build
+ARG J=1
+
+# Configure and build
+WORKDIR /ltp-full-${LTPVER}
+RUN ./configure
+RUN make -j${J:-1}
+RUN make install

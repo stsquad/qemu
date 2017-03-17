@@ -3,9 +3,16 @@
 .PHONY: docker docker-test docker-clean docker-image docker-qemu-src
 
 DOCKER_SUFFIX := .docker
+
+# These are docker targets, used to run tests and cross builds
 DOCKER_FILES_DIR := $(SRC_PATH)/tests/docker/dockerfiles
 DOCKER_IMAGES := $(notdir $(basename $(wildcard $(DOCKER_FILES_DIR)/*.docker)))
 DOCKER_TARGETS := $(patsubst %,docker-image-%,$(DOCKER_IMAGES))
+
+# These are docker builds, used to build testcases for the host
+DOCKER_BUILDS_DIR := $(SRC_PATH)/tests/docker/dockerbuilds
+DOCKER_BUILDS := $(notdir $(basename $(wildcard $(DOCKER_BUILDS_DIR)/*.docker)))
+
 # Use a global constant ccache directory to speed up repetitive builds
 DOCKER_CCACHE_DIR := $$HOME/.cache/qemu-docker-ccache
 
@@ -144,6 +151,9 @@ docker:
 	@echo 'Available tools:'
 	@echo '    $(DOCKER_TOOLS)'
 	@echo
+	@echo 'Available builds:'
+	@echo '    $(DOCKER_BUILDS)'
+	@echo
 	@echo 'Special variables:'
 	@echo '    TARGET_LIST=a,b,c    Override target list in builds.'
 	@echo '    EXTRA_CONFIGURE_OPTS="..."'
@@ -202,6 +212,35 @@ docker-run-%: CMD = $(shell echo '$@' | sed -e 's/docker-run-\([^@]*\)@\(.*\)/\1
 docker-run-%: IMAGE = $(shell echo '$@' | sed -e 's/docker-run-\([^@]*\)@\(.*\)/\2/')
 docker-run-%:
 	@$(MAKE) docker-run TEST=$(CMD) IMAGE=qemu:$(IMAGE)
+
+
+#
+# Docker Builds
+#
+# These are designed to provide a repeatable build of a some testcase.
+# While they take advantage of the cross-build environment they aren't
+# really intended to be run multiple times. Once generated they
+# provide a repository of testcases.
+#
+# For example: make docker-build RECIPE=./tests/docker/dockerbuilds/ltp-powerpc.docker IMAGE=qemu-build:ltp-powerpc
+#
+docker-build:
+	@if test -z "$(RECIPE)"; then 			\
+		echo No RECIPE specified. 2>&1 ; 	\
+		exit 1;					\
+        fi
+	@if test -z "$(IMAGE)"; then 			\
+		echo No IMAGE specified. 2>&1 ; 	\
+		exit 1;					\
+        fi
+	$(call quiet-command,							\
+		$(SRC_PATH)/tests/docker/docker.py build	\
+		$(if $J,--env J=$(J))			 	\
+		$(if $V,,--quiet)				\
+		$(if $(NOCACHE),--no-cache) 			\
+		$(IMAGE) $(RECIPE),				\
+		"BUILD","$*")
+
 
 docker-clean:
 	$(call quiet-command, $(SRC_PATH)/tests/docker/docker.py clean)
