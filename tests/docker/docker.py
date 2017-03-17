@@ -28,7 +28,7 @@ from shutil import copy, rmtree
 from pwd import getpwuid
 
 
-FILTERED_ENV_NAMES = ['ftp_proxy', 'http_proxy', 'https_proxy']
+FILTERED_ENV_NAMES = ['ftp_proxy', 'http_proxy', 'https_proxy', 'J']
 
 
 DEVNULL = open(os.devnull, 'wb')
@@ -302,9 +302,11 @@ class BuildCommand(SubCommand):
                 _copy_with_mkdir(filename, docker_dir)
                 cksum += [_file_checksum(filename)]
 
-            argv += ["--build-arg=" + k.lower() + "=" + v
-                        for k, v in os.environ.iteritems()
-                        if k.lower() in FILTERED_ENV_NAMES]
+            argv += ["--build-arg=" + k + "=" + v
+                     for k, v in os.environ.iteritems()
+                     if k in FILTERED_ENV_NAMES]
+            print ("argv: %s", argv)
+
             dkr.build_image(tag, docker_dir, dockerfile,
                             quiet=args.quiet, user=args.user, argv=argv,
                             extra_files_cksum=cksum)
