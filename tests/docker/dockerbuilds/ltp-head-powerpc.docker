@@ -1,0 +1,23 @@
+#
+# Docker recipe for building LTP on PowerPC
+#
+# This docker needs the powerpc build environment
+#
+FROM qemu:debian-powerpc-user
+
+# Need git to build direct from source
+RUN apt install -yy git automake gdb libc6-dbg
+
+# Download an unpack the source
+RUN GIT_SSL_NO_VERIFY=true git clone https://github.com/linux-test-project/ltp.git ltp.git
+
+# The J arg can be over-ridden with --build-arg=J=9 when building directly
+# or exporting J=n via the --env options of docker.py build
+ARG J=1
+
+# Configure and build
+WORKDIR /ltp.git
+RUN make autotools
+RUN ./configure
+RUN make -j${J:-1}
+RUN make install
