@@ -69,7 +69,7 @@ static inline int handle_cpu_signal(uintptr_t pc, unsigned long address,
      * abort rather than try and restart the vCPU execution.
      */
     if (!cpu || !cpu->running) {
-        printf("qemu:%s received signal outside vCPU context @ pc=0x%08lx\n",
+        printf("qemu:%s received signal outside vCPU context @ pc=0x%" PRIxPTR "\n",
                __func__, pc);
         abort();
     }
