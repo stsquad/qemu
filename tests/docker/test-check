@@ -1,0 +1,27 @@
+#!/bin/bash -e
+#
+# Quick compiling test that everyone already does. But why not automate it?
+#
+# Copyright (c) 2017 Linaro Ltd.
+#
+# Authors:
+#   Alex Bennée <alex.bennee@linaro.org>
+#
+# This work is licensed under the terms of the GNU GPL, version 2
+# or (at your option) any later version. See the COPYING file in
+# the top-level directory.
+
+. common.rc
+
+cd "$BUILD_DIR"
+
+DEF_TARGET_LIST="s390x-softmmu"
+TARGET_LIST=${TARGET_LIST:-$DEF_TARGET_LIST} \
+build_qemu
+
+for i in `seq 1 10`
+do
+    echo "Run: $i"
+    make check-qtest-s390x V=1
+    echo "Result: $?"
+done
