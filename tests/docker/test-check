@@ -19,9 +19,9 @@ DEF_TARGET_LIST="s390x-softmmu"
 TARGET_LIST=${TARGET_LIST:-$DEF_TARGET_LIST} \
 build_qemu
 
-for i in `seq 1 10`
+for i in `seq 1 1000`
 do
     echo "Run: $i"
-    make check-qtest-s390x V=1
+    make check-qtest-s390x
     echo "Result: $?"
 done
