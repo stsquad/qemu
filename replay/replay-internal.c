@@ -26,6 +26,14 @@ static QemuMutex lock;
 /* File for replay writing */
 FILE *replay_file;
 
+/* A common event print, called when reading or saving an event */
+static void print_event(uint8_t event)
+{
+    static int event_count;
+    fprintf(stderr, "replay: event %d is %d @ step=%#" PRIx64 "\n",
+            event_count++, event, replay_get_current_step());
+}
+
 void replay_put_byte(uint8_t byte)
 {
     if (replay_file) {
@@ -37,6 +45,7 @@ void replay_put_event(uint8_t event)
 {
     assert(event < EVENT_COUNT);
     replay_put_byte(event);
+    print_event(event);
 }
 
 
@@ -152,6 +161,7 @@ void replay_fetch_data_kind(void)
             if (replay_state.data_kind == EVENT_INSTRUCTION) {
                 replay_state.instructions_count = replay_get_dword();
             }
+            print_event(replay_state.data_kind);
             replay_check_error();
             replay_state.has_unread_data = 1;
             if (replay_state.data_kind >= EVENT_COUNT) {
