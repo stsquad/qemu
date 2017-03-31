@@ -230,11 +230,14 @@ int64_t cpu_get_icount_raw(void)
 
     icount = timers_state.qemu_icount;
     if (cpu && cpu->running) {
+        int64_t insns = cpu->icount_budget;
         if (!cpu->can_do_io) {
             fprintf(stderr, "Bad icount read\n");
             exit(1);
         }
-        icount -= (cpu->icount_decr.u16.low + cpu->icount_extra);
+        /* Take into account what has run */
+        insns -= (cpu->icount_decr.u16.low + cpu->icount_extra);
+        icount += insns;
     }
     return icount;
 }
@@ -1195,7 +1198,10 @@ static void prepare_icount_for_run(CPUState *cpu)
 
         count = tcg_get_icount_limit();
 
-        timers_state.qemu_icount += count;
+        /* dont credit this yet */
+        /* timers_state.qemu_icount += count; */
+        cpu->icount_budget = count;
+
         decr = (count > 0xffff) ? 0xffff : count;
         count -= decr;
         cpu->icount_decr.u16.low = decr;
@@ -1208,8 +1214,13 @@ static void process_icount_data(CPUState *cpu)
     if (use_icount) {
         /* Fold pending instructions back into the
            instruction counter, and clear the interrupt flag.  */
-        timers_state.qemu_icount -= (cpu->icount_decr.u16.low
-                        + cpu->icount_extra);
+         /* timers_state.qemu_icount -= (cpu->icount_decr.u16.low */
+         /*              + cpu->icount_extra); */
+
+        /* add executed instructions */
+        timers_state.qemu_icount += (cpu->icount_budget -
+                                     (cpu->icount_decr.u16.low
+                                      + cpu->icount_extra));
 
         /* We must be under BQL here as cpu_exit can tweak
            icount_decr.u32 */

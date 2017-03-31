@@ -209,6 +209,9 @@ void replay_save_instructions(void)
             replay_put_event(EVENT_INSTRUCTION);
             replay_put_dword(diff);
             replay_state.current_step += diff;
+        } else if (diff < 0) {
+            fprintf(stderr,"%s: negative diff %d\n", __func__, diff);
+            abort();
         }
         replay_mutex_unlock();
     }
