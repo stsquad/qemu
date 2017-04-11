@@ -89,12 +89,13 @@ def read_trace_header(fobj):
         raise ValueError('Log format %d not supported with this QEMU release!'
                          % log_version)
 
-def read_trace_records(edict, fobj):
+def read_trace_records(edict, fobj, limit=0):
     """Deserialize trace records from a file, yielding record tuples (event_num, timestamp, pid, arg1, ..., arg6)."""
     idtoname = {
         dropped_event_id: "dropped"
     }
-    while True:
+    count = 0
+    while True and count <= limit:
         t = fobj.read(8)
         if len(t) == 0:
             break
@@ -105,8 +106,11 @@ def read_trace_records(edict, fobj):
             idtoname[event_id] = name
         else:
             rec = read_record(edict, idtoname, fobj)
+            if limit > 0:
+                count += 1
 
             yield rec
+
 
 class Analyzer(object):
     """A trace file analyzer which processes trace records.
@@ -151,7 +155,7 @@ class Analyzer(object):
         """Called at the end of the trace."""
         pass
 
-def process(events, log, analyzer, read_header=True):
+def process(events, log, analyzer, read_header=True, limit=0):
     """Invoke an analyzer on each event in a log."""
     if isinstance(events, str):
         events = read_events(open(events, 'r'))
@@ -189,7 +193,7 @@ def process(events, log, analyzer, read_header=True):
 
     analyzer.begin()
     fn_cache = {}
-    for rec in read_trace_records(edict, log):
+    for rec in read_trace_records(edict, log, limit):
         event_num = rec[0]
         event = edict[event_num]
         if event_num not in fn_cache:
