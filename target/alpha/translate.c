@@ -2900,6 +2900,15 @@ static ExitStatus translate_one(DisasContext *ctx, uint32_t insn)
     return ret;
 }
 
+static inline gen_exit_or_excp(void)
+{
+    if (ctx.singlestep_enabled) {
+        gen_excp_1(EXCP_DEBUG, 0);
+    } else {
+        tcg_gen_exit_tb(0);
+    }
+}
+
 void gen_intermediate_code(CPUAlphaState *env, struct TranslationBlock *tb)
 {
     AlphaCPU *cpu = alpha_env_get_cpu(env);
@@ -3002,25 +3011,21 @@ void gen_intermediate_code(CPUAlphaState *env, struct TranslationBlock *tb)
 
     case EXIT_PC_STALE:
         tcg_gen_movi_i64(cpu_pc, ctx.pc);
-        goto do_exit_pc_updated;
-    case EXIT_PC_STALE_FORCE:
-        tcg_gen_movi_i64(cpu_pc, ctx.pc);
-        goto do_exit_pc_updated_force;
-
+        /* FALLTHRU */
     case EXIT_PC_UPDATED:
-    do_exit_pc_updated:
         if (!use_exit_tb(&ctx)) {
             tcg_gen_lookup_and_goto_ptr(cpu_pc);
             break;
         }
+        gen_exit_or_excp();
+        break;
+
+    case EXIT_PC_STALE_FORCE:
+        tcg_gen_movi_i64(cpu_pc, ctx.pc);
         /* FALLTHRU */
+
     case EXIT_PC_UPDATED_FORCE:
-    do_exit_pc_updated_force:
-        if (ctx.singlestep_enabled) {
-            gen_excp_1(EXCP_DEBUG, 0);
-        } else {
-            tcg_gen_exit_tb(0);
-        }
+        gen_exit_or_excp();
         break;
 
     default:
