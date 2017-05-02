@@ -1965,9 +1965,7 @@ int kvm_cpu_exec(CPUState *cpu)
         return EXCP_HLT;
     }
 
-    qemu_mutex_unlock_iothread();
     cpu_exec_start(cpu);
-
     do {
         MemTxAttrs attrs;
 
@@ -2097,8 +2095,6 @@ int kvm_cpu_exec(CPUState *cpu)
     } while (ret == 0);
 
     cpu_exec_end(cpu);
-    qemu_mutex_lock_iothread();
-
     if (ret < 0) {
         cpu_dump_state(cpu, stderr, fprintf, CPU_DUMP_CODE);
         vm_stop(RUN_STATE_INTERNAL_ERROR);
