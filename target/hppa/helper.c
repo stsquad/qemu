@@ -21,7 +21,7 @@
 
 #include "cpu.h"
 #include "exec/exec-all.h"
-#include "fpu/softfloat.h"
+#include "fpu/softfloat2a/softfloat.h"
 #include "exec/helper-proto.h"
 
 target_ulong cpu_hppa_get_psw(CPUHPPAState *env)

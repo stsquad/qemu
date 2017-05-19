@@ -11,7 +11,7 @@
 #include "cpu-qom.h"
 #include "mips-defs.h"
 #include "exec/cpu-defs.h"
-#include "fpu/softfloat.h"
+#include "fpu/softfloat2a/softfloat.h"
 
 struct CPUMIPSState;
 

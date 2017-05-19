@@ -20,7 +20,7 @@
 
 #include "qemu/osdep.h"
 #include "fpa11.h"
-#include "fpu/softfloat.h"
+#include "fpu/softfloat2a/softfloat.h"
 #include "fpopcode.h"
 #include "fpsr.h"
 //#include "fpmodule.h"

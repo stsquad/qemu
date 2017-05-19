@@ -20,7 +20,7 @@
 
 #include "qemu/osdep.h"
 #include "fpa11.h"
-#include "fpu/softfloat.h"
+#include "fpu/softfloat2a/softfloat.h"
 #include "fpopcode.h"
 
 float64 float64_exp(float64 Fm);

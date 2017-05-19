@@ -20,7 +20,7 @@
 
 #include "qemu/osdep.h"
 #include "fpa11.h"
-#include "fpu/softfloat.h"
+#include "fpu/softfloat2a/softfloat.h"
 #include "fpopcode.h"
 
 floatx80 floatx80_exp(floatx80 Fm);

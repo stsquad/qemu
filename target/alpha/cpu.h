@@ -33,7 +33,7 @@
 
 #include "exec/cpu-defs.h"
 
-#include "fpu/softfloat.h"
+#include "fpu/softfloat2a/softfloat.h"
 
 #define ICACHE_LINE_SIZE 32
 #define DCACHE_LINE_SIZE 32

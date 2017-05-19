@@ -29,7 +29,7 @@
 
 #include "exec/cpu-defs.h"
 
-#include "fpu/softfloat.h"
+#include "fpu/softfloat2a/softfloat.h"
 
 /*#define EXCP_INTERRUPT 0x100*/
 
