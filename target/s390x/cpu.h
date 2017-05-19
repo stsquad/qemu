@@ -40,7 +40,7 @@
 
 #include "exec/cpu-all.h"
 
-#include "fpu/softfloat.h"
+#include "fpu/softfloat2a/softfloat.h"
 
 #define NB_MMU_MODES 3
 #define TARGET_INSN_START_EXTRA_WORDS 1

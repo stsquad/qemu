@@ -29,7 +29,7 @@ struct OpenRISCCPU;
 
 #include "qemu-common.h"
 #include "exec/cpu-defs.h"
-#include "fpu/softfloat.h"
+#include "fpu/softfloat2a/softfloat.h"
 #include "qom/cpu.h"
 
 #define TYPE_OPENRISC_CPU "or1k-cpu"

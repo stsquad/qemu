@@ -84,7 +84,7 @@ this code that are retained.
  */
 #include "qemu/osdep.h"
 
-#include "fpu/softfloat.h"
+#include "fpu/softfloat2a/softfloat.h"
 
 /* We only need stdlib for abort() */
 

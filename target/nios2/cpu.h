@@ -28,7 +28,7 @@
 #define CPUArchState struct CPUNios2State
 
 #include "exec/cpu-defs.h"
-#include "fpu/softfloat.h"
+#include "fpu/softfloat2a/softfloat.h"
 #include "qom/cpu.h"
 struct CPUNios2State;
 typedef struct CPUNios2State CPUNios2State;

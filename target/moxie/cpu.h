@@ -34,7 +34,7 @@
 #define MOXIE_EX_BREAK      16
 
 #include "exec/cpu-defs.h"
-#include "fpu/softfloat.h"
+#include "fpu/softfloat2a/softfloat.h"
 
 #define TARGET_PAGE_BITS 12     /* 4k */
 
