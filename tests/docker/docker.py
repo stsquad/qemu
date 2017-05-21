@@ -237,6 +237,11 @@ class BuildCommand(SubCommand):
                             help="""Specify a binary that will be copied to the
                             container together with all its dependent
                             libraries""")
+        parser.add_argument("--extra-files", "-f", nargs='*',
+                            help="""Specify files that will be sent to the
+                            Docker daemon. The daemon will copy those files into
+                            the built image. The ADD directive of the Dockerfile
+                            specify where a file is placed into the image""")
         parser.add_argument("--add-current-user", "-u", dest="user",
                             action="store_true",
                             help="Add the current user to image's passwd")
@@ -270,10 +275,11 @@ class BuildCommand(SubCommand):
                     print "%s exited with code %d" % (docker_pre, rc)
                     return 1
 
-            # Do we include a extra binary?
+            # Include files used by ADD directives found within the Dockerfile.
             if args.include_executable:
-                _copy_binary_with_libs(args.include_executable,
-                                       docker_dir)
+                _copy_binary_with_libs(args.include_executable, docker_dir)
+            for filename in args.extra_files or []:
+                _copy_with_mkdir(filename, docker_dir)
 
             argv += ["--build-arg=" + k.lower() + "=" + v
                         for k, v in os.environ.iteritems()
