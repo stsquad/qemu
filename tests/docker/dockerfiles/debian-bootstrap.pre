@@ -32,6 +32,11 @@ if [ -z "${DEB_TYPE}" ]; then
 
 fi
 
+if [ -z "${DEB_URL}" ]; then
+    DEB_URL="http://deb.debian.org/debian"
+    echo "Defaulting DEB_URL to $DEB_URL"
+fi
+
 # We check in order for
 #
 #  - DEBOOTSTRAP_DIR pointing at a development checkout
@@ -107,5 +112,5 @@ fi
 
 echo "Building a rootfs using ${FAKEROOT} and ${DEBOOTSTRAP} ${DEB_ARCH}/${DEB_TYPE}"
 
-${FAKEROOT} ${DEBOOTSTRAP} --variant=buildd --foreign --arch=$DEB_ARCH $DEB_TYPE . http://httpredir.debian.org/debian || exit 1
+${FAKEROOT} ${DEBOOTSTRAP} --no-check-gpg --variant=buildd --foreign --arch=$DEB_ARCH $DEB_TYPE . $DEB_URL || exit 1
 exit 0
