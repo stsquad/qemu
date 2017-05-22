@@ -1,1 +1,9 @@
 obj-y = softfloat2a/softfloat.o
+obj-$(CONFIG_SOFTFLOAT3_FP16) += softfloat3c/f16_add.o softfloat3c/f16_div.o softfloat3c/f16_eq.o softfloat3c/f16_eq_signaling.o
+obj-$(CONFIG_SOFTFLOAT3_FP16) += softfloat3c/f16_isSignalingNaN.o softfloat3c/f16_le.o softfloat3c/f16_le_quiet.o softfloat3c/f16_lt.o
+obj-$(CONFIG_SOFTFLOAT3_FP16) += softfloat3c/f16_lt_quiet.o softfloat3c/f16_mul.o softfloat3c/f16_mulAdd.o softfloat3c/f16_rem.o
+obj-$(CONFIG_SOFTFLOAT3_FP16) += softfloat3c/f16_roundToInt.o softfloat3c/f16_sqrt.o softfloat3c/f16_sub.o softfloat3c/f16_to_extF80.o
+obj-$(CONFIG_SOFTFLOAT3_FP16) += softfloat3c/f16_to_extF80M.o softfloat3c/f16_to_f32.o softfloat3c/f16_to_f64.o softfloat3c/f16_to_f128.o
+obj-$(CONFIG_SOFTFLOAT3_FP16) += softfloat3c/f16_to_f128M.o softfloat3c/f16_to_i32.o softfloat3c/f16_to_i32_r_minMag.o softfloat3c/f16_to_i64.o
+obj-$(CONFIG_SOFTFLOAT3_FP16) += softfloat3c/f16_to_i64_r_minMag.o softfloat3c/f16_to_ui32.o softfloat3c/f16_to_ui32_r_minMag.o softfloat3c/f16_to_ui64.o
+obj-$(CONFIG_SOFTFLOAT3_FP16) += softfloat3c/f16_to_ui64_r_minMag.o
