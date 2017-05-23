@@ -38,8 +38,8 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <stdint.h>
 #include "platform.h"
 #include "fpu/softfloat3c/softfloat-internals.h"
+#include "fpu/softfloat3c/softfloat.h"
 #include "specialize.h"
-#include "softfloat.h"
 
 float128_t f16_to_f128( float16_t a )
 {

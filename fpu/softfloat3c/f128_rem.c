@@ -39,7 +39,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "platform.h"
 #include "fpu/softfloat3c/softfloat-internals.h"
 #include "specialize.h"
-#include "softfloat.h"
+#include "fpu/softfloat3c/softfloat.h"
 
 float128_t f128_rem( float128_t a, float128_t b )
 {

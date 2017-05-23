@@ -40,7 +40,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #ifndef softfloat_shiftRightJamM
 
 #define softfloat_shiftRightJamM softfloat_shiftRightJamM
-#include "primitives.h"
+#include "fpu/softfloat3c/primitives.h"
 
 void
  softfloat_shiftRightJamM(

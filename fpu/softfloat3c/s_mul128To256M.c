@@ -40,7 +40,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #ifndef softfloat_mul128To256M
 
 #define softfloat_mul128To256M softfloat_mul128To256M
-#include "primitives.h"
+#include "fpu/softfloat3c/primitives.h"
 
 void
  softfloat_mul128To256M(

@@ -36,10 +36,10 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <stdbool.h>
 #include <stdint.h>
-#include "platform.h"
+#include "../platform.h"
 #include "fpu/softfloat3c/softfloat-internals.h"
-#include "specialize.h"
-#include "softfloat.h"
+#include "fpu/softfloat3c/specialize.h"
+#include "fpu/softfloat3c/softfloat.h"
 
 /*----------------------------------------------------------------------------
 | Interpreting `uiA' and `uiB' as the bit patterns of two 16-bit floating-

@@ -40,7 +40,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #ifndef softfloat_countLeadingZeros64
 
 #define softfloat_countLeadingZeros64 softfloat_countLeadingZeros64
-#include "primitives.h"
+#include "fpu/softfloat3c/primitives.h"
 
 uint_fast8_t softfloat_countLeadingZeros64( uint64_t a )
 {

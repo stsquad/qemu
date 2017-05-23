@@ -36,9 +36,9 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <stdint.h>
 #include "platform.h"
-#include "primitives.h"
+#include "fpu/softfloat3c/primitives.h"
 #include "specialize.h"
-#include "softfloat.h"
+#include "fpu/softfloat3c/softfloat.h"
 
 void softfloat_invalidF128M( uint32_t *zWPtr )
 {

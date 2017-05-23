@@ -36,7 +36,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <stdint.h>
 #include "platform.h"
-#include "primitiveTypes.h"
+#include "fpu/softfloat3c/primitiveTypes.h"
 
 #ifndef softfloat_mul128MTo256M
 

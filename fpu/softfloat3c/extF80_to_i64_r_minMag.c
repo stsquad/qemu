@@ -39,7 +39,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "platform.h"
 #include "fpu/softfloat3c/softfloat-internals.h"
 #include "specialize.h"
-#include "softfloat.h"
+#include "fpu/softfloat3c/softfloat.h"
 
 int_fast64_t extF80_to_i64_r_minMag( extFloat80_t a, bool exact )
 {

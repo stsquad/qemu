@@ -38,7 +38,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <stdint.h>
 #include "platform.h"
 #include "fpu/softfloat3c/softfloat-internals.h"
-#include "softfloat.h"
+#include "fpu/softfloat3c/softfloat.h"
 
 float32_t f32_sub( float32_t a, float32_t b )
 {

@@ -35,9 +35,9 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 =============================================================================*/
 
 #include <stdint.h>
-#include "platform.h"
+#include "../platform.h"
 #include "fpu/softfloat3c/softfloat-internals.h"
-#include "specialize.h"
+#include "fpu/softfloat3c/specialize.h"
 
 /*----------------------------------------------------------------------------
 | Converts the common NaN pointed to by `aPtr' into an 80-bit extended

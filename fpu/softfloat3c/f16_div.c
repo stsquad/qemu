@@ -38,11 +38,11 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <stdint.h>
 #include "platform.h"
 #include "fpu/softfloat3c/softfloat-internals.h"
+#include "fpu/softfloat3c/softfloat.h"
 #include "specialize.h"
-#include "softfloat.h"
 
-extern const uint16_t softfloat_approxRecip_1k0s[];
-extern const uint16_t softfloat_approxRecip_1k1s[];
+/* extern const uint16_t softfloat_approxRecip_1k0s[]; */
+/* extern const uint16_t softfloat_approxRecip_1k1s[]; */
 
 float16_t f16_div( float16_t a, float16_t b )
 {

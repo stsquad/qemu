@@ -37,7 +37,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <stdint.h>
 #include "platform.h"
 #include "fpu/softfloat3c/softfloat-internals.h"
-#include "softfloat.h"
+#include "fpu/softfloat3c/softfloat.h"
 
 float64_t f64_mulAdd( float64_t a, float64_t b, float64_t c )
 {

@@ -38,7 +38,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <stdint.h>
 #include "platform.h"
 #include "fpu/softfloat3c/softfloat-internals.h"
-#include "softfloat.h"
+#include "fpu/softfloat3c/softfloat.h"
 
 float64_t
  softfloat_roundPackToF64( bool sign, int_fast16_t exp, uint_fast64_t sig )

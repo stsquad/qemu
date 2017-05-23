@@ -38,7 +38,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <stdint.h>
 #include "platform.h"
 #include "fpu/softfloat3c/softfloat-internals.h"
-#include "softfloat.h"
+#include "fpu/softfloat3c/softfloat.h"
 
 bool extF80_eq_signaling( extFloat80_t a, extFloat80_t b )
 {
