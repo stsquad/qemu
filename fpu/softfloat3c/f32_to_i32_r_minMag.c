@@ -37,9 +37,9 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <stdbool.h>
 #include <stdint.h>
 #include "platform.h"
-#include "fpu/softfloat3c/softfloat-internals.h"
+#include "fpu/softfloat3c/softfloat-internals.h"
 #include "specialize.h"
-#include "softfloat.h"
+#include "fpu/softfloat3c/softfloat.h"
 
 int_fast32_t f32_to_i32_r_minMag( float32_t a, bool exact )
 {

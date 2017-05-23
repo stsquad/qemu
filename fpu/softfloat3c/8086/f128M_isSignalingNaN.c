@@ -38,7 +38,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <stdint.h>
 #include "platform.h"
 #include "primitives.h"
-#include "softfloat.h"
+#include "fpu/softfloat3c/softfloat.h"
 
 /*----------------------------------------------------------------------------
 *----------------------------------------------------------------------------*/
