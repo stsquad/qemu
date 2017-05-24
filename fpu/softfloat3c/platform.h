@@ -34,9 +34,31 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 =============================================================================*/
 
-/*----------------------------------------------------------------------------
-*----------------------------------------------------------------------------*/
-#define LITTLEENDIAN 1
+/*
+ * QEMU Tweaks - here we map the QEMU configs to the appropriate
+ * Softfloat Specialisations.
+ */
+
+#include "config-target.h"
+
+#if defined(CONFIG_SOFTFLOAT3_FAST_INT64)
+    #define SOFTFLOAT_FAST_INT64 1
+#endif
+
+#if defined(CONFIG_SOFTFLOAT3_FAST_DIV32TO16)
+    #define SOFTFLOAT_FAST_DIV32TO16 1
+#endif
+
+#if defined(CONFIG_SOFTFLOAT3_FAST_DIV64TO32)
+    #define SOFTFLOAT_FAST_DIV64TO32 1
+#endif
+
+#ifndef HOST_WORDS_BIGENDIAN
+    #define LITTLEENDIAN 1
+#endif
+
+#define SOFTFLOAT_ROUND_ODD 1
+#define INLINE_LEVEL 5
 
 /*----------------------------------------------------------------------------
 *----------------------------------------------------------------------------*/
@@ -46,3 +68,6 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define INLINE extern inline
 #endif
 
+#define THREAD_LOCAL __thread
+
+#include "fpu/softfloat3c/primitives.h"

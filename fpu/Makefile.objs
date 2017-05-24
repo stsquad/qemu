@@ -1,9 +1,28 @@
 obj-y = softfloat2a/softfloat.o
-obj-$(CONFIG_SOFTFLOAT3_FP16) += softfloat3c/f16_add.o softfloat3c/f16_div.o softfloat3c/f16_eq.o softfloat3c/f16_eq_signaling.o
+
+# Base SoftFloat3
+obj-$(CONFIG_SOFTFLOAT3) += softfloat3c/softfloat_state.o
+obj-$(CONFIG_SOFTFLOAT3) += softfloat3c/8086-SSE/softfloat_raiseFlags.o
+obj-$(CONFIG_SOFTFLOAT3) += softfloat3c/s_countLeadingZeros8.o
+obj-$(CONFIG_SOFTFLOAT3) += softfloat3c/s_approxRecipSqrt_1Ks.o
+obj-$(CONFIG_SOFTFLOAT3) += softfloat3c/8086-SSE/s_commonNaNToF32UI.o softfloat3c/8086-SSE/s_commonNaNToF64UI.o
+obj-$(CONFIG_SOFTFLOAT3) += softfloat3c/s_roundToI32.o softfloat3c/s_roundToUI32.o
+
+# Some of specialisations are just needed for FASTINT
+obj-$(CONFIG_SOFTFLOAT3_FAST_INT64) += softfloat3c/8086-SSE/s_f16UIToCommonNaN.o softfloat3c/8086-SSE/s_commonNaNToF128UI.o
+obj-$(CONFIG_SOFTFLOAT3_FAST_INT64) += softfloat3c/f16_to_f128.o
+
+# Internal helpers
+obj-$(CONFIG_SOFTFLOAT3_FP16) += softfloat3c/s_roundPackToF16.o softfloat3c/s_normRoundPackToF16.o softfloat3c/8086-SSE/s_propagateNaNF16UI.o
+obj-$(CONFIG_SOFTFLOAT3_FP16) += softfloat3c/s_normSubnormalF16Sig.o
+
+obj-$(CONFIG_SOFTFLOAT3_FP16) += softfloat3c/f16_add.o softfloat3c/f16_sub.o softfloat3c/s_addMagsF16.o softfloat3c/s_subMagsF16.o
+obj-$(CONFIG_SOFTFLOAT3_FP16) += softfloat3c/f16_div.o softfloat3c/f16_eq.o softfloat3c/f16_eq_signaling.o
 obj-$(CONFIG_SOFTFLOAT3_FP16) += softfloat3c/f16_isSignalingNaN.o softfloat3c/f16_le.o softfloat3c/f16_le_quiet.o softfloat3c/f16_lt.o
-obj-$(CONFIG_SOFTFLOAT3_FP16) += softfloat3c/f16_lt_quiet.o softfloat3c/f16_mul.o softfloat3c/f16_mulAdd.o softfloat3c/f16_rem.o
-obj-$(CONFIG_SOFTFLOAT3_FP16) += softfloat3c/f16_roundToInt.o softfloat3c/f16_sqrt.o softfloat3c/f16_sub.o softfloat3c/f16_to_extF80.o
-obj-$(CONFIG_SOFTFLOAT3_FP16) += softfloat3c/f16_to_extF80M.o softfloat3c/f16_to_f32.o softfloat3c/f16_to_f64.o softfloat3c/f16_to_f128.o
+obj-$(CONFIG_SOFTFLOAT3_FP16) += softfloat3c/f16_lt_quiet.o
+obj-$(CONFIG_SOFTFLOAT3_FP16) += softfloat3c/f16_mul.o softfloat3c/f16_mulAdd.o softfloat3c/f16_rem.o softfloat3c/s_mulAddF16.o
+obj-$(CONFIG_SOFTFLOAT3_FP16) += softfloat3c/f16_roundToInt.o softfloat3c/f16_sqrt.o
+obj-$(CONFIG_SOFTFLOAT3_FP16) += softfloat3c/f16_to_f32.o softfloat3c/f16_to_f64.o
 obj-$(CONFIG_SOFTFLOAT3_FP16) += softfloat3c/f16_to_f128M.o softfloat3c/f16_to_i32.o softfloat3c/f16_to_i32_r_minMag.o softfloat3c/f16_to_i64.o
 obj-$(CONFIG_SOFTFLOAT3_FP16) += softfloat3c/f16_to_i64_r_minMag.o softfloat3c/f16_to_ui32.o softfloat3c/f16_to_ui32_r_minMag.o softfloat3c/f16_to_ui64.o
 obj-$(CONFIG_SOFTFLOAT3_FP16) += softfloat3c/f16_to_ui64_r_minMag.o
