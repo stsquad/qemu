@@ -148,7 +148,7 @@ void *HELPER(lookup_tb_ptr)(CPUArchState *env, target_ulong addr)
 {
     CPUState *cpu = ENV_GET_CPU(env);
     unsigned int addr_hash = tb_jmp_cache_hash_func(addr);
-    void * code_ptr = tcg_ctx.code_gen_epilogue;
+    void * code_ptr = NULL;
     TranslationBlock *tb;
 
     tb = atomic_rcu_read(&cpu->tb_jmp_cache[addr_hash]);
@@ -169,11 +169,14 @@ void *HELPER(lookup_tb_ptr)(CPUArchState *env, target_ulong addr)
             if (likely(tb)) {
                 atomic_set(&cpu->tb_jmp_cache[addr_hash], tb);
                 code_ptr = tb->tc_ptr;
+                addr_hash = 0;
             }
         }
     }
 
-    return code_ptr;
+    trace_lookup_tb_ptr(addr, addr_hash, code_ptr);
+
+    return code_ptr ? code_ptr : tcg_ctx.code_gen_epilogue;
 }
 
 void HELPER(exit_atomic)(CPUArchState *env)
