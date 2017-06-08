@@ -28,6 +28,9 @@
 /** Records were dropped event ID */
 #define DROPPED_EVENT_ID (~(uint64_t)0 - 1)
 
+/** Seek record event ID */
+#define SEEK_EVENT_ID (~(uint64_t)0 - 2)
+
 /** Trace record is valid */
 #define TRACE_RECORD_VALID ((uint64_t)1 << 63)
 
@@ -57,6 +60,7 @@ static char *trace_file_name;
 
 #define TRACE_RECORD_TYPE_MAPPING 0
 #define TRACE_RECORD_TYPE_EVENT   1
+#define TRACE_RECORD_TYPE_SEEK    0x5eeca67d6100f10dULL
 
 /* * Trace buffer entry */
 typedef struct {
@@ -155,19 +159,23 @@ static void wait_for_trace_records_available(void)
 static gpointer writeout_thread(gpointer opaque)
 {
     TraceRecord *recordptr;
-    union {
-        TraceRecord rec;
-        uint8_t bytes[sizeof(TraceRecord) + sizeof(uint64_t)];
-    } dropped;
     unsigned int idx = 0;
     int dropped_count;
+    uint64_t total_event_count = 0;
+    uint64_t chunk_event_count = 0;
+
     size_t unused __attribute__ ((unused));
-    uint64_t type = TRACE_RECORD_TYPE_EVENT;
 
     for (;;) {
         wait_for_trace_records_available();
 
         if (g_atomic_int_get(&dropped_events)) {
+            const uint64_t type = TRACE_RECORD_TYPE_EVENT;
+            union {
+                TraceRecord rec;
+                uint8_t bytes[sizeof(TraceRecord) + sizeof(uint64_t)];
+            } dropped;
+
             dropped.rec.event = DROPPED_EVENT_ID,
             dropped.rec.timestamp_ns = get_clock();
             dropped.rec.length = sizeof(TraceRecord) + sizeof(uint64_t),
@@ -179,14 +187,38 @@ static gpointer writeout_thread(gpointer opaque)
             dropped.rec.arguments[0] = dropped_count;
             unused = fwrite(&type, sizeof(type), 1, trace_fp);
             unused = fwrite(&dropped.rec, dropped.rec.length, 1, trace_fp);
+
+            chunk_event_count += dropped_count;
         }
 
         while (get_trace_record(idx, &recordptr)) {
+            const uint64_t type = TRACE_RECORD_TYPE_EVENT;
             unused = fwrite(&type, sizeof(type), 1, trace_fp);
             unused = fwrite(recordptr, recordptr->length, 1, trace_fp);
             writeout_idx += recordptr->length;
             free(recordptr); /* don't use g_free, can deadlock when traced */
             idx = writeout_idx % TRACE_BUF_LEN;
+
+            chunk_event_count++;
+        }
+
+        if (chunk_event_count) {
+            const uint64_t type = TRACE_RECORD_TYPE_SEEK;
+            union {
+                TraceRecord rec;
+                uint8_t bytes[sizeof(TraceRecord) + sizeof(uint64_t)];
+            } seek   ;
+
+            total_event_count += chunk_event_count;
+            chunk_event_count = 0;
+
+            seek.rec.event = SEEK_EVENT_ID,
+            seek.rec.timestamp_ns = get_clock();
+            seek.rec.length = sizeof(TraceRecord) + sizeof(uint64_t),
+            seek.rec.pid = trace_pid;
+            seek.rec.arguments[0] = total_event_count;
+            unused = fwrite(&type, sizeof(type), 1, trace_fp);
+            unused = fwrite(&seek.rec, seek.rec.length, 1, trace_fp);
         }
 
         fflush(trace_fp);
