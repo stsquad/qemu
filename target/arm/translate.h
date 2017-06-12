@@ -1,11 +1,15 @@
 #ifndef TARGET_ARM_TRANSLATE_H
 #define TARGET_ARM_TRANSLATE_H
 
+#include "exec/translate-all_template.h"
+
+
 /* internal defines */
 typedef struct DisasContext {
-    target_ulong pc;
+    DisasContextBase base;
+
+    target_ulong next_page_start;
     uint32_t insn;
-    int is_jmp;
     /* Nonzero if this instruction has been conditionally skipped.  */
     int condjmp;
     /* The label that will be jumped to when the instruction is skipped.  */
@@ -13,8 +17,6 @@ typedef struct DisasContext {
     /* Thumb-2 conditional execution bits.  */
     int condexec_mask;
     int condexec_cond;
-    struct TranslationBlock *tb;
-    int singlestep_enabled;
     int thumb;
     int sctlr_b;
     TCGMemOp be_data;
@@ -119,39 +121,53 @@ static void disas_set_insn_syndrome(DisasContext *s, uint32_t syn)
     s->insn_start_idx = 0;
 }
 
-/* target-specific extra values for is_jmp */
-/* TODO: rename as DJ_* when transitioning this target to generic translation */
+/* Target-specific values for DisasContextBase::jmp_type */
+#include "exec/translate-all_template.h"
+#define DJ_JUMP    (DJ_TARGET + 0)
+#define DJ_UPDATE  (DJ_TARGET + 1)
+#define DJ_TB_JUMP (DJ_TARGET + 2)
 /* These instructions trap after executing, so the A32/T32 decoder must
  * defer them until after the conditional execution state has been updated.
  * WFI also needs special handling when single-stepping.
  */
-#define DISAS_WFI (DISAS_TARGET + 0)
-#define DISAS_SWI (DISAS_TARGET + 1)
+#define DJ_WFI     (DJ_TARGET + 3)
+#define DJ_SWI     (DJ_TARGET + 4)
 /* For instructions which unconditionally cause an exception we can skip
  * emitting unreachable code at the end of the TB in the A64 decoder
  */
-#define DISAS_EXC (DISAS_TARGET + 2)
+#define DJ_EXC     (DJ_TARGET + 5)
 /* WFE */
-#define DISAS_WFE (DISAS_TARGET + 3)
-#define DISAS_HVC (DISAS_TARGET + 4)
-#define DISAS_SMC (DISAS_TARGET + 5)
-#define DISAS_YIELD (DISAS_TARGET + 6)
+#define DJ_WFE     (DJ_TARGET + 6)
+#define DJ_HVC     (DJ_TARGET + 7)
+#define DJ_SMC     (DJ_TARGET + 8)
+#define DJ_YIELD   (DJ_TARGET + 9)
 /* M profile branch which might be an exception return (and so needs
  * custom end-of-TB code)
  */
-#define DISAS_BX_EXCRET (DISAS_TARGET + 7)
+#define DJ_BX_EXCRET (DJ_TARGET + 10)
 /* For instructions which want an immediate exit to the main loop,
  * as opposed to attempting to use lookup_and_goto_ptr.
  */
-#define DISAS_EXIT (DISAS_TARGET + 8)
+#define DJ_EXIT (DJ_TARGET + 11)
+#define DJ_SS      (DJ_TARGET + 12)
+#define DJ_PAGE_CROSS (DJ_TARGET + 13)
+#define DJ_SKIP    (DJ_TARGET + 14)
+
+void gen_intermediate_code_arm(CPUState *cpu, struct TranslationBlock *tb);
+void gen_intermediate_code_aarch64(CPUState *cpu, struct TranslationBlock *tb);
 
 #ifdef TARGET_AARCH64
+void init_tmp_a64_array(DisasContext *s);
 void a64_translate_init(void);
 void gen_intermediate_code_a64(ARMCPU *cpu, TranslationBlock *tb);
 void gen_a64_set_pc_im(uint64_t val);
 void aarch64_cpu_dump_state(CPUState *cs, FILE *f,
                             fprintf_function cpu_fprintf, int flags);
 #else
+static inline void init_tmp_a64_array(DisasContext *s)
+{
+}
+
 static inline void a64_translate_init(void)
 {
 }
