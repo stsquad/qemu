@@ -1,6 +1,49 @@
 obj-y = softfloat2a/softfloat.o
 
 # Base SoftFloat3
+
+# The softfloat3 primitives don't include declarations and avoid including the primitives themselves
+# so they can still be linked when needed. We build these files surpressing so of the normal CFLAGS.
+
+# OBJS_PRIMITIVES = \
+#   s_compare96M$(OBJ) \
+#   s_compare128M$(OBJ) \
+#   s_shortShiftLeft64To96M$(OBJ) \
+#   s_shortShiftLeftM$(OBJ) \
+#   s_shiftLeftM$(OBJ) \
+#   s_shortShiftRightM$(OBJ) \
+#   s_shortShiftRightJam64$(OBJ) \
+#   s_shortShiftRightJamM$(OBJ) \
+#   s_shiftRightJam32$(OBJ) \
+#   s_shiftRightJam64$(OBJ) \
+#   s_shiftRightJamM$(OBJ) \
+#   s_shiftRightM$(OBJ) \
+#   s_countLeadingZeros8$(OBJ) \
+#   s_countLeadingZeros16$(OBJ) \
+#   s_countLeadingZeros32$(OBJ) \
+#   s_countLeadingZeros64$(OBJ) \
+#   s_addM$(OBJ) \
+#   s_addCarryM$(OBJ) \
+#   s_addComplCarryM$(OBJ) \
+#   s_negXM$(OBJ) \
+#   s_sub1XM$(OBJ) \
+#   s_subM$(OBJ) \
+#   s_mul64To128M$(OBJ) \
+#   s_mul128MTo256M$(OBJ) \
+#   s_approxRecip_1Ks$(OBJ) \
+#   s_approxRecip32_1$(OBJ) \
+#   s_approxRecipSqrt_1Ks$(OBJ) \
+#   s_approxRecipSqrt32_1$(OBJ) \
+#   s_remStepMBy32$(OBJ) \
+
+softfloat3_primative_OBJS = softfloat3c/s_shortShiftRight128.o \
+	softfloat3c/s_shiftRightJam32.o \
+	softfloat3c/s_countLeadingZeros16.o \
+	softfloat3c/s_countLeadingZeros32.o
+
+$(addprefix $(obj)/,$(softfloat3_primative_OBJS)): QEMU_CFLAGS := $(filter-out -Wstrict-prototypes -Wmissing-prototypes, $(QEMU_CFLAGS))
+
+obj-$(CONFIG_SOFTFLOAT3) += $(softfloat3_primative_OBJS)
 obj-$(CONFIG_SOFTFLOAT3) += softfloat3c/softfloat_state.o
 obj-$(CONFIG_SOFTFLOAT3) += softfloat3c/8086-SSE/softfloat_raiseFlags.o
 obj-$(CONFIG_SOFTFLOAT3) += softfloat3c/s_countLeadingZeros8.o
