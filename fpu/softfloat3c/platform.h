@@ -70,4 +70,3 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define THREAD_LOCAL __thread
 
-#include "fpu/softfloat3c/primitives.h"
