@@ -387,6 +387,7 @@ static inline void gen_goto_tb(DisasContext *s, int n, uint64_t dest)
 
 static void unallocated_encoding(DisasContext *s)
 {
+    fprintf(stderr,"%s: %08lx\n", __func__, s->pc);
     /* Unallocated and reserved encodings are uncategorized */
     gen_exception_insn(s, 4, EXCP_UDEF, syn_uncategorized(),
                        default_exception_el(s));
@@ -7433,6 +7434,8 @@ static void disas_simd_scalar_three_reg_same(DisasContext *s, uint32_t insn)
     bool u = extract32(insn, 29, 1);
     TCGv_i64 tcg_rd;
 
+    fprintf(stderr,"%s: %#04x\n", __func__, insn);
+
     if (opcode >= 0x18) {
         /* Floating point: U, size[1] and opcode indicate operation */
         int fpopcode = opcode | (extract32(size, 1, 1) << 5) | (u << 6);
@@ -9314,6 +9317,8 @@ static void disas_simd_3same_float(DisasContext *s, uint32_t insn)
     int esize = 32 << size;
     int elements = datasize / esize;
 
+    fprintf(stderr,"%s: %#04x\n", __func__, insn);
+
     if (size == 1 && !is_q) {
         unallocated_encoding(s);
         return;
@@ -9717,6 +9722,86 @@ static void disas_simd_three_reg_same(DisasContext *s, uint32_t insn)
         disas_simd_3same_int(s, insn);
         break;
     }
+}
+
+/*
+ * Advanced SIMD three same (ARMv8.2 FP16 variants)
+ *
+ *  31  30  29  28       24 23  22 21 20  16 15 14 13    11 10  9    5 4    0
+ * +---+---+---+-----------+---------+------+-----+--------+---+------+------+
+ * | 0 | Q | U | 0 1 1 1 0 | a | 1 0 |  Rm  | 0 0 | opcode | 1 |  Rn  |  Rd  |
+ * +---+---+---+-----------+---------+------+-----+--------+---+------+------+
+ *
+ * This includes FMULX, FCMEQ (register), FRECPS, FRSQRTS, FCMGE
+ * (register), FACGE, FABD, FCMGT (register) and FACGT.
+ *
+ */
+static void disas_simd_three_reg_same_fp16(DisasContext *s, uint32_t insn)
+{
+    int opcode, fpopcode;
+    int is_q, u, a, rm, rn, rd;
+    int datasize, elements;
+    int pass;
+    TCGv_ptr fpst;
+
+    if (!arm_dc_feature(s, ARM_FEATURE_V8_FP16)) {
+        unallocated_encoding(s);
+        return;
+    }
+
+    if (!fp_access_check(s)) {
+        return;
+    }
+
+    /* For these floating point ops, the U, a and opcode bits
+     * together indicate the operation.
+     */
+    opcode = extract32(insn, 11, 3);
+    u = extract32(insn, 29, 1);
+    a = extract32(insn, 23, 1);
+    is_q = extract32(insn, 30, 1);
+    rm = extract32(insn, 16, 5);
+    rn = extract32(insn, 5, 5);
+    rd = extract32(insn, 0, 5);
+
+    fpopcode = opcode | (a << 4) |  (u << 5);
+    datasize = is_q ? 128 : 64;
+    elements = datasize / 16;
+
+    fprintf(stderr,"%s: %#04x fpop %2x\n", __func__, insn, fpopcode);
+
+    fpst = get_fpstatus_ptr();
+
+    for (pass = 0; pass < elements; pass++) {
+        TCGv_i32 tcg_op1 = tcg_temp_new_i32();
+        TCGv_i32 tcg_op2 = tcg_temp_new_i32();
+        TCGv_i32 tcg_res = tcg_temp_new_i32();
+
+        read_vec_element_i32(s, tcg_op1, rn, pass, MO_16);
+        read_vec_element_i32(s, tcg_op2, rm, pass, MO_16);
+
+        switch (fpopcode) {
+        case 0x35: /* FACGT */
+            gen_helper_advsimd_acgt_f16(tcg_res, tcg_op1, tcg_op2, fpst);
+            break;
+        default:
+            fprintf(stderr,"%s: insn %#04x fpop %#2x\n", __func__, insn, fpopcode);
+            unsupported_encoding(s, insn);
+        }
+
+        write_vec_element_i32(s, tcg_res, rd, pass, MO_16);
+        tcg_temp_free_i32(tcg_res);
+        tcg_temp_free_i32(tcg_op1);
+        tcg_temp_free_i32(tcg_op2);
+    }
+
+    tcg_temp_free_ptr(fpst);
+
+    if (!is_q) {
+        /* non-quad vector op */
+        clear_vec_high(s, rd);
+    }
+
 }
 
 static void handle_2misc_widening(DisasContext *s, int opcode, bool is_q,
@@ -11098,6 +11183,7 @@ static void disas_crypto_two_reg_sha(DisasContext *s, uint32_t insn)
     tcg_temp_free_i32(tcg_rn_regno);
 }
 
+
 /* C3.6 Data processing - SIMD, inc Crypto
  *
  * As the decode gets a little complex we are using a table based
@@ -11127,8 +11213,18 @@ static const AArch64DecodeTable data_proc_simd[] = {
     { 0x4e280800, 0xff3e0c00, disas_crypto_aes },
     { 0x5e000000, 0xff208c00, disas_crypto_three_reg_sha },
     { 0x5e280800, 0xff3e0c00, disas_crypto_two_reg_sha },
+    { 0x0e400400, 0x9f60c400, disas_simd_three_reg_same_fp16},
     { 0x00000000, 0x00000000, NULL }
 };
+
+/*
+ * FACGT     A64_V   0111 1110 1 size:1 1 rm:5 11101 1 rn:5 rd:5        \
+ * FACGT_FP16 A64_V  0111 1110 1  10      rm:5 00101 1 rn:5 rd:5
+ *               enc 0111 1110 1000 0000 0010 1100 0000 0000
+ *                0x    7    e    8    0    2    d    0    0
+ *               msk 1111 1111 1000 0000 1111 1100 0000 0000
+ *                      f    f    8    8    f    a    0    0
+*/
 
 static void disas_data_proc_simd(DisasContext *s, uint32_t insn)
 {
