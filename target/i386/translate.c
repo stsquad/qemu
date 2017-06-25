@@ -71,6 +71,9 @@
     case (2 << 6) | (OP << 3) | 0 ... (2 << 6) | (OP << 3) | 7: \
     case (3 << 6) | (OP << 3) | 0 ... (3 << 6) | (OP << 3) | 7
 
+#define DJ_JUMP (DJ_TARGET + 0)         /* end of block due to call/jump */
+#define DJ_MISC (DJ_TARGET + 1)         /* some other reason */
+
 //#define MACRO_TEST   1
 
 /* global register indexes */
@@ -2180,7 +2183,7 @@ static inline void gen_jcc(DisasContext *s, int b,
 
         gen_set_label(l1);
         gen_goto_tb(s, 1, val);
-        s->base.is_jmp = DISAS_TB_JUMP;
+        s->base.is_jmp = DJ_JUMP;
     } else {
         l1 = gen_new_label();
         l2 = gen_new_label();
@@ -2253,11 +2256,11 @@ static void gen_movl_seg_T0(DisasContext *s, int seg_reg)
            stop as a special handling must be done to disable hardware
            interrupts for the next instruction */
         if (seg_reg == R_SS || (s->code32 && seg_reg < R_FS))
-            b->is_jmp = DISAS_TB_JUMP;
+            b->is_jmp = DJ_JUMP;
     } else {
         gen_op_movl_seg_T0_vm(seg_reg);
         if (seg_reg == R_SS)
-            b->is_jmp = DISAS_TB_JUMP;
+            b->is_jmp = DJ_JUMP;
     }
 }
 
@@ -2431,7 +2434,7 @@ static void gen_exception(DisasContext *s, int trapno, target_ulong cur_eip)
     gen_update_cc_op(s);
     gen_jmp_im(cur_eip);
     gen_helper_raise_exception(cpu_env, tcg_const_i32(trapno));
-    b->is_jmp = DISAS_TB_JUMP;
+    b->is_jmp = DJ_JUMP;
 }
 
 /* Generate #UD for the current instruction.  The assumption here is that
@@ -2471,7 +2474,7 @@ static void gen_interrupt(DisasContext *s, int intno,
     gen_jmp_im(cur_eip);
     gen_helper_raise_interrupt(cpu_env, tcg_const_i32(intno),
                                tcg_const_i32(next_eip - cur_eip));
-    b->is_jmp = DISAS_TB_JUMP;
+    b->is_jmp = DJ_JUMP;
 }
 
 static void gen_debug(DisasContext *s, target_ulong cur_eip)
@@ -2481,7 +2484,7 @@ static void gen_debug(DisasContext *s, target_ulong cur_eip)
     gen_update_cc_op(s);
     gen_jmp_im(cur_eip);
     gen_helper_debug(cpu_env);
-    b->is_jmp = DISAS_TB_JUMP;
+    b->is_jmp = DJ_JUMP;
 }
 
 static void gen_set_hflag(DisasContext *s, uint32_t mask)
@@ -2558,7 +2561,7 @@ do_gen_eob_worker(DisasContext *s, bool inhibit, bool recheck_tf, TCGv jr)
     } else {
         tcg_gen_exit_tb(0);
     }
-    b->is_jmp = DISAS_TB_JUMP;
+    b->is_jmp = DJ_JUMP;
 }
 
 static inline void
@@ -2599,7 +2602,7 @@ static void gen_jmp_tb(DisasContext *s, target_ulong eip, int tb_num)
     set_cc_op(s, CC_OP_DYNAMIC);
     if (s->jmp_opt) {
         gen_goto_tb(s, tb_num, eip);
-        b->is_jmp = DISAS_TB_JUMP;
+        b->is_jmp = DJ_JUMP;
     } else {
         gen_jmp_im(eip);
         gen_eob(s);
@@ -6963,7 +6966,7 @@ static target_ulong disas_insn(DisasContextBase *db, CPUState *cpu)
             gen_update_cc_op(s);
             gen_jmp_im(pc_start - s->cs_base);
             gen_helper_pause(cpu_env, tcg_const_i32(s->pc - pc_start));
-            db->is_jmp = DISAS_TB_JUMP;
+            db->is_jmp = DJ_JUMP;
         }
         break;
     case 0x9b: /* fwait */
@@ -7208,7 +7211,7 @@ static target_ulong disas_insn(DisasContextBase *db, CPUState *cpu)
             gen_update_cc_op(s);
             gen_jmp_im(pc_start - s->cs_base);
             gen_helper_hlt(cpu_env, tcg_const_i32(s->pc - pc_start));
-            db->is_jmp = DISAS_TB_JUMP;
+            db->is_jmp = DJ_JUMP;
         }
         break;
     case 0x100:
@@ -7391,7 +7394,7 @@ static target_ulong disas_insn(DisasContextBase *db, CPUState *cpu)
             gen_helper_vmrun(cpu_env, tcg_const_i32(s->aflag - 1),
                              tcg_const_i32(s->pc - pc_start));
             tcg_gen_exit_tb(0);
-            db->is_jmp = DISAS_TB_JUMP;
+            db->is_jmp = DJ_JUMP;
             break;
 
         case 0xd9: /* VMMCALL */
@@ -8567,7 +8570,7 @@ void gen_intermediate_code(CPUState *cpu, TranslationBlock *tb)
     /* generate intermediate code */
     db->singlestep_enabled = cpu->singlestep_enabled;
     db->tb = tb;
-    db->is_jmp = DISAS_NEXT;
+    db->is_jmp = DJ_NEXT;
     db->pc_first = tb->pc;
     db->pc_next = db->pc_first;
     i386_trblock_init_disas_context(db, cpu);
