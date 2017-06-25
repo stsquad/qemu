@@ -12179,6 +12179,13 @@ static void arm_trblock_tb_stop(DisasContextBase *db, CPUState *cpu)
     }
 }
 
+static int arm_trblock_disas_flags(const DisasContextBase *db)
+{
+    DisasContext *dc = container_of(db, DisasContext, base);
+
+    return dc->thumb | (dc->sctlr_b << 1);
+}
+
 /* generate intermediate code for basic block 'tb'.  */
 void gen_intermediate_code(CPUState *cpu, TranslationBlock *tb)
 {
@@ -12274,11 +12281,12 @@ done_generating:
 #ifdef DEBUG_DISAS
     if (qemu_loglevel_mask(CPU_LOG_TB_IN_ASM) &&
         qemu_log_in_addr_range(db->pc_first)) {
+        int disas_flags = arm_trblock_disas_flags(db);
         qemu_log_lock();
         qemu_log("----------------\n");
         qemu_log("IN: %s\n", lookup_symbol(db->pc_first));
         log_target_disas(cpu, db->pc_first, dc->pc - db->pc_first,
-                         dc->thumb | (dc->sctlr_b << 1));
+                         disas_flags);
         qemu_log("\n");
         qemu_log_unlock();
     }
