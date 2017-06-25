@@ -11823,6 +11823,62 @@ static bool insn_crosses_page(CPUARMState *env, DisasContext *s)
     return false;
 }
 
+static void arm_trblock_init_disas_context(DisasContextBase *db, CPUState *cpu)
+{
+    DisasContext *dc = container_of(db, DisasContext, base);
+    CPUARMState *env = cpu->env_ptr;
+    ARMCPU *arm_cpu = arm_env_get_cpu(env);
+
+    dc->pc = db->pc_first;
+    dc->condjmp = 0;
+
+    dc->aarch64 = 0;
+    /* If we are coming from secure EL0 in a system with a 32-bit EL3, then
+     * there is no secure EL1, so we route exceptions to EL3.
+     */
+    dc->secure_routed_to_el3 = arm_feature(env, ARM_FEATURE_EL3) &&
+                               !arm_el_is_aa64(env, 3);
+    dc->thumb = ARM_TBFLAG_THUMB(db->tb->flags);
+    dc->sctlr_b = ARM_TBFLAG_SCTLR_B(db->tb->flags);
+    dc->be_data = ARM_TBFLAG_BE_DATA(db->tb->flags) ? MO_BE : MO_LE;
+    dc->condexec_mask = (ARM_TBFLAG_CONDEXEC(db->tb->flags) & 0xf) << 1;
+    dc->condexec_cond = ARM_TBFLAG_CONDEXEC(db->tb->flags) >> 4;
+    dc->mmu_idx = core_to_arm_mmu_idx(env, ARM_TBFLAG_MMUIDX(db->tb->flags));
+    dc->current_el = arm_mmu_idx_to_el(dc->mmu_idx);
+#if !defined(CONFIG_USER_ONLY)
+    dc->user = (dc->current_el == 0);
+#endif
+    dc->ns = ARM_TBFLAG_NS(db->tb->flags);
+    dc->fp_excp_el = ARM_TBFLAG_FPEXC_EL(db->tb->flags);
+    dc->vfp_enabled = ARM_TBFLAG_VFPEN(db->tb->flags);
+    dc->vec_len = ARM_TBFLAG_VECLEN(db->tb->flags);
+    dc->vec_stride = ARM_TBFLAG_VECSTRIDE(db->tb->flags);
+    dc->c15_cpar = ARM_TBFLAG_XSCALE_CPAR(db->tb->flags);
+    dc->v7m_handler_mode = ARM_TBFLAG_HANDLER(db->tb->flags);
+    dc->cp_regs = arm_cpu->cp_regs;
+    dc->features = env->features;
+
+    /* Single step state. The code-generation logic here is:
+     *  SS_ACTIVE == 0:
+     *   generate code with no special handling for single-stepping (except
+     *   that anything that can make us go to SS_ACTIVE == 1 must end the TB;
+     *   this happens anyway because those changes are all system register or
+     *   PSTATE writes).
+     *  SS_ACTIVE == 1, PSTATE.SS == 1: (active-not-pending)
+     *   emit code for one insn
+     *   emit code to clear PSTATE.SS
+     *   emit code to generate software step exception for completed step
+     *   end TB (as usual for having generated an exception)
+     *  SS_ACTIVE == 1, PSTATE.SS == 0: (active-pending)
+     *   emit code to generate a software step exception
+     *   end the TB
+     */
+    dc->ss_active = ARM_TBFLAG_SS_ACTIVE(db->tb->flags);
+    dc->pstate_ss = ARM_TBFLAG_PSTATE_SS(db->tb->flags);
+    dc->is_ldex = false;
+    dc->ss_same_el = false; /* Can't be true since EL_d must be AArch64 */
+}
+
 /* generate intermediate code for basic block 'tb'.  */
 void gen_intermediate_code(CPUState *cpu, TranslationBlock *tb)
 {
@@ -11847,58 +11903,11 @@ void gen_intermediate_code(CPUState *cpu, TranslationBlock *tb)
     db->tb = tb;
     db->pc_first = tb->pc;
     db->pc_next = db->pc_first;
-    db->is_jmp = DJ_NEXT;
+    db->is_jmp = DISAS_NEXT;
     db->num_insns = 0;
     db->singlestep_enabled = cpu->singlestep_enabled;
+    arm_trblock_init_disas_context(db, cpu);
 
-    dc->pc = db->pc_first;
-    dc->condjmp = 0;
-
-    dc->aarch64 = 0;
-    /* If we are coming from secure EL0 in a system with a 32-bit EL3, then
-     * there is no secure EL1, so we route exceptions to EL3.
-     */
-    dc->secure_routed_to_el3 = arm_feature(env, ARM_FEATURE_EL3) &&
-                               !arm_el_is_aa64(env, 3);
-    dc->thumb = ARM_TBFLAG_THUMB(tb->flags);
-    dc->sctlr_b = ARM_TBFLAG_SCTLR_B(tb->flags);
-    dc->be_data = ARM_TBFLAG_BE_DATA(tb->flags) ? MO_BE : MO_LE;
-    dc->condexec_mask = (ARM_TBFLAG_CONDEXEC(tb->flags) & 0xf) << 1;
-    dc->condexec_cond = ARM_TBFLAG_CONDEXEC(tb->flags) >> 4;
-    dc->mmu_idx = core_to_arm_mmu_idx(env, ARM_TBFLAG_MMUIDX(tb->flags));
-    dc->current_el = arm_mmu_idx_to_el(dc->mmu_idx);
-#if !defined(CONFIG_USER_ONLY)
-    dc->user = (dc->current_el == 0);
-#endif
-    dc->ns = ARM_TBFLAG_NS(tb->flags);
-    dc->fp_excp_el = ARM_TBFLAG_FPEXC_EL(tb->flags);
-    dc->vfp_enabled = ARM_TBFLAG_VFPEN(tb->flags);
-    dc->vec_len = ARM_TBFLAG_VECLEN(tb->flags);
-    dc->vec_stride = ARM_TBFLAG_VECSTRIDE(tb->flags);
-    dc->c15_cpar = ARM_TBFLAG_XSCALE_CPAR(tb->flags);
-    dc->v7m_handler_mode = ARM_TBFLAG_HANDLER(tb->flags);
-    dc->cp_regs = arm_cpu->cp_regs;
-    dc->features = env->features;
-
-    /* Single step state. The code-generation logic here is:
-     *  SS_ACTIVE == 0:
-     *   generate code with no special handling for single-stepping (except
-     *   that anything that can make us go to SS_ACTIVE == 1 must end the TB;
-     *   this happens anyway because those changes are all system register or
-     *   PSTATE writes).
-     *  SS_ACTIVE == 1, PSTATE.SS == 1: (active-not-pending)
-     *   emit code for one insn
-     *   emit code to clear PSTATE.SS
-     *   emit code to generate software step exception for completed step
-     *   end TB (as usual for having generated an exception)
-     *  SS_ACTIVE == 1, PSTATE.SS == 0: (active-pending)
-     *   emit code to generate a software step exception
-     *   end the TB
-     */
-    dc->ss_active = ARM_TBFLAG_SS_ACTIVE(tb->flags);
-    dc->pstate_ss = ARM_TBFLAG_PSTATE_SS(tb->flags);
-    dc->is_ldex = false;
-    dc->ss_same_el = false; /* Can't be true since EL_d must be AArch64 */
 
     cpu_F0s = tcg_temp_new_i32();
     cpu_F1s = tcg_temp_new_i32();

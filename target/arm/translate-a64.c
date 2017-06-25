@@ -11204,21 +11204,12 @@ static void disas_a64_insn(CPUARMState *env, DisasContext *s)
     free_tmp_a64(s);
 }
 
-void gen_intermediate_code_a64(DisasContextBase *db, ARMCPU *cpu,
-                               TranslationBlock *tb)
+static void aarch64_trblock_init_disas_context(DisasContextBase *db,
+                                               CPUState *cpu)
 {
-    CPUState *cs = CPU(cpu);
-    CPUARMState *env = &cpu->env;
     DisasContext *dc = container_of(db, DisasContext, base);
-    target_ulong next_page_start;
-    int max_insns;
-
-    db->tb = tb;
-    db->pc_first = tb->pc;
-    db->pc_next = db->pc_first;
-    db->is_jmp = DJ_NEXT;
-    db->num_insns = 0;
-    db->singlestep_enabled = cs->singlestep_enabled;
+    CPUARMState *env = cpu->env_ptr;
+    ARMCPU *arm_cpu = arm_env_get_cpu(env);
 
     dc->pc = db->pc_first;
     dc->condjmp = 0;
@@ -11231,20 +11222,20 @@ void gen_intermediate_code_a64(DisasContextBase *db, ARMCPU *cpu,
                                !arm_el_is_aa64(env, 3);
     dc->thumb = 0;
     dc->sctlr_b = 0;
-    dc->be_data = ARM_TBFLAG_BE_DATA(tb->flags) ? MO_BE : MO_LE;
+    dc->be_data = ARM_TBFLAG_BE_DATA(db->tb->flags) ? MO_BE : MO_LE;
     dc->condexec_mask = 0;
     dc->condexec_cond = 0;
-    dc->mmu_idx = core_to_arm_mmu_idx(env, ARM_TBFLAG_MMUIDX(tb->flags));
-    dc->tbi0 = ARM_TBFLAG_TBI0(tb->flags);
-    dc->tbi1 = ARM_TBFLAG_TBI1(tb->flags);
+    dc->mmu_idx = core_to_arm_mmu_idx(env, ARM_TBFLAG_MMUIDX(db->tb->flags));
+    dc->tbi0 = ARM_TBFLAG_TBI0(db->tb->flags);
+    dc->tbi1 = ARM_TBFLAG_TBI1(db->tb->flags);
     dc->current_el = arm_mmu_idx_to_el(dc->mmu_idx);
 #if !defined(CONFIG_USER_ONLY)
     dc->user = (dc->current_el == 0);
 #endif
-    dc->fp_excp_el = ARM_TBFLAG_FPEXC_EL(tb->flags);
+    dc->fp_excp_el = ARM_TBFLAG_FPEXC_EL(db->tb->flags);
     dc->vec_len = 0;
     dc->vec_stride = 0;
-    dc->cp_regs = cpu->cp_regs;
+    dc->cp_regs = arm_cpu->cp_regs;
     dc->features = env->features;
 
     /* Single step state. The code-generation logic here is:
@@ -11262,12 +11253,30 @@ void gen_intermediate_code_a64(DisasContextBase *db, ARMCPU *cpu,
      *   emit code to generate a software step exception
      *   end the TB
      */
-    dc->ss_active = ARM_TBFLAG_SS_ACTIVE(tb->flags);
-    dc->pstate_ss = ARM_TBFLAG_PSTATE_SS(tb->flags);
+    dc->ss_active = ARM_TBFLAG_SS_ACTIVE(db->tb->flags);
+    dc->pstate_ss = ARM_TBFLAG_PSTATE_SS(db->tb->flags);
     dc->is_ldex = false;
     dc->ss_same_el = (arm_debug_target_el(env) == dc->current_el);
 
     init_tmp_a64_array(dc);
+}
+
+void gen_intermediate_code_a64(DisasContextBase *db, ARMCPU *cpu,
+                               TranslationBlock *tb)
+{
+    CPUState *cs = CPU(cpu);
+    CPUARMState *env = &cpu->env;
+    DisasContext *dc = container_of(db, DisasContext, base);
+    target_ulong next_page_start;
+    int max_insns;
+
+    db->tb = tb;
+    db->pc_first = tb->pc;
+    db->pc_next = db->pc_first;
+    db->is_jmp = DISAS_NEXT;
+    db->num_insns = 0;
+    db->singlestep_enabled = cs->singlestep_enabled;
+    aarch64_trblock_init_disas_context(db, cs);
 
     next_page_start = (db->pc_first & TARGET_PAGE_MASK) + TARGET_PAGE_SIZE;
     max_insns = tb->cflags & CF_COUNT_MASK;
