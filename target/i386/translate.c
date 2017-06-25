@@ -18,6 +18,7 @@
  */
 #include "qemu/osdep.h"
 
+#include "qemu/error-report.h"
 #include "qemu/host-utils.h"
 #include "cpu.h"
 #include "disas/disas.h"
@@ -8474,12 +8475,32 @@ static void i386_trblock_insn_start(DisasContextBase *db, CPUState *cpu)
     tcg_gen_insn_start(db->pc_next, dc->cc_op);
 }
 
+static BreakpointCheckType i386_trblock_breakpoint_check(
+    DisasContextBase *db, CPUState *cpu, const CPUBreakpoint *bp)
+{
+    DisasContext *dc = container_of(db, DisasContext, base);
+    /* If RF is set, suppress an internally generated breakpoint.  */
+    int flags = db->tb->flags & HF_RF_MASK ? BP_GDB : BP_ANY;
+    if (bp->flags & flags) {
+        gen_debug(dc, db->pc_next - dc->cs_base);
+        /* The address covered by the breakpoint must be included in
+           [tb->pc, tb->pc + tb->size) in order to for it to be
+           properly cleared -- thus we increment the PC here so that
+           the logic setting tb->size below does the right thing.  */
+        db->pc_next += 1;
+        return BC_HIT_TB;
+    } else {
+        return BC_MISS;
+    }
+}
+
 /* generate intermediate code for basic block 'tb'.  */
 void gen_intermediate_code(CPUState *cpu, TranslationBlock *tb)
 {
     CPUX86State *env = cpu->env_ptr;
     DisasContext dc1, *dc = &dc1;
     DisasContextBase *db = &dc1.base;
+    CPUBreakpoint *bp;
     int num_insns;
     int max_insns;
 
@@ -8507,18 +8528,21 @@ void gen_intermediate_code(CPUState *cpu, TranslationBlock *tb)
         i386_trblock_insn_start(db, cpu);
         num_insns++;
 
-        /* If RF is set, suppress an internally generated breakpoint.  */
-        if (unlikely(cpu_breakpoint_test(cpu, db->pc_next,
-                                         tb->flags & HF_RF_MASK
-                                         ? BP_GDB : BP_ANY))) {
-            gen_debug(dc, db->pc_next - dc->cs_base);
-            /* The address covered by the breakpoint must be included in
-               [tb->pc, tb->pc + tb->size) in order to for it to be
-               properly cleared -- thus we increment the PC here so that
-               the logic setting tb->size below does the right thing.  */
-            db->pc_next += 1;
-            goto done_generating;
-        }
+        bp = NULL;
+        do {
+            bp = cpu_breakpoint_get(cpu, db->pc_next, bp);
+            if (unlikely(bp)) {
+                BreakpointCheckType bp_check = i386_trblock_breakpoint_check(
+                    db, cpu, bp);
+                if (bp_check == BC_HIT_TB) {
+                    goto done_generating;
+                } else {
+                    error_report("Unexpected BreakpointCheckType %d", bp_check);
+                    abort();
+                }
+            }
+        } while (bp != NULL);
+
         if (num_insns == max_insns && (tb->cflags & CF_LAST_IO)) {
             gen_io_start(cpu_env);
         }
