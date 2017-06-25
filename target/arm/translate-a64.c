@@ -11261,6 +11261,14 @@ static void aarch64_trblock_init_disas_context(DisasContextBase *db,
     init_tmp_a64_array(dc);
 }
 
+static void aarch64_trblock_insn_start(DisasContextBase *db, CPUState *cpu)
+{
+    DisasContext *dc = container_of(db, DisasContext, base);
+
+    dc->insn_start_idx = tcg_op_buf_count();
+    tcg_gen_insn_start(dc->pc, 0, 0);
+}
+
 void gen_intermediate_code_a64(DisasContextBase *db, ARMCPU *cpu,
                                TranslationBlock *tb)
 {
@@ -11293,8 +11301,7 @@ void gen_intermediate_code_a64(DisasContextBase *db, ARMCPU *cpu,
 
     do {
         db->num_insns++;
-        dc->insn_start_idx = tcg_op_buf_count();
-        tcg_gen_insn_start(dc->pc, 0, 0);
+        aarch64_trblock_insn_start(db, cs);
 
         if (unlikely(!QTAILQ_EMPTY(&cs->breakpoints))) {
             CPUBreakpoint *bp;
