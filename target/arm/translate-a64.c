@@ -11389,6 +11389,9 @@ static void aarch64_trblock_tb_stop(DisasContextBase *db, CPUState *cpu)
             break;
         }
     }
+
+    /* Functions above can change dc->pc, so re-align db->pc_next */
+    db->pc_next = dc->pc;
 }
 
 static int aarch64_trblock_disas_flags(const DisasContextBase *db)
@@ -11398,103 +11401,17 @@ static int aarch64_trblock_disas_flags(const DisasContextBase *db)
     return 4 | (bswap_code(dc->sctlr_b) ? 2 : 0);
 }
 
-void gen_intermediate_code_a64(DisasContextBase *db, ARMCPU *cpu,
+static TranslatorOps aarch64_translator_ops = {
+    .init_disas_context = aarch64_trblock_init_disas_context,
+    .insn_start = aarch64_trblock_insn_start,
+    .breakpoint_check = aarch64_trblock_breakpoint_check,
+    .disas_insn = aarch64_trblock_disas_insn,
+    .tb_stop = aarch64_trblock_tb_stop,
+    .disas_flags = aarch64_trblock_disas_flags,
+};
+
+void gen_intermediate_code_a64(DisasContextBase *db, CPUState *cpu,
                                TranslationBlock *tb)
 {
-    CPUState *cs = CPU(cpu);
-    DisasContext *dc = container_of(db, DisasContext, base);
-    int max_insns;
-    CPUBreakpoint *bp;
-
-    db->tb = tb;
-    db->pc_first = tb->pc;
-    db->pc_next = db->pc_first;
-    db->is_jmp = DISAS_NEXT;
-    db->num_insns = 0;
-    db->singlestep_enabled = cs->singlestep_enabled;
-    aarch64_trblock_init_disas_context(db, cs);
-
-    max_insns = tb->cflags & CF_COUNT_MASK;
-    if (max_insns == 0) {
-        max_insns = CF_COUNT_MASK;
-    }
-    if (max_insns > TCG_MAX_INSNS) {
-        max_insns = TCG_MAX_INSNS;
-    }
-
-    gen_tb_start(tb, cpu_env);
-
-    tcg_clear_temp_count();
-
-    do {
-        db->num_insns++;
-        aarch64_trblock_insn_start(db, cs);
-
-        bp = NULL;
-        do {
-            bp = cpu_breakpoint_get(cs, db->pc_next, bp);
-            if (unlikely(bp)) {
-                BreakpointCheckType bp_check =
-                    aarch64_trblock_breakpoint_check(db, cs, bp);
-                if (bp_check == BC_HIT_INSN) {
-                    /* Hit, keep translating */
-                    /*
-                     * TODO: if we're never going to have more than one BP in a
-                     *       single address, we can simply use a bool here.
-                     */
-                    break;
-                } else {
-                    goto done_generating;
-                }
-            }
-        } while (bp != NULL);
-
-        if (db->num_insns == max_insns && (tb->cflags & CF_LAST_IO)) {
-            gen_io_start(cpu_env);
-        }
-
-        db->pc_next = aarch64_trblock_disas_insn(db, cs);
-
-        if (tcg_check_temp_count()) {
-            fprintf(stderr, "TCG temporary leak before "TARGET_FMT_lx"\n",
-                    dc->pc);
-        }
-
-        if (!db->is_jmp && (tcg_op_buf_full() || cs->singlestep_enabled ||
-                            singlestep || db->num_insns >= max_insns)) {
-            db->is_jmp = DJ_TOO_MANY;
-        }
-
-        /* Translation stops when a conditional branch is encountered.
-         * Otherwise the subsequent code could get translated several times.
-         * Also stop translation when a page boundary is reached.  This
-         * ensures prefetch aborts occur at the right place.
-         */
-    } while (!db->is_jmp);
-
-    aarch64_trblock_tb_stop(db, cs);
-
-    if (tb->cflags & CF_LAST_IO) {
-        gen_io_end(cpu_env);
-    }
-
-
-done_generating:
-    gen_tb_end(tb, db->num_insns);
-
-#ifdef DEBUG_DISAS
-    if (qemu_loglevel_mask(CPU_LOG_TB_IN_ASM) &&
-        qemu_log_in_addr_range(db->pc_first)) {
-        int disas_flags = aarch64_trblock_disas_flags(db);
-        qemu_log_lock();
-        qemu_log("----------------\n");
-        qemu_log("IN: %s\n", lookup_symbol(db->pc_first));
-        log_target_disas(cs, db->pc_first, dc->pc - db->pc_first,
-                         disas_flags);
-        qemu_log("\n");
-        qemu_log_unlock();
-    }
-#endif
-    tb->size = dc->pc - db->pc_first;
-    tb->icount = db->num_insns;
+    translate_block(&aarch64_translator_ops, db, cpu, &cpu_env, tb);
 }

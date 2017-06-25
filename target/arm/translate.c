@@ -12177,6 +12177,9 @@ static void arm_trblock_tb_stop(DisasContextBase *db, CPUState *cpu)
             gen_goto_tb(dc, 1, dc->pc);
         }
     }
+
+    /* Functions above can change dc->pc, so re-align db->pc_next */
+    db->pc_next = dc->pc;
 }
 
 static int arm_trblock_disas_flags(const DisasContextBase *db)
@@ -12186,15 +12189,24 @@ static int arm_trblock_disas_flags(const DisasContextBase *db)
     return dc->thumb | (dc->sctlr_b << 1);
 }
 
+static TranslatorOps arm_translator_ops = {
+    .init_disas_context = arm_trblock_init_disas_context,
+    .init_globals = arm_trblock_init_globals,
+    .tb_start = arm_trblock_tb_start,
+    .insn_start = arm_trblock_insn_start,
+    .breakpoint_check = arm_trblock_breakpoint_check,
+    .disas_insn = arm_trblock_disas_insn,
+    .tb_stop = arm_trblock_tb_stop,
+    .disas_flags = arm_trblock_disas_flags,
+};
+
+#include "qemu/error-report.h"
+
 /* generate intermediate code for basic block 'tb'.  */
 void gen_intermediate_code(CPUState *cpu, TranslationBlock *tb)
 {
-    CPUARMState *env = cpu->env_ptr;
-    ARMCPU *arm_cpu = arm_env_get_cpu(env);
     DisasContext dc1, *dc = &dc1;
     DisasContextBase *db = &dc->base;
-    int max_insns;
-    CPUBreakpoint *bp;
 
     /* generate intermediate code */
 
@@ -12202,97 +12214,11 @@ void gen_intermediate_code(CPUState *cpu, TranslationBlock *tb)
      * the A32/T32 complexity to do with conditional execution/IT blocks/etc.
      */
     if (ARM_TBFLAG_AARCH64_STATE(tb->flags)) {
-        gen_intermediate_code_a64(db, arm_cpu, tb);
+        gen_intermediate_code_a64(db, cpu, tb);
         return;
+    } else {
+        translate_block(&arm_translator_ops, db, cpu, &cpu_env, tb);
     }
-
-    db->tb = tb;
-    db->pc_first = tb->pc;
-    db->pc_next = db->pc_first;
-    db->is_jmp = DISAS_NEXT;
-    db->num_insns = 0;
-    db->singlestep_enabled = cpu->singlestep_enabled;
-    arm_trblock_init_disas_context(db, cpu);
-
-
-    arm_trblock_init_globals(db, cpu);
-    max_insns = tb->cflags & CF_COUNT_MASK;
-    if (max_insns == 0) {
-        max_insns = CF_COUNT_MASK;
-    }
-    if (max_insns > TCG_MAX_INSNS) {
-        max_insns = TCG_MAX_INSNS;
-    }
-
-    gen_tb_start(tb, cpu_env);
-
-    tcg_clear_temp_count();
-    arm_trblock_tb_start(db, cpu);
-
-    do {
-        db->num_insns++;
-        arm_trblock_insn_start(db, cpu);
-
-        bp = NULL;
-        do {
-            bp = cpu_breakpoint_get(cpu, db->pc_next, bp);
-            if (unlikely(bp)) {
-                BreakpointCheckType bp_check = arm_trblock_breakpoint_check(
-                    db, cpu, bp);
-                if (bp_check == BC_HIT_INSN) {
-                    /* Hit, keep translating */
-                    /*
-                     * TODO: if we're never going to have more than one BP in a
-                     *       single address, we can simply use a bool here.
-                     */
-                    break;
-                } else {
-                    goto done_generating;
-                }
-            }
-        } while (bp != NULL);
-
-        if (db->num_insns == max_insns && (tb->cflags & CF_LAST_IO)) {
-            gen_io_start(cpu_env);
-        }
-
-        db->pc_next = arm_trblock_disas_insn(db, cpu);
-
-        if (tcg_check_temp_count()) {
-            fprintf(stderr, "TCG temporary leak before "TARGET_FMT_lx"\n",
-                    dc->pc);
-        }
-
-        if (!db->is_jmp && (tcg_op_buf_full() || singlestep ||
-                            db->num_insns >= max_insns)) {
-            db->is_jmp = DJ_TOO_MANY;
-        }
-    } while (!db->is_jmp);
-
-    arm_trblock_tb_stop(db, cpu);
-
-    if (tb->cflags & CF_LAST_IO) {
-        gen_io_end(cpu_env);
-    }
-
-done_generating:
-    gen_tb_end(tb, db->num_insns);
-
-#ifdef DEBUG_DISAS
-    if (qemu_loglevel_mask(CPU_LOG_TB_IN_ASM) &&
-        qemu_log_in_addr_range(db->pc_first)) {
-        int disas_flags = arm_trblock_disas_flags(db);
-        qemu_log_lock();
-        qemu_log("----------------\n");
-        qemu_log("IN: %s\n", lookup_symbol(db->pc_first));
-        log_target_disas(cpu, db->pc_first, dc->pc - db->pc_first,
-                         disas_flags);
-        qemu_log("\n");
-        qemu_log_unlock();
-    }
-#endif
-    tb->size = dc->pc - db->pc_first;
-    tb->icount = db->num_insns;
 }
 
 static const char *cpu_mode_names[16] = {

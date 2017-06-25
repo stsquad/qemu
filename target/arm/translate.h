@@ -152,7 +152,7 @@ static void disas_set_insn_syndrome(DisasContext *s, uint32_t syn)
 
 #ifdef TARGET_AARCH64
 void a64_translate_init(void);
-void gen_intermediate_code_a64(DisasContextBase *db, ARMCPU *cpu,
+void gen_intermediate_code_a64(DisasContextBase *db, CPUState *cpu,
                                TranslationBlock *tb);
 void gen_a64_set_pc_im(uint64_t val);
 void aarch64_cpu_dump_state(CPUState *cs, FILE *f,
@@ -162,8 +162,8 @@ static inline void a64_translate_init(void)
 {
 }
 
-static inline void gen_intermediate_code_a64(DisasContextBase *db, ARMCPU *cpu,
-                                             TranslationBlock *tb)
+static inline void gen_intermediate_code_a64(
+    DisasContextBase *db, CPUState *cpu, TranslationBlock *tb)
 {
 }
 
