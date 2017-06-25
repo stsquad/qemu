@@ -8396,21 +8396,12 @@ void tcg_x86_init(void)
     }
 }
 
-/* generate intermediate code for basic block 'tb'.  */
-void gen_intermediate_code(CPUState *cpu, TranslationBlock *tb)
+static void i386_trblock_init_disas_context(DisasContextBase *db, CPUState *cpu)
 {
+    DisasContext *dc = container_of(db, DisasContext, base);
     CPUX86State *env = cpu->env_ptr;
-    DisasContext dc1, *dc = &dc1;
-    DisasContextBase *db = &dc1.base;
-    uint32_t flags;
-    target_ulong cs_base;
-    int num_insns;
-    int max_insns;
-
-    /* generate intermediate code */
-    db->pc_first = tb->pc;
-    cs_base = tb->cs_base;
-    flags = tb->flags;
+    uint32_t flags = db->tb->flags;
+    target_ulong cs_base = db->tb->cs_base;
 
     dc->pe = (flags >> HF_PE_SHIFT) & 1;
     dc->code32 = (flags >> HF_CS32_SHIFT) & 1;
@@ -8421,11 +8412,9 @@ void gen_intermediate_code(CPUState *cpu, TranslationBlock *tb)
     dc->cpl = (flags >> HF_CPL_SHIFT) & 3;
     dc->iopl = (flags >> IOPL_SHIFT) & 3;
     dc->tf = (flags >> TF_SHIFT) & 1;
-    db->singlestep_enabled = cpu->singlestep_enabled;
     dc->cc_op = CC_OP_DYNAMIC;
     dc->cc_op_dirty = false;
     dc->cs_base = cs_base;
-    db->tb = tb;
     dc->popl_esp_hack = 0;
     /* select memory access functions */
     dc->mem_index = 0;
@@ -8455,12 +8444,30 @@ void gen_intermediate_code(CPUState *cpu, TranslationBlock *tb)
        record/replay modes and there will always be an
        additional step for ecx=0 when icount is enabled.
      */
-    dc->repz_opt = !dc->jmp_opt && !(tb->cflags & CF_USE_ICOUNT);
+    dc->repz_opt = !dc->jmp_opt && !(db->tb->cflags & CF_USE_ICOUNT);
 #if 0
     /* check addseg logic */
     if (!dc->addseg && (dc->vm86 || !dc->pe || !dc->code32))
         printf("ERROR addseg\n");
 #endif
+}
+
+/* generate intermediate code for basic block 'tb'.  */
+void gen_intermediate_code(CPUState *cpu, TranslationBlock *tb)
+{
+    CPUX86State *env = cpu->env_ptr;
+    DisasContext dc1, *dc = &dc1;
+    DisasContextBase *db = &dc1.base;
+    int num_insns;
+    int max_insns;
+
+    /* generate intermediate code */
+    db->singlestep_enabled = cpu->singlestep_enabled;
+    db->tb = tb;
+    db->is_jmp = DISAS_NEXT;
+    db->pc_first = tb->pc;
+    db->pc_next = db->pc_first;
+    i386_trblock_init_disas_context(db, cpu);
 
     cpu_T0 = tcg_temp_new();
     cpu_T1 = tcg_temp_new();
@@ -8475,8 +8482,6 @@ void gen_intermediate_code(CPUState *cpu, TranslationBlock *tb)
     cpu_ptr1 = tcg_temp_new_ptr();
     cpu_cc_srcT = tcg_temp_local_new();
 
-    db->is_jmp = DISAS_NEXT;
-    db->pc_next = db->pc_first;
     num_insns = 0;
     max_insns = tb->cflags & CF_COUNT_MASK;
     if (max_insns == 0) {
@@ -8518,7 +8523,7 @@ void gen_intermediate_code(CPUState *cpu, TranslationBlock *tb)
            the flag and abort the translation to give the irqs a
            change to be happen */
         if (dc->tf || db->singlestep_enabled ||
-            (flags & HF_INHIBIT_IRQ_MASK)) {
+            (db->tb->flags & HF_INHIBIT_IRQ_MASK)) {
             gen_jmp_im(db->pc_next - dc->cs_base);
             gen_eob(dc);
             break;
