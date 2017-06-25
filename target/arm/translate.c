@@ -11954,6 +11954,33 @@ static void arm_trblock_insn_start(DisasContextBase *db, CPUState *cpu)
 #endif
 }
 
+static BreakpointCheckType arm_trblock_breakpoint_check(DisasContextBase *db,
+                                                        CPUState *cpu,
+                                                        const CPUBreakpoint *bp)
+{
+    DisasContext *dc = container_of(db, DisasContext, base);
+
+    if (bp->flags & BP_CPU) {
+        gen_set_condexec(dc);
+        gen_set_pc_im(dc, dc->pc);
+        gen_helper_check_breakpoints(cpu_env);
+        /* End the TB early; it's likely not going to be executed */
+        db->is_jmp = DJ_UPDATE;
+        return BC_HIT_INSN;
+    } else {
+        gen_exception_internal_insn(dc, 0, EXCP_DEBUG);
+        /* The address covered by the breakpoint must be
+           included in [tb->pc, tb->pc + tb->size) in order
+           to for it to be properly cleared -- thus we
+           increment the PC here so that the logic setting
+           tb->size below does the right thing.  */
+        /* TODO: Advance PC by correct instruction length to
+         * avoid disassembler error messages */
+        dc->pc += 2;
+        return BC_HIT_TB;
+    }
+}
+
 /* generate intermediate code for basic block 'tb'.  */
 void gen_intermediate_code(CPUState *cpu, TranslationBlock *tb)
 {
@@ -11964,6 +11991,7 @@ void gen_intermediate_code(CPUState *cpu, TranslationBlock *tb)
     target_ulong next_page_start;
     int max_insns;
     bool end_of_page;
+    CPUBreakpoint *bp;
 
     /* generate intermediate code */
 
@@ -12003,32 +12031,24 @@ void gen_intermediate_code(CPUState *cpu, TranslationBlock *tb)
         db->num_insns++;
         arm_trblock_insn_start(db, cpu);
 
-        if (unlikely(!QTAILQ_EMPTY(&cpu->breakpoints))) {
-            CPUBreakpoint *bp;
-            QTAILQ_FOREACH(bp, &cpu->breakpoints, entry) {
-                if (bp->pc == dc->pc) {
-                    if (bp->flags & BP_CPU) {
-                        gen_set_condexec(dc);
-                        gen_set_pc_im(dc, dc->pc);
-                        gen_helper_check_breakpoints(cpu_env);
-                        /* End the TB early; it's likely not going to be executed */
-                        db->is_jmp = DJ_UPDATE;
-                    } else {
-                        gen_exception_internal_insn(dc, 0, EXCP_DEBUG);
-                        /* The address covered by the breakpoint must be
-                           included in [tb->pc, tb->pc + tb->size) in order
-                           to for it to be properly cleared -- thus we
-                           increment the PC here so that the logic setting
-                           tb->size below does the right thing.  */
-                        /* TODO: Advance PC by correct instruction length to
-                         * avoid disassembler error messages */
-                        dc->pc += 2;
-                        goto done_generating;
-                    }
+        bp = NULL;
+        do {
+            bp = cpu_breakpoint_get(cpu, db->pc_next, bp);
+            if (unlikely(bp)) {
+                BreakpointCheckType bp_check = arm_trblock_breakpoint_check(
+                    db, cpu, bp);
+                if (bp_check == BC_HIT_INSN) {
+                    /* Hit, keep translating */
+                    /*
+                     * TODO: if we're never going to have more than one BP in a
+                     *       single address, we can simply use a bool here.
+                     */
                     break;
+                } else {
+                    goto done_generating;
                 }
             }
-        }
+        } while (bp != NULL);
 
         if (db->num_insns == max_insns && (tb->cflags & CF_LAST_IO)) {
             gen_io_start(cpu_env);
