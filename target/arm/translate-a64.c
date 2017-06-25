@@ -11258,6 +11258,8 @@ static void aarch64_trblock_init_disas_context(DisasContextBase *db,
     dc->is_ldex = false;
     dc->ss_same_el = (arm_debug_target_el(env) == dc->current_el);
 
+    dc->next_page_start = (db->pc_first & TARGET_PAGE_MASK) + TARGET_PAGE_SIZE;
+
     init_tmp_a64_array(dc);
 }
 
@@ -11292,13 +11294,46 @@ static BreakpointCheckType aarch64_trblock_breakpoint_check(
     }
 }
 
+static target_ulong aarch64_trblock_disas_insn(DisasContextBase *db,
+                                               CPUState *cpu)
+{
+    DisasContext *dc = container_of(db, DisasContext, base);
+    CPUARMState *env = cpu->env_ptr;
+
+
+    if (dc->ss_active && !dc->pstate_ss) {
+        /* Singlestep state is Active-pending.
+         * If we're in this state at the start of a TB then either
+         *  a) we just took an exception to an EL which is being debugged
+         *     and this is the first insn in the exception handler
+         *  b) debug exceptions were masked and we just unmasked them
+         *     without changing EL (eg by clearing PSTATE.D)
+         * In either case we're going to take a swstep exception in the
+         * "did not step an insn" case, and so the syndrome ISV and EX
+         * bits should be zero.
+         */
+        assert(db->num_insns == 1);
+        gen_exception(EXCP_UDEF, syn_swstep(dc->ss_same_el, 0, 0),
+                      default_exception_el(dc));
+        db->is_jmp = DJ_EXC;
+    } else {
+        disas_a64_insn(env, dc);
+    }
+
+    if (dc->ss_active) {
+        db->is_jmp = DJ_SS;
+    } else if (dc->pc >= dc->next_page_start) {
+        db->is_jmp = DJ_PAGE_CROSS;
+    }
+
+    return dc->pc;
+}
+
 void gen_intermediate_code_a64(DisasContextBase *db, ARMCPU *cpu,
                                TranslationBlock *tb)
 {
     CPUState *cs = CPU(cpu);
-    CPUARMState *env = &cpu->env;
     DisasContext *dc = container_of(db, DisasContext, base);
-    target_ulong next_page_start;
     int max_insns;
     CPUBreakpoint *bp;
 
@@ -11310,7 +11345,6 @@ void gen_intermediate_code_a64(DisasContextBase *db, ARMCPU *cpu,
     db->singlestep_enabled = cs->singlestep_enabled;
     aarch64_trblock_init_disas_context(db, cs);
 
-    next_page_start = (db->pc_first & TARGET_PAGE_MASK) + TARGET_PAGE_SIZE;
     max_insns = tb->cflags & CF_COUNT_MASK;
     if (max_insns == 0) {
         max_insns = CF_COUNT_MASK;
@@ -11350,29 +11384,16 @@ void gen_intermediate_code_a64(DisasContextBase *db, ARMCPU *cpu,
             gen_io_start(cpu_env);
         }
 
-        if (dc->ss_active && !dc->pstate_ss) {
-            /* Singlestep state is Active-pending.
-             * If we're in this state at the start of a TB then either
-             *  a) we just took an exception to an EL which is being debugged
-             *     and this is the first insn in the exception handler
-             *  b) debug exceptions were masked and we just unmasked them
-             *     without changing EL (eg by clearing PSTATE.D)
-             * In either case we're going to take a swstep exception in the
-             * "did not step an insn" case, and so the syndrome ISV and EX
-             * bits should be zero.
-             */
-            assert(db->num_insns == 1);
-            gen_exception(EXCP_UDEF, syn_swstep(dc->ss_same_el, 0, 0),
-                          default_exception_el(dc));
-            db->is_jmp = DJ_EXC;
-            break;
-        }
-
-        disas_a64_insn(env, dc);
+        db->pc_next = aarch64_trblock_disas_insn(db, cs);
 
         if (tcg_check_temp_count()) {
             fprintf(stderr, "TCG temporary leak before "TARGET_FMT_lx"\n",
                     dc->pc);
+        }
+
+        if (!db->is_jmp && (tcg_op_buf_full() || cs->singlestep_enabled ||
+                            singlestep || db->num_insns >= max_insns)) {
+            db->is_jmp = DJ_TOO_MANY;
         }
 
         /* Translation stops when a conditional branch is encountered.
@@ -11380,12 +11401,7 @@ void gen_intermediate_code_a64(DisasContextBase *db, ARMCPU *cpu,
          * Also stop translation when a page boundary is reached.  This
          * ensures prefetch aborts occur at the right place.
          */
-    } while (!db->is_jmp && !tcg_op_buf_full() &&
-             !cs->singlestep_enabled &&
-             !singlestep &&
-             !dc->ss_active &&
-             dc->pc < next_page_start &&
-             db->num_insns < max_insns);
+    } while (!db->is_jmp);
 
     if (tb->cflags & CF_LAST_IO) {
         gen_io_end(cpu_env);
@@ -11412,6 +11428,7 @@ void gen_intermediate_code_a64(DisasContextBase *db, ARMCPU *cpu,
         unsigned int is_jmp = (unsigned int)db->is_jmp;
         switch (is_jmp) {
         case DJ_NEXT:
+        case DJ_TOO_MANY:
             gen_goto_tb(dc, 1, dc->pc);
             break;
         default:
