@@ -8468,6 +8468,12 @@ static void i386_trblock_init_globals(DisasContextBase *db, CPUState *cpu)
     cpu_cc_srcT = tcg_temp_local_new();
 }
 
+static void i386_trblock_insn_start(DisasContextBase *db, CPUState *cpu)
+{
+    DisasContext *dc = container_of(db, DisasContext, base);
+    tcg_gen_insn_start(db->pc_next, dc->cc_op);
+}
+
 /* generate intermediate code for basic block 'tb'.  */
 void gen_intermediate_code(CPUState *cpu, TranslationBlock *tb)
 {
@@ -8498,7 +8504,7 @@ void gen_intermediate_code(CPUState *cpu, TranslationBlock *tb)
 
     gen_tb_start(tb, cpu_env);
     for(;;) {
-        tcg_gen_insn_start(db->pc_next, dc->cc_op);
+        i386_trblock_insn_start(db, cpu);
         num_insns++;
 
         /* If RF is set, suppress an internally generated breakpoint.  */
