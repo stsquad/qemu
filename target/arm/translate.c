@@ -217,6 +217,8 @@ static inline TCGv_i32 load_reg(DisasContext *s, int reg)
    marked as dead.  */
 static void store_reg(DisasContext *s, int reg, TCGv_i32 var)
 {
+    DisasContextBase *b = &s->base;
+
     if (reg == 15) {
         /* In Thumb mode, we must ignore bit 0.
          * In ARM mode, for ARMv4 and ARMv5, it is UNPREDICTABLE if bits [1:0]
@@ -224,7 +226,7 @@ static void store_reg(DisasContext *s, int reg, TCGv_i32 var)
          * We choose to ignore [1:0] in ARM mode for all architecture versions.
          */
         tcg_gen_andi_i32(var, var, s->thumb ? ~1 : ~3);
-        s->is_jmp = DJ_JUMP;
+        b->is_jmp = DJ_JUMP;
     }
     tcg_gen_mov_i32(cpu_R[reg], var);
     tcg_temp_free_i32(var);
@@ -285,6 +287,8 @@ static void gen_ss_advance(DisasContext *s)
 
 static void gen_step_complete_exception(DisasContext *s)
 {
+    DisasContextBase *b = &s->base;
+
     /* We just completed step of an insn. Move from Active-not-pending
      * to Active-pending, and then also take the swstep exception.
      * This corresponds to making the (IMPDEF) choice to prioritize
@@ -297,7 +301,7 @@ static void gen_step_complete_exception(DisasContext *s)
     gen_ss_advance(s);
     gen_exception(EXCP_UDEF, syn_swstep(s->ss_same_el, 1, s->is_ldex),
                   default_exception_el(s));
-    s->is_jmp = DJ_EXC;
+    b->is_jmp = DJ_EXC;
 }
 
 static void gen_singlestep_exception(DisasContext *s)
@@ -315,13 +319,15 @@ static void gen_singlestep_exception(DisasContext *s)
 
 static inline bool is_singlestepping(DisasContext *s)
 {
+    DisasContextBase *b = &s->base;
+
     /* Return true if we are singlestepping either because of
      * architectural singlestep or QEMU gdbstub singlestep. This does
      * not include the command line '-singlestep' mode which is rather
      * misnamed as it only means "one instruction per TB" and doesn't
      * affect the code we generate.
      */
-    return s->singlestep_enabled || s->ss_active;
+    return b->singlestep_enabled || s->ss_active;
 }
 
 static void gen_smul_dual(TCGv_i32 a, TCGv_i32 b)
@@ -926,9 +932,10 @@ static inline void gen_set_pc_im(DisasContext *s, target_ulong val)
 /* Set PC and Thumb state from an immediate address.  */
 static inline void gen_bx_im(DisasContext *s, uint32_t addr)
 {
+    DisasContextBase *b = &s->base;
     TCGv_i32 tmp;
 
-    s->is_jmp = DJ_JUMP;
+    b->is_jmp = DJ_JUMP;
     if (s->thumb != (addr & 1)) {
         tmp = tcg_temp_new_i32();
         tcg_gen_movi_i32(tmp, addr & 1);
@@ -941,7 +948,9 @@ static inline void gen_bx_im(DisasContext *s, uint32_t addr)
 /* Set PC and Thumb state from var.  var is marked as dead.  */
 static inline void gen_bx(DisasContext *s, TCGv_i32 var)
 {
-    s->is_jmp = DJ_JUMP;
+    DisasContextBase *b = &s->base;
+
+    b->is_jmp = DJ_JUMP;
     tcg_gen_andi_i32(cpu_R[15], var, ~1);
     tcg_gen_andi_i32(var, var, 1);
     store_cpu_field(var, thumb);
@@ -954,12 +963,14 @@ static inline void gen_bx(DisasContext *s, TCGv_i32 var)
  */
 static inline void gen_bx_excret(DisasContext *s, TCGv_i32 var)
 {
+    DisasContextBase *b = &s->base;
+
     /* Generate the same code here as for a simple bx, but flag via
-     * s->is_jmp that we need to do the rest of the work later.
+     * b->is_jmp that we need to do the rest of the work later.
      */
     gen_bx(s, var);
     if (s->v7m_handler_mode && arm_dc_feature(s, ARM_FEATURE_M)) {
-        s->is_jmp = DJ_BX_EXCRET;
+        b->is_jmp = DJ_BX_EXCRET;
     }
 }
 
@@ -1146,6 +1157,8 @@ DO_GEN_ST(32, MO_UL)
 
 static inline void gen_hvc(DisasContext *s, int imm16)
 {
+    DisasContextBase *b = &s->base;
+
     /* The pre HVC helper handles cases when HVC gets trapped
      * as an undefined insn by runtime configuration (ie before
      * the insn really executes).
@@ -1159,11 +1172,12 @@ static inline void gen_hvc(DisasContext *s, int imm16)
      */
     s->svc_imm = imm16;
     gen_set_pc_im(s, s->pc);
-    s->is_jmp = DJ_HVC;
+    b->is_jmp = DJ_HVC;
 }
 
 static inline void gen_smc(DisasContext *s)
 {
+    DisasContextBase *b = &s->base;
     /* As with HVC, we may take an exception either before or after
      * the insn executes.
      */
@@ -1174,31 +1188,37 @@ static inline void gen_smc(DisasContext *s)
     gen_helper_pre_smc(cpu_env, tmp);
     tcg_temp_free_i32(tmp);
     gen_set_pc_im(s, s->pc);
-    s->is_jmp = DJ_SMC;
+    b->is_jmp = DJ_SMC;
 }
 
 static void gen_exception_internal_insn(DisasContext *s, int offset, int excp)
 {
+    DisasContextBase *b = &s->base;
+
     gen_set_condexec(s);
     gen_set_pc_im(s, s->pc - offset);
     gen_exception_internal(excp);
-    s->is_jmp = DJ_EXC;
+    b->is_jmp = DJ_EXC;
 }
 
 static void gen_exception_insn(DisasContext *s, int offset, int excp,
                                int syn, uint32_t target_el)
 {
+    DisasContextBase *b = &s->base;
+
     gen_set_condexec(s);
     gen_set_pc_im(s, s->pc - offset);
     gen_exception(excp, syn, target_el);
-    s->is_jmp = DJ_EXC;
+    b->is_jmp = DJ_EXC;
 }
 
 /* Force a TB lookup after an instruction that changes the CPU state.  */
 static inline void gen_lookup_tb(DisasContext *s)
 {
+    DisasContextBase *b = &s->base;
+
     tcg_gen_movi_i32(cpu_R[15], s->pc & ~1);
-    s->is_jmp = DJ_EXIT;
+    b->is_jmp = DJ_EXIT;
 }
 
 static inline void gen_hlt(DisasContext *s, int imm)
@@ -4143,7 +4163,9 @@ static int disas_vfp_insn(DisasContext *s, uint32_t insn)
 static inline bool use_goto_tb(DisasContext *s, target_ulong dest)
 {
 #ifndef CONFIG_USER_ONLY
-    return (s->tb->pc & TARGET_PAGE_MASK) == (dest & TARGET_PAGE_MASK) ||
+    DisasContextBase *b = &s->base;
+
+    return (b->tb->pc & TARGET_PAGE_MASK) == (dest & TARGET_PAGE_MASK) ||
            ((s->pc - 1) & TARGET_PAGE_MASK) == (dest & TARGET_PAGE_MASK);
 #else
     return true;
@@ -4160,10 +4182,12 @@ static void gen_goto_ptr(void)
 
 static void gen_goto_tb(DisasContext *s, int n, target_ulong dest)
 {
+    DisasContextBase *b = &s->base;
+
     if (use_goto_tb(s, dest)) {
         tcg_gen_goto_tb(n);
         gen_set_pc_im(s, dest);
-        tcg_gen_exit_tb((uintptr_t)s->tb + n);
+        tcg_gen_exit_tb((uintptr_t)b->tb + n);
     } else {
         gen_set_pc_im(s, dest);
         gen_goto_ptr();
@@ -4172,6 +4196,8 @@ static void gen_goto_tb(DisasContext *s, int n, target_ulong dest)
 
 static inline void gen_jmp (DisasContext *s, uint32_t dest)
 {
+    DisasContextBase *b = &s->base;
+
     if (unlikely(is_singlestepping(s))) {
         /* An indirect jump so that we still trigger the debug exception.  */
         if (s->thumb)
@@ -4179,7 +4205,7 @@ static inline void gen_jmp (DisasContext *s, uint32_t dest)
         gen_bx_im(s, dest);
     } else {
         gen_goto_tb(s, 0, dest);
-        s->is_jmp = DJ_TB_JUMP;
+        b->is_jmp = DJ_TB_JUMP;
     }
 }
 
@@ -4413,6 +4439,7 @@ undef:
 
 static void gen_msr_banked(DisasContext *s, int r, int sysm, int rn)
 {
+    DisasContextBase *b = &s->base;
     TCGv_i32 tcg_reg, tcg_tgtmode, tcg_regno;
     int tgtmode = 0, regno = 0;
 
@@ -4430,11 +4457,12 @@ static void gen_msr_banked(DisasContext *s, int r, int sysm, int rn)
     tcg_temp_free_i32(tcg_tgtmode);
     tcg_temp_free_i32(tcg_regno);
     tcg_temp_free_i32(tcg_reg);
-    s->is_jmp = DJ_UPDATE;
+    b->is_jmp = DJ_UPDATE;
 }
 
 static void gen_mrs_banked(DisasContext *s, int r, int sysm, int rn)
 {
+    DisasContextBase *b = &s->base;
     TCGv_i32 tcg_reg, tcg_tgtmode, tcg_regno;
     int tgtmode = 0, regno = 0;
 
@@ -4452,7 +4480,7 @@ static void gen_mrs_banked(DisasContext *s, int r, int sysm, int rn)
     tcg_temp_free_i32(tcg_tgtmode);
     tcg_temp_free_i32(tcg_regno);
     store_reg(s, rn, tcg_reg);
-    s->is_jmp = DJ_UPDATE;
+    b->is_jmp = DJ_UPDATE;
 }
 
 /* Store value to PC as for an exception return (ie don't
@@ -4468,6 +4496,8 @@ static void store_pc_exc_ret(DisasContext *s, TCGv_i32 pc)
 /* Generate a v6 exception return.  Marks both values as dead.  */
 static void gen_rfe(DisasContext *s, TCGv_i32 pc, TCGv_i32 cpsr)
 {
+    DisasContextBase *b = &s->base;
+
     store_pc_exc_ret(s, pc);
     /* The cpsr_write_eret helper will mask the low bits of PC
      * appropriately depending on the new Thumb bit, so it must
@@ -4475,7 +4505,7 @@ static void gen_rfe(DisasContext *s, TCGv_i32 pc, TCGv_i32 cpsr)
      */
     gen_helper_cpsr_write_eret(cpu_env, cpsr);
     tcg_temp_free_i32(cpsr);
-    s->is_jmp = DJ_JUMP;
+    b->is_jmp = DJ_JUMP;
 }
 
 /* Generate an old-style exception return. Marks pc as dead. */
@@ -4494,21 +4524,23 @@ static void gen_exception_return(DisasContext *s, TCGv_i32 pc)
  */
 static void gen_nop_hint(DisasContext *s, int val)
 {
+    DisasContextBase *b = &s->base;
+
     switch (val) {
     case 1: /* yield */
         if (!parallel_cpus) {
             gen_set_pc_im(s, s->pc);
-            s->is_jmp = DJ_YIELD;
+            b->is_jmp = DJ_YIELD;
         }
         break;
     case 3: /* wfi */
         gen_set_pc_im(s, s->pc);
-        s->is_jmp = DJ_WFI;
+        b->is_jmp = DJ_WFI;
         break;
     case 2: /* wfe */
         if (!parallel_cpus) {
             gen_set_pc_im(s, s->pc);
-            s->is_jmp = DJ_WFE;
+            b->is_jmp = DJ_WFE;
         }
         break;
     case 4: /* sev */
@@ -7529,6 +7561,8 @@ static int disas_neon_data_insn(DisasContext *s, uint32_t insn)
 
 static int disas_coproc_insn(DisasContext *s, uint32_t insn)
 {
+    DisasContextBase *b = &s->base;
+
     int cpnum, is64, crn, crm, opc1, opc2, isread, rt, rt2;
     const ARMCPRegInfo *ri;
 
@@ -7647,13 +7681,13 @@ static int disas_coproc_insn(DisasContext *s, uint32_t insn)
                 return 1;
             }
             gen_set_pc_im(s, s->pc);
-            s->is_jmp = DJ_WFI;
+            b->is_jmp = DJ_WFI;
             return 0;
         default:
             break;
         }
 
-        if ((s->tb->cflags & CF_USE_ICOUNT) && (ri->type & ARM_CP_IO)) {
+        if ((b->tb->cflags & CF_USE_ICOUNT) && (ri->type & ARM_CP_IO)) {
             gen_io_start(cpu_env);
         }
 
@@ -7744,7 +7778,7 @@ static int disas_coproc_insn(DisasContext *s, uint32_t insn)
             }
         }
 
-        if ((s->tb->cflags & CF_USE_ICOUNT) && (ri->type & ARM_CP_IO)) {
+        if ((b->tb->cflags & CF_USE_ICOUNT) && (ri->type & ARM_CP_IO)) {
             /* I/O operations must end the TB here (whether read or write) */
             gen_io_end(cpu_env);
             gen_lookup_tb(s);
@@ -7946,6 +7980,7 @@ static void gen_store_exclusive(DisasContext *s, int rd, int rt, int rt2,
 static void gen_srs(DisasContext *s,
                     uint32_t mode, uint32_t amode, bool writeback)
 {
+    DisasContextBase *b = &s->base;
     int32_t offset;
     TCGv_i32 addr, tmp;
     bool undef = false;
@@ -8058,11 +8093,12 @@ static void gen_srs(DisasContext *s,
         tcg_temp_free_i32(tmp);
     }
     tcg_temp_free_i32(addr);
-    s->is_jmp = DJ_UPDATE;
+    b->is_jmp = DJ_UPDATE;
 }
 
 static void disas_arm_insn(DisasContext *s, unsigned int insn)
 {
+    DisasContextBase *b = &s->base;
     unsigned int cond, val, op1, i, shift, rm, rs, rn, rd, sh;
     TCGv_i32 tmp;
     TCGv_i32 tmp2;
@@ -8146,7 +8182,7 @@ static void disas_arm_insn(DisasContext *s, unsigned int insn)
             /* setend */
             if (((insn >> 9) & 1) != !!(s->be_data == MO_BE)) {
                 gen_helper_setend(cpu_env);
-                s->is_jmp = DJ_UPDATE;
+                b->is_jmp = DJ_UPDATE;
             }
             return;
         } else if ((insn & 0x0fffff00) == 0x057ff000) {
@@ -9519,7 +9555,7 @@ static void disas_arm_insn(DisasContext *s, unsigned int insn)
                     tmp = load_cpu_field(spsr);
                     gen_helper_cpsr_write_eret(cpu_env, tmp);
                     tcg_temp_free_i32(tmp);
-                    s->is_jmp = DJ_JUMP;
+                    b->is_jmp = DJ_JUMP;
                 }
             }
             break;
@@ -9557,7 +9593,7 @@ static void disas_arm_insn(DisasContext *s, unsigned int insn)
             /* swi */
             gen_set_pc_im(s, s->pc);
             s->svc_imm = extract32(insn, 0, 24);
-            s->is_jmp = DJ_SWI;
+            b->is_jmp = DJ_SWI;
             break;
         default:
         illegal_op:
@@ -11013,6 +11049,7 @@ illegal_op:
 
 static void disas_thumb_insn(CPUARMState *env, DisasContext *s)
 {
+    DisasContextBase *b = &s->base;
     uint32_t val, insn, op, rm, rn, rd, shift, cond;
     int32_t offset;
     int i;
@@ -11619,7 +11656,7 @@ static void disas_thumb_insn(CPUARMState *env, DisasContext *s)
                 ARCH(6);
                 if (((insn >> 3) & 1) != !!(s->be_data == MO_BE)) {
                     gen_helper_setend(cpu_env);
-                    s->is_jmp = DJ_UPDATE;
+                    b->is_jmp = DJ_UPDATE;
                 }
                 break;
             case 3:
@@ -11713,7 +11750,7 @@ static void disas_thumb_insn(CPUARMState *env, DisasContext *s)
             /* swi */
             gen_set_pc_im(s, s->pc);
             s->svc_imm = extract32(insn, 0, 8);
-            s->is_jmp = DJ_SWI;
+            b->is_jmp = DJ_SWI;
             break;
         }
         /* generate a conditional jump to next instruction */
@@ -11792,9 +11829,8 @@ void gen_intermediate_code(CPUState *cpu, TranslationBlock *tb)
     CPUARMState *env = cpu->env_ptr;
     ARMCPU *arm_cpu = arm_env_get_cpu(env);
     DisasContext dc1, *dc = &dc1;
-    target_ulong pc_start;
+    DisasContextBase *db = &dc->base;
     target_ulong next_page_start;
-    int num_insns;
     int max_insns;
     bool end_of_page;
 
@@ -11804,17 +11840,18 @@ void gen_intermediate_code(CPUState *cpu, TranslationBlock *tb)
      * the A32/T32 complexity to do with conditional execution/IT blocks/etc.
      */
     if (ARM_TBFLAG_AARCH64_STATE(tb->flags)) {
-        gen_intermediate_code_a64(arm_cpu, tb);
+        gen_intermediate_code_a64(db, arm_cpu, tb);
         return;
     }
 
-    pc_start = tb->pc;
+    db->tb = tb;
+    db->pc_first = tb->pc;
+    db->pc_next = db->pc_first;
+    db->is_jmp = DJ_NEXT;
+    db->num_insns = 0;
+    db->singlestep_enabled = cpu->singlestep_enabled;
 
-    dc->tb = tb;
-
-    dc->is_jmp = DJ_NEXT;
-    dc->pc = pc_start;
-    dc->singlestep_enabled = cpu->singlestep_enabled;
+    dc->pc = db->pc_first;
     dc->condjmp = 0;
 
     dc->aarch64 = 0;
@@ -11871,8 +11908,7 @@ void gen_intermediate_code(CPUState *cpu, TranslationBlock *tb)
     cpu_V1 = cpu_F1d;
     /* FIXME: cpu_M0 can probably be the same as cpu_V0.  */
     cpu_M0 = tcg_temp_new_i64();
-    next_page_start = (pc_start & TARGET_PAGE_MASK) + TARGET_PAGE_SIZE;
-    num_insns = 0;
+    next_page_start = (db->pc_first & TARGET_PAGE_MASK) + TARGET_PAGE_SIZE;
     max_insns = tb->cflags & CF_COUNT_MASK;
     if (max_insns == 0) {
         max_insns = CF_COUNT_MASK;
@@ -11924,11 +11960,11 @@ void gen_intermediate_code(CPUState *cpu, TranslationBlock *tb)
         store_cpu_field(tmp, condexec_bits);
       }
     do {
+        db->num_insns++;
         dc->insn_start_idx = tcg_op_buf_count();
         tcg_gen_insn_start(dc->pc,
                            (dc->condexec_cond << 4) | (dc->condexec_mask >> 1),
                            0);
-        num_insns++;
 
 #ifdef CONFIG_USER_ONLY
         /* Intercept jump to the magic kernel page.  */
@@ -11950,7 +11986,7 @@ void gen_intermediate_code(CPUState *cpu, TranslationBlock *tb)
                         gen_set_pc_im(dc, dc->pc);
                         gen_helper_check_breakpoints(cpu_env);
                         /* End the TB early; it's likely not going to be executed */
-                        dc->is_jmp = DJ_UPDATE;
+                        db->is_jmp = DJ_UPDATE;
                     } else {
                         gen_exception_internal_insn(dc, 0, EXCP_DEBUG);
                         /* The address covered by the breakpoint must be
@@ -11968,7 +12004,7 @@ void gen_intermediate_code(CPUState *cpu, TranslationBlock *tb)
             }
         }
 
-        if (num_insns == max_insns && (tb->cflags & CF_LAST_IO)) {
+        if (db->num_insns == max_insns && (tb->cflags & CF_LAST_IO)) {
             gen_io_start(cpu_env);
         }
 
@@ -11983,7 +12019,7 @@ void gen_intermediate_code(CPUState *cpu, TranslationBlock *tb)
              * "did not step an insn" case, and so the syndrome ISV and EX
              * bits should be zero.
              */
-            assert(num_insns == 1);
+            assert(db->num_insns == 1);
             gen_exception(EXCP_UDEF, syn_swstep(dc->ss_same_el, 0, 0),
                           default_exception_el(dc));
             goto done_generating;
@@ -12005,7 +12041,7 @@ void gen_intermediate_code(CPUState *cpu, TranslationBlock *tb)
             disas_arm_insn(dc, insn);
         }
 
-        if (dc->condjmp && !dc->is_jmp) {
+        if (dc->condjmp && !db->is_jmp) {
             gen_set_label(dc->condlabel);
             dc->condjmp = 0;
         }
@@ -12032,11 +12068,11 @@ void gen_intermediate_code(CPUState *cpu, TranslationBlock *tb)
         end_of_page = (dc->pc >= next_page_start) ||
             ((dc->pc >= next_page_start - 3) && insn_crosses_page(env, dc));
 
-    } while (!dc->is_jmp && !tcg_op_buf_full() &&
+    } while (!db->is_jmp && !tcg_op_buf_full() &&
              !is_singlestepping(dc) &&
              !singlestep &&
              !end_of_page &&
-             num_insns < max_insns);
+             db->num_insns < max_insns);
 
     if (tb->cflags & CF_LAST_IO) {
         if (dc->condjmp) {
@@ -12051,7 +12087,7 @@ void gen_intermediate_code(CPUState *cpu, TranslationBlock *tb)
        instruction was a conditional branch or trap, and the PC has
        already been written.  */
     gen_set_condexec(dc);
-    if (dc->is_jmp == DJ_BX_EXCRET) {
+    if (db->is_jmp == DJ_BX_EXCRET) {
         /* Exception return branches need some special case code at the
          * end of the TB, which is complex enough that it has to
          * handle the single-step vs not and the condition-failed
@@ -12059,8 +12095,10 @@ void gen_intermediate_code(CPUState *cpu, TranslationBlock *tb)
          */
         gen_bx_excret_final_code(dc);
     } else if (unlikely(is_singlestepping(dc))) {
+        /* Cast because target-specific values are not in generic enum */
+        unsigned int is_jmp = (unsigned int)db->is_jmp;
         /* Unconditional and "condition passed" instruction codepath. */
-        switch (dc->is_jmp) {
+        switch (is_jmp) {
         case DJ_SWI:
             gen_ss_advance(dc);
             gen_exception(EXCP_SWI, syn_aa32_svc(dc->svc_imm, dc->thumb),
@@ -12083,6 +12121,8 @@ void gen_intermediate_code(CPUState *cpu, TranslationBlock *tb)
             gen_singlestep_exception(dc);
         }
     } else {
+        /* Cast because target-specific values are not in generic enum */
+        unsigned int is_jmp = (unsigned int)db->is_jmp;
         /* While branches must always occur at the end of an IT block,
            there are a few other things that can cause us to terminate
            the TB in the middle of an IT block:
@@ -12091,7 +12131,7 @@ void gen_intermediate_code(CPUState *cpu, TranslationBlock *tb)
             - Hardware watchpoints.
            Hardware breakpoints have already been handled and skip this code.
          */
-        switch(dc->is_jmp) {
+        switch (is_jmp) {
         case DJ_NEXT:
             gen_goto_tb(dc, 1, dc->pc);
             break;
@@ -12148,22 +12188,22 @@ void gen_intermediate_code(CPUState *cpu, TranslationBlock *tb)
     }
 
 done_generating:
-    gen_tb_end(tb, num_insns);
+    gen_tb_end(tb, db->num_insns);
 
 #ifdef DEBUG_DISAS
     if (qemu_loglevel_mask(CPU_LOG_TB_IN_ASM) &&
-        qemu_log_in_addr_range(pc_start)) {
+        qemu_log_in_addr_range(db->pc_first)) {
         qemu_log_lock();
         qemu_log("----------------\n");
-        qemu_log("IN: %s\n", lookup_symbol(pc_start));
-        log_target_disas(cpu, pc_start, dc->pc - pc_start,
+        qemu_log("IN: %s\n", lookup_symbol(db->pc_first));
+        log_target_disas(cpu, db->pc_first, dc->pc - db->pc_first,
                          dc->thumb | (dc->sctlr_b << 1));
         qemu_log("\n");
         qemu_log_unlock();
     }
 #endif
-    tb->size = dc->pc - pc_start;
-    tb->icount = num_insns;
+    tb->size = dc->pc - db->pc_first;
+    tb->icount = db->num_insns;
 }
 
 static const char *cpu_mode_names[16] = {

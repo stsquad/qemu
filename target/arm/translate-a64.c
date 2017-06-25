@@ -302,17 +302,21 @@ static void gen_exception(int excp, uint32_t syndrome, uint32_t target_el)
 
 static void gen_exception_internal_insn(DisasContext *s, int offset, int excp)
 {
+    DisasContextBase *b = &s->base;
+
     gen_a64_set_pc_im(s->pc - offset);
     gen_exception_internal(excp);
-    s->is_jmp = DJ_EXC;
+    b->is_jmp = DJ_EXC;
 }
 
 static void gen_exception_insn(DisasContext *s, int offset, int excp,
                                uint32_t syndrome, uint32_t target_el)
 {
+    DisasContextBase *b = &s->base;
+
     gen_a64_set_pc_im(s->pc - offset);
     gen_exception(excp, syndrome, target_el);
-    s->is_jmp = DJ_EXC;
+    b->is_jmp = DJ_EXC;
 }
 
 static void gen_ss_advance(DisasContext *s)
@@ -328,6 +332,8 @@ static void gen_ss_advance(DisasContext *s)
 
 static void gen_step_complete_exception(DisasContext *s)
 {
+    DisasContextBase *b = &s->base;
+
     /* We just completed step of an insn. Move from Active-not-pending
      * to Active-pending, and then also take the swstep exception.
      * This corresponds to making the (IMPDEF) choice to prioritize
@@ -340,21 +346,23 @@ static void gen_step_complete_exception(DisasContext *s)
     gen_ss_advance(s);
     gen_exception(EXCP_UDEF, syn_swstep(s->ss_same_el, 1, s->is_ldex),
                   default_exception_el(s));
-    s->is_jmp = DJ_EXC;
+    b->is_jmp = DJ_EXC;
 }
 
 static inline bool use_goto_tb(DisasContext *s, int n, uint64_t dest)
 {
+    DisasContextBase *b = &s->base;
+
     /* No direct tb linking with singlestep (either QEMU's or the ARM
      * debug architecture kind) or deterministic io
      */
-    if (s->singlestep_enabled || s->ss_active || (s->tb->cflags & CF_LAST_IO)) {
+    if (b->singlestep_enabled || s->ss_active || (b->tb->cflags & CF_LAST_IO)) {
         return false;
     }
 
 #ifndef CONFIG_USER_ONLY
     /* Only link tbs from inside the same guest page */
-    if ((s->tb->pc & TARGET_PAGE_MASK) != (dest & TARGET_PAGE_MASK)) {
+    if ((b->tb->pc & TARGET_PAGE_MASK) != (dest & TARGET_PAGE_MASK)) {
         return false;
     }
 #endif
@@ -364,23 +372,24 @@ static inline bool use_goto_tb(DisasContext *s, int n, uint64_t dest)
 
 static inline void gen_goto_tb(DisasContext *s, int n, uint64_t dest)
 {
+    DisasContextBase *b = &s->base;
     TranslationBlock *tb;
 
-    tb = s->tb;
+    tb = b->tb;
     if (use_goto_tb(s, n, dest)) {
         tcg_gen_goto_tb(n);
         gen_a64_set_pc_im(dest);
         tcg_gen_exit_tb((intptr_t)tb + n);
-        s->is_jmp = DJ_TB_JUMP;
+        b->is_jmp = DJ_TB_JUMP;
     } else {
         gen_a64_set_pc_im(dest);
         if (s->ss_active) {
             gen_step_complete_exception(s);
-        } else if (s->singlestep_enabled) {
+        } else if (b->singlestep_enabled) {
             gen_exception_internal(EXCP_DEBUG);
         } else {
             tcg_gen_lookup_and_goto_ptr(cpu_pc);
-            s->is_jmp = DJ_TB_JUMP;
+            b->is_jmp = DJ_TB_JUMP;
         }
     }
 }
@@ -1320,6 +1329,7 @@ static void disas_cond_b_imm(DisasContext *s, uint32_t insn)
 static void handle_hint(DisasContext *s, uint32_t insn,
                         unsigned int op1, unsigned int op2, unsigned int crm)
 {
+    DisasContextBase *b = &s->base;
     unsigned int selector = crm << 3 | op2;
 
     if (op1 != 3) {
@@ -1331,16 +1341,16 @@ static void handle_hint(DisasContext *s, uint32_t insn,
     case 0: /* NOP */
         return;
     case 3: /* WFI */
-        s->is_jmp = DJ_WFI;
+        b->is_jmp = DJ_WFI;
         return;
     case 1: /* YIELD */
         if (!parallel_cpus) {
-            s->is_jmp = DJ_YIELD;
+            b->is_jmp = DJ_YIELD;
         }
         return;
     case 2: /* WFE */
         if (!parallel_cpus) {
-            s->is_jmp = DJ_WFE;
+            b->is_jmp = DJ_WFE;
         }
         return;
     case 4: /* SEV */
@@ -1362,6 +1372,7 @@ static void gen_clrex(DisasContext *s, uint32_t insn)
 static void handle_sync(DisasContext *s, uint32_t insn,
                         unsigned int op1, unsigned int op2, unsigned int crm)
 {
+    DisasContextBase *b = &s->base;
     TCGBar bar;
 
     if (op1 != 3) {
@@ -1393,7 +1404,7 @@ static void handle_sync(DisasContext *s, uint32_t insn,
          * a self-modified code correctly and also to take
          * any pending interrupts immediately.
          */
-        s->is_jmp = DJ_UPDATE;
+        b->is_jmp = DJ_UPDATE;
         return;
     default:
         unallocated_encoding(s);
@@ -1405,6 +1416,7 @@ static void handle_sync(DisasContext *s, uint32_t insn,
 static void handle_msr_i(DisasContext *s, uint32_t insn,
                          unsigned int op1, unsigned int op2, unsigned int crm)
 {
+    DisasContextBase *b = &s->base;
     int op = op1 << 3 | op2;
     switch (op) {
     case 0x05: /* SPSel */
@@ -1424,7 +1436,7 @@ static void handle_msr_i(DisasContext *s, uint32_t insn,
         tcg_temp_free_i32(tcg_op);
         /* For DAIFClear, exit the cpu loop to re-evaluate pending IRQs.  */
         gen_a64_set_pc_im(s->pc);
-        s->is_jmp = (op == 0x1f ? DJ_EXIT : DJ_JUMP);
+        b->is_jmp = (op == 0x1f ? DJ_EXIT : DJ_JUMP);
         break;
     }
     default:
@@ -1488,6 +1500,7 @@ static void handle_sys(DisasContext *s, uint32_t insn, bool isread,
                        unsigned int op0, unsigned int op1, unsigned int op2,
                        unsigned int crn, unsigned int crm, unsigned int rt)
 {
+    DisasContextBase *b = &s->base;
     const ARMCPRegInfo *ri;
     TCGv_i64 tcg_rt;
 
@@ -1559,7 +1572,7 @@ static void handle_sys(DisasContext *s, uint32_t insn, bool isread,
         break;
     }
 
-    if ((s->tb->cflags & CF_USE_ICOUNT) && (ri->type & ARM_CP_IO)) {
+    if ((b->tb->cflags & CF_USE_ICOUNT) && (ri->type & ARM_CP_IO)) {
         gen_io_start(cpu_env);
     }
 
@@ -1590,16 +1603,16 @@ static void handle_sys(DisasContext *s, uint32_t insn, bool isread,
         }
     }
 
-    if ((s->tb->cflags & CF_USE_ICOUNT) && (ri->type & ARM_CP_IO)) {
+    if ((b->tb->cflags & CF_USE_ICOUNT) && (ri->type & ARM_CP_IO)) {
         /* I/O operations must end the TB here (whether read or write) */
         gen_io_end(cpu_env);
-        s->is_jmp = DJ_UPDATE;
+        b->is_jmp = DJ_UPDATE;
     } else if (!isread && !(ri->type & ARM_CP_SUPPRESS_TB_END)) {
         /* We default to ending the TB on a coprocessor register write,
          * but allow this to be suppressed by the register definition
          * (usually only necessary to work around guest bugs).
          */
-        s->is_jmp = DJ_UPDATE;
+        b->is_jmp = DJ_UPDATE;
     }
 }
 
@@ -1759,6 +1772,7 @@ static void disas_exc(DisasContext *s, uint32_t insn)
  */
 static void disas_uncond_b_reg(DisasContext *s, uint32_t insn)
 {
+    DisasContextBase *b = &s->base;
     unsigned int opc, op2, op3, rn, op4;
 
     opc = extract32(insn, 21, 4);
@@ -1788,7 +1802,7 @@ static void disas_uncond_b_reg(DisasContext *s, uint32_t insn)
             return;
         }
         gen_helper_exception_return(cpu_env);
-        s->is_jmp = DJ_JUMP;
+        b->is_jmp = DJ_JUMP;
         return;
     case 5: /* DRPS */
         if (rn != 0x1f) {
@@ -1802,7 +1816,7 @@ static void disas_uncond_b_reg(DisasContext *s, uint32_t insn)
         return;
     }
 
-    s->is_jmp = DJ_JUMP;
+    b->is_jmp = DJ_JUMP;
 }
 
 /* C3.2 Branches, exception generating and system instructions */
@@ -11190,23 +11204,23 @@ static void disas_a64_insn(CPUARMState *env, DisasContext *s)
     free_tmp_a64(s);
 }
 
-void gen_intermediate_code_a64(ARMCPU *cpu, TranslationBlock *tb)
+void gen_intermediate_code_a64(DisasContextBase *db, ARMCPU *cpu,
+                               TranslationBlock *tb)
 {
     CPUState *cs = CPU(cpu);
     CPUARMState *env = &cpu->env;
-    DisasContext dc1, *dc = &dc1;
-    target_ulong pc_start;
+    DisasContext *dc = container_of(db, DisasContext, base);
     target_ulong next_page_start;
-    int num_insns;
     int max_insns;
 
-    pc_start = tb->pc;
+    db->tb = tb;
+    db->pc_first = tb->pc;
+    db->pc_next = db->pc_first;
+    db->is_jmp = DJ_NEXT;
+    db->num_insns = 0;
+    db->singlestep_enabled = cs->singlestep_enabled;
 
-    dc->tb = tb;
-
-    dc->is_jmp = DJ_NEXT;
-    dc->pc = pc_start;
-    dc->singlestep_enabled = cs->singlestep_enabled;
+    dc->pc = db->pc_first;
     dc->condjmp = 0;
 
     dc->aarch64 = 1;
@@ -11255,8 +11269,7 @@ void gen_intermediate_code_a64(ARMCPU *cpu, TranslationBlock *tb)
 
     init_tmp_a64_array(dc);
 
-    next_page_start = (pc_start & TARGET_PAGE_MASK) + TARGET_PAGE_SIZE;
-    num_insns = 0;
+    next_page_start = (db->pc_first & TARGET_PAGE_MASK) + TARGET_PAGE_SIZE;
     max_insns = tb->cflags & CF_COUNT_MASK;
     if (max_insns == 0) {
         max_insns = CF_COUNT_MASK;
@@ -11270,9 +11283,9 @@ void gen_intermediate_code_a64(ARMCPU *cpu, TranslationBlock *tb)
     tcg_clear_temp_count();
 
     do {
+        db->num_insns++;
         dc->insn_start_idx = tcg_op_buf_count();
         tcg_gen_insn_start(dc->pc, 0, 0);
-        num_insns++;
 
         if (unlikely(!QTAILQ_EMPTY(&cs->breakpoints))) {
             CPUBreakpoint *bp;
@@ -11282,7 +11295,7 @@ void gen_intermediate_code_a64(ARMCPU *cpu, TranslationBlock *tb)
                         gen_a64_set_pc_im(dc->pc);
                         gen_helper_check_breakpoints(cpu_env);
                         /* End the TB early; it likely won't be executed */
-                        dc->is_jmp = DJ_UPDATE;
+                        db->is_jmp = DJ_UPDATE;
                     } else {
                         gen_exception_internal_insn(dc, 0, EXCP_DEBUG);
                         /* The address covered by the breakpoint must be
@@ -11298,7 +11311,7 @@ void gen_intermediate_code_a64(ARMCPU *cpu, TranslationBlock *tb)
             }
         }
 
-        if (num_insns == max_insns && (tb->cflags & CF_LAST_IO)) {
+        if (db->num_insns == max_insns && (tb->cflags & CF_LAST_IO)) {
             gen_io_start(cpu_env);
         }
 
@@ -11313,10 +11326,10 @@ void gen_intermediate_code_a64(ARMCPU *cpu, TranslationBlock *tb)
              * "did not step an insn" case, and so the syndrome ISV and EX
              * bits should be zero.
              */
-            assert(num_insns == 1);
+            assert(db->num_insns == 1);
             gen_exception(EXCP_UDEF, syn_swstep(dc->ss_same_el, 0, 0),
                           default_exception_el(dc));
-            dc->is_jmp = DJ_EXC;
+            db->is_jmp = DJ_EXC;
             break;
         }
 
@@ -11332,26 +11345,26 @@ void gen_intermediate_code_a64(ARMCPU *cpu, TranslationBlock *tb)
          * Also stop translation when a page boundary is reached.  This
          * ensures prefetch aborts occur at the right place.
          */
-    } while (!dc->is_jmp && !tcg_op_buf_full() &&
+    } while (!db->is_jmp && !tcg_op_buf_full() &&
              !cs->singlestep_enabled &&
              !singlestep &&
              !dc->ss_active &&
              dc->pc < next_page_start &&
-             num_insns < max_insns);
+             db->num_insns < max_insns);
 
     if (tb->cflags & CF_LAST_IO) {
         gen_io_end(cpu_env);
     }
 
     if (unlikely(cs->singlestep_enabled || dc->ss_active)
-        && dc->is_jmp != DJ_EXC) {
+        && db->is_jmp != DJ_EXC) {
         /* Note that this means single stepping WFI doesn't halt the CPU.
          * For conditional branch insns this is harmless unreachable code as
          * gen_goto_tb() has already handled emitting the debug exception
          * (and thus a tb-jump is not possible when singlestepping).
          */
-        assert(dc->is_jmp != DJ_TB_JUMP);
-        if (dc->is_jmp != DJ_JUMP) {
+        assert(db->is_jmp != DJ_TB_JUMP);
+        if (db->is_jmp != DJ_JUMP) {
             gen_a64_set_pc_im(dc->pc);
         }
         if (cs->singlestep_enabled) {
@@ -11360,7 +11373,9 @@ void gen_intermediate_code_a64(ARMCPU *cpu, TranslationBlock *tb)
             gen_step_complete_exception(dc);
         }
     } else {
-        switch (dc->is_jmp) {
+        /* Cast because target-specific values are not in generic enum */
+        unsigned int is_jmp = (unsigned int)db->is_jmp;
+        switch (is_jmp) {
         case DJ_NEXT:
             gen_goto_tb(dc, 1, dc->pc);
             break;
@@ -11401,20 +11416,20 @@ void gen_intermediate_code_a64(ARMCPU *cpu, TranslationBlock *tb)
     }
 
 done_generating:
-    gen_tb_end(tb, num_insns);
+    gen_tb_end(tb, db->num_insns);
 
 #ifdef DEBUG_DISAS
     if (qemu_loglevel_mask(CPU_LOG_TB_IN_ASM) &&
-        qemu_log_in_addr_range(pc_start)) {
+        qemu_log_in_addr_range(db->pc_first)) {
         qemu_log_lock();
         qemu_log("----------------\n");
-        qemu_log("IN: %s\n", lookup_symbol(pc_start));
-        log_target_disas(cs, pc_start, dc->pc - pc_start,
+        qemu_log("IN: %s\n", lookup_symbol(db->pc_first));
+        log_target_disas(cs, db->pc_first, dc->pc - db->pc_first,
                          4 | (bswap_code(dc->sctlr_b) ? 2 : 0));
         qemu_log("\n");
         qemu_log_unlock();
     }
 #endif
-    tb->size = dc->pc - pc_start;
-    tb->icount = num_insns;
+    tb->size = dc->pc - db->pc_first;
+    tb->icount = db->num_insns;
 }
