@@ -5401,7 +5401,7 @@ void gen_intermediate_code(CPUState *cpu, TranslationBlock *tb)
         max_insns = TCG_MAX_INSNS;
     }
 
-    gen_tb_start(tb);
+    gen_tb_start(tb, cpu_env);
     do {
         pc_offset = dc->pc - pc_start;
         gen_throws_exception = NULL;
@@ -5420,7 +5420,7 @@ void gen_intermediate_code(CPUState *cpu, TranslationBlock *tb)
         }
 
         if (num_insns == max_insns && (tb->cflags & CF_LAST_IO)) {
-            gen_io_start();
+            gen_io_start(cpu_env);
         }
 
         dc->insn_pc = dc->pc;
@@ -5432,7 +5432,7 @@ void gen_intermediate_code(CPUState *cpu, TranslationBlock *tb)
              num_insns < max_insns);
 
     if (tb->cflags & CF_LAST_IO)
-        gen_io_end();
+        gen_io_end(cpu_env);
     if (unlikely(cpu->singlestep_enabled)) {
         /* Make sure the pc is updated, and raise a debug exception.  */
         if (!dc->is_jmp) {

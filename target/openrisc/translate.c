@@ -1556,7 +1556,7 @@ void gen_intermediate_code(CPUState *cpu, struct TranslationBlock *tb)
         qemu_log("IN: %s\n", lookup_symbol(pc_start));
     }
 
-    gen_tb_start(tb);
+    gen_tb_start(tb, cpu_env);
 
     /* Allow the TCG optimizer to see that R0 == 0,
        when it's true, which is the common case.  */
@@ -1584,7 +1584,7 @@ void gen_intermediate_code(CPUState *cpu, struct TranslationBlock *tb)
         }
 
         if (num_insns == max_insns && (tb->cflags & CF_LAST_IO)) {
-            gen_io_start();
+            gen_io_start(cpu_env);
         }
         disas_openrisc_insn(dc, or_cpu);
         dc->pc = dc->pc + 4;
@@ -1607,7 +1607,7 @@ void gen_intermediate_code(CPUState *cpu, struct TranslationBlock *tb)
              && num_insns < max_insns);
 
     if (tb->cflags & CF_LAST_IO) {
-        gen_io_end();
+        gen_io_end(cpu_env);
     }
 
     if ((dc->tb_flags & TB_FLAGS_DFLAG ? 1 : 0) != (dc->delayed_branch != 0)) {

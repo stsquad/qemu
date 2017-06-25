@@ -7282,7 +7282,7 @@ void gen_intermediate_code(CPUState *cpu, struct TranslationBlock *tb)
         max_insns = TCG_MAX_INSNS;
     }
 
-    gen_tb_start(tb);
+    gen_tb_start(tb, cpu_env);
     tcg_clear_temp_count();
     /* Set env in case of segfault during code fetch */
     while (ctx.exception == POWERPC_EXCP_NONE && !tcg_op_buf_full()) {
@@ -7303,7 +7303,7 @@ void gen_intermediate_code(CPUState *cpu, struct TranslationBlock *tb)
         LOG_DISAS("nip=" TARGET_FMT_lx " super=%d ir=%d\n",
                   ctx.nip, ctx.mem_idx, (int)msr_ir);
         if (num_insns == max_insns && (tb->cflags & CF_LAST_IO))
-            gen_io_start();
+            gen_io_start(cpu_env);
         if (unlikely(need_byteswap(&ctx))) {
             ctx.opcode = bswap32(cpu_ldl_code(env, ctx.nip));
         } else {
@@ -7384,7 +7384,7 @@ void gen_intermediate_code(CPUState *cpu, struct TranslationBlock *tb)
         }
     }
     if (tb->cflags & CF_LAST_IO)
-        gen_io_end();
+        gen_io_end(cpu_env);
     if (ctx.exception == POWERPC_EXCP_NONE) {
         gen_goto_tb(&ctx, 0, ctx.nip);
     } else if (ctx.exception != POWERPC_EXCP_BRANCH) {

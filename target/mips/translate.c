@@ -5233,11 +5233,11 @@ static void gen_mfc0(DisasContext *ctx, TCGv arg, int reg, int sel)
         case 0:
             /* Mark as an IO operation because we read the time.  */
             if (ctx->tb->cflags & CF_USE_ICOUNT) {
-                gen_io_start();
+                gen_io_start(cpu_env);
 	    }
             gen_helper_mfc0_count(arg, cpu_env);
             if (ctx->tb->cflags & CF_USE_ICOUNT) {
-                gen_io_end();
+                gen_io_end(cpu_env);
             }
             /* Break the TB to be able to take timer interrupts immediately
                after reading count.  */
@@ -5637,7 +5637,7 @@ static void gen_mtc0(DisasContext *ctx, TCGv arg, int reg, int sel)
         check_insn(ctx, ISA_MIPS32);
 
     if (ctx->tb->cflags & CF_USE_ICOUNT) {
-        gen_io_start();
+        gen_io_start(cpu_env);
     }
 
     switch (reg) {
@@ -6286,7 +6286,7 @@ static void gen_mtc0(DisasContext *ctx, TCGv arg, int reg, int sel)
 
     /* For simplicity assume that all writes can cause interrupts.  */
     if (ctx->tb->cflags & CF_USE_ICOUNT) {
-        gen_io_end();
+        gen_io_end(cpu_env);
         ctx->bstate = BS_STOP;
     }
     return;
@@ -6546,11 +6546,11 @@ static void gen_dmfc0(DisasContext *ctx, TCGv arg, int reg, int sel)
         case 0:
             /* Mark as an IO operation because we read the time.  */
             if (ctx->tb->cflags & CF_USE_ICOUNT) {
-                gen_io_start();
+                gen_io_start(cpu_env);
             }
             gen_helper_mfc0_count(arg, cpu_env);
             if (ctx->tb->cflags & CF_USE_ICOUNT) {
-                gen_io_end();
+                gen_io_end(cpu_env);
             }
             /* Break the TB to be able to take timer interrupts immediately
                after reading count.  */
@@ -6937,7 +6937,7 @@ static void gen_dmtc0(DisasContext *ctx, TCGv arg, int reg, int sel)
         check_insn(ctx, ISA_MIPS64);
 
     if (ctx->tb->cflags & CF_USE_ICOUNT) {
-        gen_io_start();
+        gen_io_start(cpu_env);
     }
 
     switch (reg) {
@@ -7254,11 +7254,11 @@ static void gen_dmtc0(DisasContext *ctx, TCGv arg, int reg, int sel)
             /* Mark as an IO operation because we may trigger a software
                interrupt.  */
             if (ctx->tb->cflags & CF_USE_ICOUNT) {
-                gen_io_start();
+                gen_io_start(cpu_env);
             }
             gen_helper_mtc0_cause(cpu_env, arg);
             if (ctx->tb->cflags & CF_USE_ICOUNT) {
-                gen_io_end();
+                gen_io_end(cpu_env);
             }
             /* Stop translation as we may have triggered an intetrupt */
             ctx->bstate = BS_STOP;
@@ -7584,7 +7584,7 @@ static void gen_dmtc0(DisasContext *ctx, TCGv arg, int reg, int sel)
 
     /* For simplicity assume that all writes can cause interrupts.  */
     if (ctx->tb->cflags & CF_USE_ICOUNT) {
-        gen_io_end();
+        gen_io_end(cpu_env);
         ctx->bstate = BS_STOP;
     }
     return;
@@ -19935,7 +19935,7 @@ void gen_intermediate_code(CPUState *cpu, struct TranslationBlock *tb)
     }
 
     LOG_DISAS("\ntb %p idx %d hflags %04x\n", tb, ctx.mem_idx, ctx.hflags);
-    gen_tb_start(tb);
+    gen_tb_start(tb, cpu_env);
     while (ctx.bstate == BS_NONE) {
         tcg_gen_insn_start(ctx.pc, ctx.hflags & MIPS_HFLAG_BMASK, ctx.btarget);
         num_insns++;
@@ -19953,7 +19953,7 @@ void gen_intermediate_code(CPUState *cpu, struct TranslationBlock *tb)
         }
 
         if (num_insns == max_insns && (tb->cflags & CF_LAST_IO)) {
-            gen_io_start();
+            gen_io_start(cpu_env);
         }
 
         is_slot = ctx.hflags & MIPS_HFLAG_BMASK;
@@ -20014,7 +20014,7 @@ void gen_intermediate_code(CPUState *cpu, struct TranslationBlock *tb)
             break;
     }
     if (tb->cflags & CF_LAST_IO) {
-        gen_io_end();
+        gen_io_end(cpu_env);
     }
     if (cpu->singlestep_enabled && ctx.bstate != BS_BRANCH) {
         save_cpu_state(&ctx, ctx.bstate != BS_EXCP);

@@ -8810,7 +8810,7 @@ void gen_intermediate_code(CPUState *cpu, struct TranslationBlock *tb)
     ctx.mem_idx = cpu_mmu_index(env, false);
 
     tcg_clear_temp_count();
-    gen_tb_start(tb);
+    gen_tb_start(tb, cpu_env);
     while (ctx.bstate == BS_NONE) {
         tcg_gen_insn_start(ctx.pc);
         num_insns++;

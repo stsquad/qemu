@@ -2402,7 +2402,7 @@ void gen_intermediate_code(CPUState *cpu, struct TranslationBlock *tb)
     if (max_insns > TCG_MAX_INSNS) {
         max_insns = TCG_MAX_INSNS;
     }
-    gen_tb_start(tb);
+    gen_tb_start(tb, cpu_env);
 
     while (1) {
         tcg_gen_insn_start(dc->pc);

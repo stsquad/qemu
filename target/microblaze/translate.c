@@ -1637,7 +1637,7 @@ void gen_intermediate_code(CPUState *cpu, struct TranslationBlock *tb)
         max_insns = TCG_MAX_INSNS;
     }
 
-    gen_tb_start(tb);
+    gen_tb_start(tb, cpu_env);
     do
     {
         tcg_gen_insn_start(dc->pc);
@@ -1665,7 +1665,7 @@ void gen_intermediate_code(CPUState *cpu, struct TranslationBlock *tb)
         LOG_DIS("%8.8x:\t", dc->pc);
 
         if (num_insns == max_insns && (tb->cflags & CF_LAST_IO)) {
-            gen_io_start();
+            gen_io_start(cpu_env);
         }
 
         dc->clear_imm = 1;
@@ -1727,7 +1727,7 @@ void gen_intermediate_code(CPUState *cpu, struct TranslationBlock *tb)
     }
 
     if (tb->cflags & CF_LAST_IO)
-        gen_io_end();
+        gen_io_end(cpu_env);
     /* Force an update if the per-tb mb_cpu state has changed.  */
     if (dc->is_jmp == DISAS_NEXT
         && (dc->cpustate_changed || org_flags != dc->tb_flags)) {

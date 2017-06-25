@@ -8,7 +8,7 @@
 static int icount_start_insn_idx;
 static TCGLabel *exitreq_label;
 
-static inline void gen_tb_start(TranslationBlock *tb)
+static inline void gen_tb_start(TranslationBlock *tb, TCGv_env cpu_env)
 {
     TCGv_i32 count, imm;
 
@@ -59,14 +59,14 @@ static void gen_tb_end(TranslationBlock *tb, int num_insns)
     tcg_ctx.gen_op_buf[tcg_ctx.gen_op_buf[0].prev].next = 0;
 }
 
-static inline void gen_io_start(void)
+static inline void gen_io_start(TCGv_env cpu_env)
 {
     TCGv_i32 tmp = tcg_const_i32(1);
     tcg_gen_st_i32(tmp, cpu_env, -ENV_OFFSET + offsetof(CPUState, can_do_io));
     tcg_temp_free_i32(tmp);
 }
 
-static inline void gen_io_end(void)
+static inline void gen_io_end(TCGv_env cpu_env)
 {
     TCGv_i32 tmp = tcg_const_i32(0);
     tcg_gen_st_i32(tmp, cpu_env, -ENV_OFFSET + offsetof(CPUState, can_do_io));

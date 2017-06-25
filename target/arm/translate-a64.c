@@ -1560,7 +1560,7 @@ static void handle_sys(DisasContext *s, uint32_t insn, bool isread,
     }
 
     if ((s->tb->cflags & CF_USE_ICOUNT) && (ri->type & ARM_CP_IO)) {
-        gen_io_start();
+        gen_io_start(cpu_env);
     }
 
     tcg_rt = cpu_reg(s, rt);
@@ -1592,7 +1592,7 @@ static void handle_sys(DisasContext *s, uint32_t insn, bool isread,
 
     if ((s->tb->cflags & CF_USE_ICOUNT) && (ri->type & ARM_CP_IO)) {
         /* I/O operations must end the TB here (whether read or write) */
-        gen_io_end();
+        gen_io_end(cpu_env);
         s->is_jmp = DISAS_UPDATE;
     } else if (!isread && !(ri->type & ARM_CP_SUPPRESS_TB_END)) {
         /* We default to ending the TB on a coprocessor register write,
@@ -11265,7 +11265,7 @@ void gen_intermediate_code_a64(ARMCPU *cpu, TranslationBlock *tb)
         max_insns = TCG_MAX_INSNS;
     }
 
-    gen_tb_start(tb);
+    gen_tb_start(tb, cpu_env);
 
     tcg_clear_temp_count();
 
@@ -11299,7 +11299,7 @@ void gen_intermediate_code_a64(ARMCPU *cpu, TranslationBlock *tb)
         }
 
         if (num_insns == max_insns && (tb->cflags & CF_LAST_IO)) {
-            gen_io_start();
+            gen_io_start(cpu_env);
         }
 
         if (dc->ss_active && !dc->pstate_ss) {
@@ -11340,7 +11340,7 @@ void gen_intermediate_code_a64(ARMCPU *cpu, TranslationBlock *tb)
              num_insns < max_insns);
 
     if (tb->cflags & CF_LAST_IO) {
-        gen_io_end();
+        gen_io_end(cpu_env);
     }
 
     if (unlikely(cs->singlestep_enabled || dc->ss_active)

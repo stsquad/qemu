@@ -7654,7 +7654,7 @@ static int disas_coproc_insn(DisasContext *s, uint32_t insn)
         }
 
         if ((s->tb->cflags & CF_USE_ICOUNT) && (ri->type & ARM_CP_IO)) {
-            gen_io_start();
+            gen_io_start(cpu_env);
         }
 
         if (isread) {
@@ -7746,7 +7746,7 @@ static int disas_coproc_insn(DisasContext *s, uint32_t insn)
 
         if ((s->tb->cflags & CF_USE_ICOUNT) && (ri->type & ARM_CP_IO)) {
             /* I/O operations must end the TB here (whether read or write) */
-            gen_io_end();
+            gen_io_end(cpu_env);
             gen_lookup_tb(s);
         } else if (!isread && !(ri->type & ARM_CP_SUPPRESS_TB_END)) {
             /* We default to ending the TB on a coprocessor register write,
@@ -11881,7 +11881,7 @@ void gen_intermediate_code(CPUState *cpu, TranslationBlock *tb)
         max_insns = TCG_MAX_INSNS;
     }
 
-    gen_tb_start(tb);
+    gen_tb_start(tb, cpu_env);
 
     tcg_clear_temp_count();
 
@@ -11969,7 +11969,7 @@ void gen_intermediate_code(CPUState *cpu, TranslationBlock *tb)
         }
 
         if (num_insns == max_insns && (tb->cflags & CF_LAST_IO)) {
-            gen_io_start();
+            gen_io_start(cpu_env);
         }
 
         if (dc->ss_active && !dc->pstate_ss) {
@@ -12044,7 +12044,7 @@ void gen_intermediate_code(CPUState *cpu, TranslationBlock *tb)
                code.  */
             cpu_abort(cpu, "IO on conditional branch instruction");
         }
-        gen_io_end();
+        gen_io_end(cpu_env);
     }
 
     /* At this stage dc->condjmp will only be set when the skipped

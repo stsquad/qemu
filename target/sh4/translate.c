@@ -1846,7 +1846,7 @@ void gen_intermediate_code(CPUState *cpu, struct TranslationBlock *tb)
         max_insns = TCG_MAX_INSNS;
     }
 
-    gen_tb_start(tb);
+    gen_tb_start(tb, cpu_env);
     while (ctx.bstate == BS_NONE && !tcg_op_buf_full()) {
         tcg_gen_insn_start(ctx.pc, ctx.envflags);
         num_insns++;
@@ -1865,7 +1865,7 @@ void gen_intermediate_code(CPUState *cpu, struct TranslationBlock *tb)
         }
 
         if (num_insns == max_insns && (tb->cflags & CF_LAST_IO)) {
-            gen_io_start();
+            gen_io_start(cpu_env);
         }
 
         ctx.opcode = cpu_lduw_code(env, ctx.pc);
@@ -1882,7 +1882,7 @@ void gen_intermediate_code(CPUState *cpu, struct TranslationBlock *tb)
             break;
     }
     if (tb->cflags & CF_LAST_IO)
-        gen_io_end();
+        gen_io_end(cpu_env);
     if (cpu->singlestep_enabled) {
         gen_save_cpu_state(&ctx, true);
         gen_helper_debug(cpu_env);

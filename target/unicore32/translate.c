@@ -1911,7 +1911,7 @@ void gen_intermediate_code(CPUState *cpu, TranslationBlock *tb)
     }
 #endif
 
-    gen_tb_start(tb);
+    gen_tb_start(tb, cpu_env);
     do {
         tcg_gen_insn_start(dc->pc);
         num_insns++;
@@ -1929,7 +1929,7 @@ void gen_intermediate_code(CPUState *cpu, TranslationBlock *tb)
         }
 
         if (num_insns == max_insns && (tb->cflags & CF_LAST_IO)) {
-            gen_io_start();
+            gen_io_start(cpu_env);
         }
 
         disas_uc32_insn(env, dc);
@@ -1959,7 +1959,7 @@ void gen_intermediate_code(CPUState *cpu, TranslationBlock *tb)
                code.  */
             cpu_abort(cpu, "IO on conditional branch instruction");
         }
-        gen_io_end();
+        gen_io_end(cpu_env);
     }
 
     /* At this stage dc->condjmp will only be set when the skipped

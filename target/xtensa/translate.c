@@ -514,12 +514,12 @@ static bool gen_check_sr(DisasContext *dc, uint32_t sr, unsigned access)
 static bool gen_rsr_ccount(DisasContext *dc, TCGv_i32 d, uint32_t sr)
 {
     if (dc->tb->cflags & CF_USE_ICOUNT) {
-        gen_io_start();
+        gen_io_start(cpu_env);
     }
     gen_helper_update_ccount(cpu_env);
     tcg_gen_mov_i32(d, cpu_SR[sr]);
     if (dc->tb->cflags & CF_USE_ICOUNT) {
-        gen_io_end();
+        gen_io_end(cpu_env);
         return true;
     }
     return false;
@@ -699,11 +699,11 @@ static bool gen_wsr_cpenable(DisasContext *dc, uint32_t sr, TCGv_i32 v)
 static void gen_check_interrupts(DisasContext *dc)
 {
     if (dc->tb->cflags & CF_USE_ICOUNT) {
-        gen_io_start();
+        gen_io_start(cpu_env);
     }
     gen_helper_check_interrupts(cpu_env);
     if (dc->tb->cflags & CF_USE_ICOUNT) {
-        gen_io_end();
+        gen_io_end(cpu_env);
     }
 }
 
@@ -757,11 +757,11 @@ static bool gen_wsr_ps(DisasContext *dc, uint32_t sr, TCGv_i32 v)
 static bool gen_wsr_ccount(DisasContext *dc, uint32_t sr, TCGv_i32 v)
 {
     if (dc->tb->cflags & CF_USE_ICOUNT) {
-        gen_io_start();
+        gen_io_start(cpu_env);
     }
     gen_helper_wsr_ccount(cpu_env, v);
     if (dc->tb->cflags & CF_USE_ICOUNT) {
-        gen_io_end();
+        gen_io_end(cpu_env);
         gen_jumpi_check_loop_end(dc, 0);
         return true;
     }
@@ -798,11 +798,11 @@ static bool gen_wsr_ccompare(DisasContext *dc, uint32_t sr, TCGv_i32 v)
         tcg_gen_mov_i32(cpu_SR[sr], v);
         tcg_gen_andi_i32(cpu_SR[INTSET], cpu_SR[INTSET], ~int_bit);
         if (dc->tb->cflags & CF_USE_ICOUNT) {
-            gen_io_start();
+            gen_io_start(cpu_env);
         }
         gen_helper_update_ccompare(cpu_env, tmp);
         if (dc->tb->cflags & CF_USE_ICOUNT) {
-            gen_io_end();
+            gen_io_end(cpu_env);
             gen_jumpi_check_loop_end(dc, 0);
             ret = true;
         }
@@ -897,11 +897,11 @@ static void gen_waiti(DisasContext *dc, uint32_t imm4)
     TCGv_i32 intlevel = tcg_const_i32(imm4);
 
     if (dc->tb->cflags & CF_USE_ICOUNT) {
-        gen_io_start();
+        gen_io_start(cpu_env);
     }
     gen_helper_waiti(cpu_env, pc, intlevel);
     if (dc->tb->cflags & CF_USE_ICOUNT) {
-        gen_io_end();
+        gen_io_end(cpu_env);
     }
     tcg_temp_free(pc);
     tcg_temp_free(intlevel);
@@ -3156,7 +3156,7 @@ void gen_intermediate_code(CPUState *cpu, TranslationBlock *tb)
         dc.next_icount = tcg_temp_local_new_i32();
     }
 
-    gen_tb_start(tb);
+    gen_tb_start(tb, cpu_env);
 
     if ((tb->cflags & CF_USE_ICOUNT) &&
         (tb->flags & XTENSA_TBFLAG_YIELD)) {
@@ -3191,7 +3191,7 @@ void gen_intermediate_code(CPUState *cpu, TranslationBlock *tb)
         }
 
         if (insn_count == max_insns && (tb->cflags & CF_LAST_IO)) {
-            gen_io_start();
+            gen_io_start(cpu_env);
         }
 
         if (dc.icount) {
@@ -3232,7 +3232,7 @@ done:
     }
 
     if (tb->cflags & CF_LAST_IO) {
-        gen_io_end();
+        gen_io_end(cpu_env);
     }
 
     if (dc.is_jmp == DISAS_NEXT) {
