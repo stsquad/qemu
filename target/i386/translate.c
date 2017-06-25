@@ -8540,10 +8540,25 @@ static void i386_trblock_tb_stop(DisasContextBase *db, CPUState *cpu)
     }
 }
 
+static int i386_trblock_disas_flags(const DisasContextBase *db)
+{
+    DisasContext *dc = container_of(db, DisasContext, base);
+
+#ifdef TARGET_X86_64
+    if (dc->code64) {
+        return 2;
+    } else {
+        return !dc->code32;
+    }
+#else
+    return !dc->code32;
+#endif
+}
+
 /* generate intermediate code for basic block 'tb'.  */
 void gen_intermediate_code(CPUState *cpu, TranslationBlock *tb)
 {
-    DisasContext dc1, *dc = &dc1;
+    DisasContext dc1;
     DisasContextBase *db = &dc1.base;
     CPUBreakpoint *bp;
     int num_insns;
@@ -8623,16 +8638,10 @@ done_generating:
 #ifdef DEBUG_DISAS
     if (qemu_loglevel_mask(CPU_LOG_TB_IN_ASM)
         && qemu_log_in_addr_range(db->pc_first)) {
-        int disas_flags;
+        int disas_flags = i386_trblock_disas_flags(db);
         qemu_log_lock();
         qemu_log("----------------\n");
         qemu_log("IN: %s\n", lookup_symbol(db->pc_first));
-#ifdef TARGET_X86_64
-        if (dc->code64)
-            disas_flags = 2;
-        else
-#endif
-            disas_flags = !dc->code32;
         log_target_disas(cpu, db->pc_first, db->pc_next - db->pc_first,
                          disas_flags);
         qemu_log("\n");
