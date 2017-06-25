@@ -12053,97 +12053,23 @@ static target_ulong arm_trblock_disas_insn(DisasContextBase *db, CPUState *cpu)
     return dc->pc;
 }
 
-/* generate intermediate code for basic block 'tb'.  */
-void gen_intermediate_code(CPUState *cpu, TranslationBlock *tb)
+static void arm_trblock_tb_stop(DisasContextBase *db, CPUState *cpu)
 {
-    CPUARMState *env = cpu->env_ptr;
-    ARMCPU *arm_cpu = arm_env_get_cpu(env);
-    DisasContext dc1, *dc = &dc1;
-    DisasContextBase *db = &dc->base;
-    int max_insns;
-    CPUBreakpoint *bp;
+    DisasContext *dc = container_of(db, DisasContext, base);
+    /* Cast because target-specific values are not in generic enum */
+    unsigned int is_jmp = (unsigned int)db->is_jmp;
 
-    /* generate intermediate code */
-
-    /* The A64 decoder has its own top level loop, because it doesn't need
-     * the A32/T32 complexity to do with conditional execution/IT blocks/etc.
-     */
-    if (ARM_TBFLAG_AARCH64_STATE(tb->flags)) {
-        gen_intermediate_code_a64(db, arm_cpu, tb);
+    if (is_jmp == DJ_SKIP) {
         return;
     }
 
-    db->tb = tb;
-    db->pc_first = tb->pc;
-    db->pc_next = db->pc_first;
-    db->is_jmp = DISAS_NEXT;
-    db->num_insns = 0;
-    db->singlestep_enabled = cpu->singlestep_enabled;
-    arm_trblock_init_disas_context(db, cpu);
-
-
-    arm_trblock_init_globals(db, cpu);
-    max_insns = tb->cflags & CF_COUNT_MASK;
-    if (max_insns == 0) {
-        max_insns = CF_COUNT_MASK;
+    if ((dc->base.tb->cflags & CF_LAST_IO) && dc->condjmp) {
+        /* FIXME: This can theoretically happen with self-modifying code. */
+        cpu_abort(cpu, "IO on conditional branch instruction");
     }
-    if (max_insns > TCG_MAX_INSNS) {
-        max_insns = TCG_MAX_INSNS;
-    }
-
-    gen_tb_start(tb, cpu_env);
-
-    tcg_clear_temp_count();
-    arm_trblock_tb_start(db, cpu);
-
-    do {
-        db->num_insns++;
-        arm_trblock_insn_start(db, cpu);
-
-        bp = NULL;
-        do {
-            bp = cpu_breakpoint_get(cpu, db->pc_next, bp);
-            if (unlikely(bp)) {
-                BreakpointCheckType bp_check = arm_trblock_breakpoint_check(
-                    db, cpu, bp);
-                if (bp_check == BC_HIT_INSN) {
-                    /* Hit, keep translating */
-                    /*
-                     * TODO: if we're never going to have more than one BP in a
-                     *       single address, we can simply use a bool here.
-                     */
-                    break;
-                } else {
-                    goto done_generating;
-                }
-            }
-        } while (bp != NULL);
-
-        if (db->num_insns == max_insns && (tb->cflags & CF_LAST_IO)) {
-            gen_io_start(cpu_env);
-        }
-
-        db->pc_next = arm_trblock_disas_insn(db, cpu);
-
-        if (tcg_check_temp_count()) {
-            fprintf(stderr, "TCG temporary leak before "TARGET_FMT_lx"\n",
-                    dc->pc);
-        }
-
-        if (!db->is_jmp && (tcg_op_buf_full() || singlestep ||
-                            db->num_insns >= max_insns)) {
-            db->is_jmp = DJ_TOO_MANY;
-        }
-    } while (!db->is_jmp);
-
-    if (db->is_jmp != DJ_SKIP) {
-    if (tb->cflags & CF_LAST_IO) {
-        if (dc->condjmp) {
-            /* FIXME:  This can theoretically happen with self-modifying
-               code.  */
-            cpu_abort(cpu, "IO on conditional branch instruction");
-        }
-        gen_io_end(cpu_env);
+    if (db->tb->cflags & CF_LAST_IO && dc->condjmp) {
+        /* FIXME: This can theoretically happen with self-modifying code. */
+        cpu_abort(cpu, "IO on conditional branch instruction");
     }
 
     /* At this stage dc->condjmp will only be set when the skipped
@@ -12251,6 +12177,95 @@ void gen_intermediate_code(CPUState *cpu, TranslationBlock *tb)
             gen_goto_tb(dc, 1, dc->pc);
         }
     }
+}
+
+/* generate intermediate code for basic block 'tb'.  */
+void gen_intermediate_code(CPUState *cpu, TranslationBlock *tb)
+{
+    CPUARMState *env = cpu->env_ptr;
+    ARMCPU *arm_cpu = arm_env_get_cpu(env);
+    DisasContext dc1, *dc = &dc1;
+    DisasContextBase *db = &dc->base;
+    int max_insns;
+    CPUBreakpoint *bp;
+
+    /* generate intermediate code */
+
+    /* The A64 decoder has its own top level loop, because it doesn't need
+     * the A32/T32 complexity to do with conditional execution/IT blocks/etc.
+     */
+    if (ARM_TBFLAG_AARCH64_STATE(tb->flags)) {
+        gen_intermediate_code_a64(db, arm_cpu, tb);
+        return;
+    }
+
+    db->tb = tb;
+    db->pc_first = tb->pc;
+    db->pc_next = db->pc_first;
+    db->is_jmp = DISAS_NEXT;
+    db->num_insns = 0;
+    db->singlestep_enabled = cpu->singlestep_enabled;
+    arm_trblock_init_disas_context(db, cpu);
+
+
+    arm_trblock_init_globals(db, cpu);
+    max_insns = tb->cflags & CF_COUNT_MASK;
+    if (max_insns == 0) {
+        max_insns = CF_COUNT_MASK;
+    }
+    if (max_insns > TCG_MAX_INSNS) {
+        max_insns = TCG_MAX_INSNS;
+    }
+
+    gen_tb_start(tb, cpu_env);
+
+    tcg_clear_temp_count();
+    arm_trblock_tb_start(db, cpu);
+
+    do {
+        db->num_insns++;
+        arm_trblock_insn_start(db, cpu);
+
+        bp = NULL;
+        do {
+            bp = cpu_breakpoint_get(cpu, db->pc_next, bp);
+            if (unlikely(bp)) {
+                BreakpointCheckType bp_check = arm_trblock_breakpoint_check(
+                    db, cpu, bp);
+                if (bp_check == BC_HIT_INSN) {
+                    /* Hit, keep translating */
+                    /*
+                     * TODO: if we're never going to have more than one BP in a
+                     *       single address, we can simply use a bool here.
+                     */
+                    break;
+                } else {
+                    goto done_generating;
+                }
+            }
+        } while (bp != NULL);
+
+        if (db->num_insns == max_insns && (tb->cflags & CF_LAST_IO)) {
+            gen_io_start(cpu_env);
+        }
+
+        db->pc_next = arm_trblock_disas_insn(db, cpu);
+
+        if (tcg_check_temp_count()) {
+            fprintf(stderr, "TCG temporary leak before "TARGET_FMT_lx"\n",
+                    dc->pc);
+        }
+
+        if (!db->is_jmp && (tcg_op_buf_full() || singlestep ||
+                            db->num_insns >= max_insns)) {
+            db->is_jmp = DJ_TOO_MANY;
+        }
+    } while (!db->is_jmp);
+
+    arm_trblock_tb_stop(db, cpu);
+
+    if (tb->cflags & CF_LAST_IO) {
+        gen_io_end(cpu_env);
     }
 
 done_generating:

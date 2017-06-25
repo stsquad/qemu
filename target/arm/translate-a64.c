@@ -11329,6 +11329,68 @@ static target_ulong aarch64_trblock_disas_insn(DisasContextBase *db,
     return dc->pc;
 }
 
+static void aarch64_trblock_tb_stop(DisasContextBase *db, CPUState *cpu)
+{
+    DisasContext *dc = container_of(db, DisasContext, base);
+
+    if (unlikely(db->singlestep_enabled || dc->ss_active)
+        && db->is_jmp != DJ_EXC) {
+        /* Note that this means single stepping WFI doesn't halt the CPU.
+         * For conditional branch insns this is harmless unreachable code as
+         * gen_goto_tb() has already handled emitting the debug exception
+         * (and thus a tb-jump is not possible when singlestepping).
+         */
+        assert(db->is_jmp != DJ_TB_JUMP);
+        if (db->is_jmp != DJ_JUMP) {
+            gen_a64_set_pc_im(dc->pc);
+        }
+        if (db->singlestep_enabled) {
+            gen_exception_internal(EXCP_DEBUG);
+        } else {
+            gen_step_complete_exception(dc);
+        }
+    } else {
+        /* Cast because target-specific values are not in generic enum */
+        unsigned int is_jmp = (unsigned int)db->is_jmp;
+        switch (is_jmp) {
+        case DJ_NEXT:
+        case DJ_TOO_MANY:
+            gen_goto_tb(dc, 1, dc->pc);
+            break;
+        default:
+        case DJ_UPDATE:
+            gen_a64_set_pc_im(dc->pc);
+            /* fall through */
+        case DJ_JUMP:
+            tcg_gen_lookup_and_goto_ptr(cpu_pc);
+            break;
+        case DJ_TB_JUMP:
+        case DJ_EXC:
+        case DJ_SWI:
+            break;
+        case DJ_WFE:
+            gen_a64_set_pc_im(dc->pc);
+            gen_helper_wfe(cpu_env);
+            break;
+        case DJ_YIELD:
+            gen_a64_set_pc_im(dc->pc);
+            gen_helper_yield(cpu_env);
+            break;
+        case DJ_WFI:
+            /* This is a special case because we don't want to just halt the CPU
+             * if trying to debug across a WFI.
+             */
+            gen_a64_set_pc_im(dc->pc);
+            gen_helper_wfi(cpu_env);
+            /* The helper doesn't necessarily throw an exception, but we
+             * must go back to the main loop to check for interrupts anyway.
+             */
+            tcg_gen_exit_tb(0);
+            break;
+        }
+    }
+}
+
 void gen_intermediate_code_a64(DisasContextBase *db, ARMCPU *cpu,
                                TranslationBlock *tb)
 {
@@ -11403,69 +11465,12 @@ void gen_intermediate_code_a64(DisasContextBase *db, ARMCPU *cpu,
          */
     } while (!db->is_jmp);
 
+    aarch64_trblock_tb_stop(db, cs);
+
     if (tb->cflags & CF_LAST_IO) {
         gen_io_end(cpu_env);
     }
 
-    if (unlikely(cs->singlestep_enabled || dc->ss_active)
-        && db->is_jmp != DJ_EXC) {
-        /* Note that this means single stepping WFI doesn't halt the CPU.
-         * For conditional branch insns this is harmless unreachable code as
-         * gen_goto_tb() has already handled emitting the debug exception
-         * (and thus a tb-jump is not possible when singlestepping).
-         */
-        assert(db->is_jmp != DJ_TB_JUMP);
-        if (db->is_jmp != DJ_JUMP) {
-            gen_a64_set_pc_im(dc->pc);
-        }
-        if (cs->singlestep_enabled) {
-            gen_exception_internal(EXCP_DEBUG);
-        } else {
-            gen_step_complete_exception(dc);
-        }
-    } else {
-        /* Cast because target-specific values are not in generic enum */
-        unsigned int is_jmp = (unsigned int)db->is_jmp;
-        switch (is_jmp) {
-        case DJ_NEXT:
-        case DJ_TOO_MANY:
-            gen_goto_tb(dc, 1, dc->pc);
-            break;
-        default:
-        case DJ_UPDATE:
-            gen_a64_set_pc_im(dc->pc);
-            /* fall through */
-        case DJ_JUMP:
-            tcg_gen_lookup_and_goto_ptr(cpu_pc);
-            break;
-        case DJ_EXIT:
-            tcg_gen_exit_tb(0);
-            break;
-        case DJ_TB_JUMP:
-        case DJ_EXC:
-        case DJ_SWI:
-            break;
-        case DJ_WFE:
-            gen_a64_set_pc_im(dc->pc);
-            gen_helper_wfe(cpu_env);
-            break;
-        case DJ_YIELD:
-            gen_a64_set_pc_im(dc->pc);
-            gen_helper_yield(cpu_env);
-            break;
-        case DJ_WFI:
-            /* This is a special case because we don't want to just halt the CPU
-             * if trying to debug across a WFI.
-             */
-            gen_a64_set_pc_im(dc->pc);
-            gen_helper_wfi(cpu_env);
-            /* The helper doesn't necessarily throw an exception, but we
-             * must go back to the main loop to check for interrupts anyway.
-             */
-            tcg_gen_exit_tb(0);
-            break;
-        }
-    }
 
 done_generating:
     gen_tb_end(tb, db->num_insns);
