@@ -1520,9 +1520,8 @@ static void disas_openrisc_insn(DisasContext *dc, OpenRISCCPU *cpu)
 
 void gen_intermediate_code(CPUState *cpu, struct TranslationBlock *tb)
 {
-    OpenRISCState *env = cpu->env_ptr;
+    CPUOpenRISCState *env = cpu->env_ptr;
     OpenRISCCPU *or_cpu = openrisc_env_get_cpu(env);
-    CPUState *cs = CPU(cpu);
     struct DisasContext ctx, *dc = &ctx;
     uint32_t pc_start;
     uint32_t next_page_start;
