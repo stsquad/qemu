@@ -7221,14 +7221,16 @@ static void handle_3same_64(DisasContext *s, int opcode, bool u,
  * and vector encodings. The caller must filter out any encodings
  * not allocated for the encoding it is dealing with.
  */
-static void handle_3same_float(DisasContext *s, int size, int elements,
+static void handle_3same_float(DisasContext *s, TCGMemOp size, int elements,
                                int fpopcode, int rd, int rn, int rm)
 {
     int pass;
     TCGv_ptr fpst = get_fpstatus_ptr();
 
     for (pass = 0; pass < elements; pass++) {
-        if (size) {
+        switch (size) {
+        case MO_64:
+        {
             /* Double */
             TCGv_i64 tcg_op1 = tcg_temp_new_i64();
             TCGv_i64 tcg_op2 = tcg_temp_new_i64();
@@ -7308,7 +7310,10 @@ static void handle_3same_float(DisasContext *s, int size, int elements,
             tcg_temp_free_i64(tcg_res);
             tcg_temp_free_i64(tcg_op1);
             tcg_temp_free_i64(tcg_op2);
-        } else {
+            break;
+        }
+        case MO_32:
+        {
             /* Single */
             TCGv_i32 tcg_op1 = tcg_temp_new_i32();
             TCGv_i32 tcg_op2 = tcg_temp_new_i32();
@@ -7397,6 +7402,11 @@ static void handle_3same_float(DisasContext *s, int size, int elements,
             tcg_temp_free_i32(tcg_res);
             tcg_temp_free_i32(tcg_op1);
             tcg_temp_free_i32(tcg_op2);
+            break;
+        }
+        default:
+           g_assert_not_reached();
+           break;
         }
     }
 
@@ -7447,7 +7457,7 @@ static void disas_simd_scalar_three_reg_same(DisasContext *s, uint32_t insn)
             return;
         }
 
-        handle_3same_float(s, extract32(size, 0, 1), 1, fpopcode, rd, rn, rm);
+        handle_3same_float(s, extract32(size, 0, 1) ? MO_64:MO_32, 1, fpopcode, rd, rn, rm);
         return;
     }
 
@@ -9346,7 +9356,7 @@ static void disas_simd_3same_float(DisasContext *s, uint32_t insn)
             return;
         }
 
-        handle_3same_float(s, size, elements, fpopcode, rd, rn, rm);
+        handle_3same_float(s, size ? MO_64:MO_32, elements, fpopcode, rd, rn, rm);
         return;
     default:
         unallocated_encoding(s);
