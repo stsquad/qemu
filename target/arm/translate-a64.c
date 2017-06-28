@@ -10596,6 +10596,71 @@ static void disas_simd_two_reg_misc(DisasContext *s, uint32_t insn)
     }
 }
 
+/* ARMv8.2 AdvSIMD two reg misc half-precision
+ *
+ *   31  30  29 28       24 23               17 16    12 11 10 9    5 4    0
+ * +---+---+---+-----------+---+---------------+--------+-----+------+------+
+ * | 0 | Q | U | 0 1 1 1 0 | a | 1 1 1 0 0 0 0 | opcode | 1 0 |  Rn  |  Rd  |
+ * +---+---+---+-----------+---+---------------+--------+-----+------+------+
+ * p:0xx01110x1110000xxxxx10xxxxxxxxx
+ *      0   e   7   0   0   4   0   0
+ * m:10011111011111110000011000000000
+ *      9   f   7   f   0   6   0   0
+ *
+ * This includes conversion functions and compare against zero
+ */
+static void disas_simd_two_reg_misc_fp16(DisasContext *s, uint32_t insn)
+{
+    int opcode = extract32(insn, 12, 5);
+    int u = extract32(insn, 29, 1);
+    int is_q = extract32(insn, 30, 1);
+    int a = extract32(insn, 23, 1);
+    int rn = extract32(insn, 5, 5);
+    int rd = extract32(insn, 0, 5);
+    int datasize, elements;
+    int fpopcode, pass;
+    TCGv_ptr fpst;
+
+    /* Handle any non-vector operations first */
+    switch (opcode) {
+    default:
+        fprintf(stderr, "%s: non-handled opcode %#x\n", __func__, opcode);
+        break;
+    }
+
+    fpopcode = opcode | (a << 5) | (u << 6);
+    datasize = is_q ? 128 : 64;
+    elements = datasize / 16;
+
+    fprintf(stderr, "%s: datasize %d, elements %d\n", __func__, datasize, elements);
+
+    fpst = get_fpstatus_ptr();
+
+    for (pass = 0; pass < elements; pass++) {
+        TCGv_i32 tcg_op1 = tcg_temp_new_i32();
+        TCGv_i32 tcg_res = tcg_temp_new_i32();
+
+        read_vec_element_i32(s, tcg_op1, rn, pass, MO_16);
+
+        switch (fpopcode) {
+        default:
+            fprintf(stderr,"%s: insn %#04x fpop %#2x\n", __func__, insn, fpopcode);
+            unsupported_encoding(s, insn);
+        }
+
+        write_vec_element_i32(s, tcg_res, rd, pass, MO_16);
+        tcg_temp_free_i32(tcg_res);
+        tcg_temp_free_i32(tcg_op1);
+    }
+
+    tcg_temp_free_ptr(fpst);
+
+    if (!is_q) {
+        /* non-quad vector op */
+        clear_vec_high(s, rd);
+    }
+}
+
 /* C3.6.13 AdvSIMD scalar x indexed element
  *  31 30  29 28       24 23  22 21  20  19  16 15 12  11  10 9    5 4    0
  * +-----+---+-----------+------+---+---+------+-----+---+---+------+------+
@@ -11273,7 +11338,8 @@ static const AArch64DecodeTable data_proc_simd[] = {
     { 0x4e280800, 0xff3e0c00, disas_crypto_aes },
     { 0x5e000000, 0xff208c00, disas_crypto_three_reg_sha },
     { 0x5e280800, 0xff3e0c00, disas_crypto_two_reg_sha },
-    { 0x0e400400, 0x9f60c400, disas_simd_three_reg_same_fp16},
+    { 0x0e400400, 0x9f60c400, disas_simd_three_reg_same_fp16 },
+    { 0x0e780800, 0x9f7f0c00, disas_simd_two_reg_misc_fp16 },
     { 0x00000000, 0x00000000, NULL }
 };
 
