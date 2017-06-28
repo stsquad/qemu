@@ -582,6 +582,14 @@ static TCGv_i32 read_fp_sreg(DisasContext *s, int reg)
     return v;
 }
 
+static TCGv_i32 read_fp_hreg(DisasContext *s, int reg)
+{
+    TCGv_i32 v = tcg_temp_new_i32();
+
+    tcg_gen_ld16u_i32(v, cpu_env, fp_reg_offset(s, reg, MO_16));
+    return v;
+}
+
 static void write_fp_dreg(DisasContext *s, int reg, TCGv_i64 v)
 {
     TCGv_i64 tcg_zero = tcg_const_i64(0);
@@ -592,6 +600,15 @@ static void write_fp_dreg(DisasContext *s, int reg, TCGv_i64 v)
 }
 
 static void write_fp_sreg(DisasContext *s, int reg, TCGv_i32 v)
+{
+    TCGv_i64 tmp = tcg_temp_new_i64();
+
+    tcg_gen_extu_i32_i64(tmp, v);
+    write_fp_dreg(s, reg, tmp);
+    tcg_temp_free_i64(tmp);
+}
+
+static void write_fp_hreg(DisasContext *s, int reg, TCGv_i32 v)
 {
     TCGv_i64 tmp = tcg_temp_new_i64();
 
@@ -4711,6 +4728,39 @@ static void disas_fp_1src(DisasContext *s, uint32_t insn)
     }
 }
 
+/* ARMv8.2 floating-point data-processing (2 source) - half precision
+ */
+static void handle_fp_2src_half(DisasContext *s, int opcode,
+                                int rd, int rn, int rm)
+{
+    TCGv_i32 tcg_op1;
+    TCGv_i32 tcg_op2;
+    TCGv_i32 tcg_res;
+    TCGv_ptr fpst;
+
+    tcg_res = tcg_temp_new_i32();
+    fpst = get_fpstatus_ptr();
+    tcg_op1 = read_fp_hreg(s, rn);
+    tcg_op2 = read_fp_hreg(s, rm);
+
+    switch (opcode) {
+    case 0x2: /* FADD */
+        gen_helper_advsimd_addh(tcg_res, tcg_op1, tcg_op2, fpst);
+        break;
+    default:
+        fprintf(stderr, "%s: unhandled op %#x\n", __func__, opcode);
+        unsupported_encoding(s, opcode);
+        break;
+    }
+
+    write_fp_hreg(s, rd, tcg_res);
+
+    tcg_temp_free_ptr(fpst);
+    tcg_temp_free_i32(tcg_op1);
+    tcg_temp_free_i32(tcg_op2);
+    tcg_temp_free_i32(tcg_res);
+}
+
 /* C3.6.26 Floating-point data-processing (2 source) - single precision */
 static void handle_fp_2src_single(DisasContext *s, int opcode,
                                   int rd, int rn, int rm)
@@ -4848,6 +4898,16 @@ static void disas_fp_2src(DisasContext *s, uint32_t insn)
             return;
         }
         handle_fp_2src_double(s, opcode, rd, rn, rm);
+        break;
+    case 3:
+        if (arm_dc_feature(s, ARM_FEATURE_V8_FP16)) {
+            if (!fp_access_check(s)) {
+                return;
+            }
+            handle_fp_2src_half(s, opcode, rd, rn, rm);
+        } else {
+            unallocated_encoding(s);
+        }
         break;
     default:
         unallocated_encoding(s);

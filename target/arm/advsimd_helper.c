@@ -83,3 +83,18 @@ uint32_t HELPER(advsimd_acgt_f16)(uint32_t a, uint32_t b, void *fpstp)
     sync_softfloat_flags_to_2a(fpstp);
     return r;
 }
+
+
+/* Data processing - scalar floating-point and advanced SIMD */
+
+uint32_t HELPER(advsimd_addh)(uint32_t a, uint32_t b, void *fpstp)
+{
+    union ui16_f16 uA = { .ui = a };
+    union ui16_f16 uB = { .ui = b };
+    float16_t r;
+
+    sync_softfloat_flags_from_2a(fpstp);
+    r = f16_add(uA.f, uB.f);
+    sync_softfloat_flags_to_2a(fpstp);
+    return r.v;
+}
