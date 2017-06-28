@@ -47,3 +47,4 @@ DEF_HELPER_FLAGS_4(paired_cmpxchg64_be, TCG_CALL_NO_WG, i64, env, i64, i64, i64)
 
 /* helper_advsimd.c */
 DEF_HELPER_3(advsimd_acgt_f16, i32, i32, i32, ptr)
+DEF_HELPER_3(advsimd_addh, f32, f32, f32, ptr)
