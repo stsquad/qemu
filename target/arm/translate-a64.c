@@ -9806,6 +9806,9 @@ static void disas_simd_three_reg_same_fp16(DisasContext *s, uint32_t insn)
         read_vec_element_i32(s, tcg_op2, rm, pass, MO_16);
 
         switch (fpopcode) {
+        case 0x2: /* FADD */
+            gen_helper_advsimd_addh(tcg_res, tcg_op1, tcg_op2, fpst);
+            break;
         case 0x35: /* FACGT */
             gen_helper_advsimd_acgt_f16(tcg_res, tcg_op1, tcg_op2, fpst);
             break;

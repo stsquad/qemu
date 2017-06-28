@@ -565,3 +565,11 @@ uint32_t HELPER(advsimd_acgt_f16)(float16 a, float16 b, void *fpstp)
         return 0;
     }
 }
+
+/* Data processing - scalar floating-point and advanced SIMD */
+
+float16 HELPER(advsimd_addh)(float16 a, float16 b, void *fpstp)
+{
+    float_status *fpst = fpstp;
+    return float16_add(a, b, fpst);
+}
