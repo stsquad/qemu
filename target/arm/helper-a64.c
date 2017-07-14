@@ -555,3 +555,13 @@ ADVSIMD_HALFOP(min)
 ADVSIMD_HALFOP(max)
 ADVSIMD_HALFOP(minnum)
 ADVSIMD_HALFOP(maxnum)
+
+uint32_t HELPER(advsimd_acgt_f16)(float16 a, float16 b, void *fpstp)
+{
+    float_status *fpst = fpstp;
+    if (float16_compare(a, b, fpst) == float_relation_greater) {
+        return -1;
+    } else {
+        return 0;
+    }
+}
