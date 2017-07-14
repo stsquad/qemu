@@ -407,6 +407,11 @@ supported_cpu="no"
 supported_os="no"
 bogus_os="no"
 
+# These control specialisations for the targets that use SoftFloat3
+softfloat3_fastint64="no"
+softfloat3_fastdiv32to16="no"
+softfloat3_fastdiv64to32="no"
+
 # parse CC options first
 for opt do
   optarg=$(expr "x$opt" : 'x[^=]*=\(.*\)')
@@ -620,6 +625,9 @@ case "$cpu" in
   x86_64|amd64)
     cpu="x86_64"
     supported_cpu="yes"
+    softfloat3_fastint64="yes"
+    softfloat3_fastdiv32to16="yes"
+    softfloat3_fastdiv64to32="yes"
   ;;
   armv*b|armv*l|arm)
     cpu="arm"
@@ -6421,6 +6429,20 @@ fi
 
 echo "LDFLAGS+=$ldflags" >> $config_target_mak
 echo "QEMU_CFLAGS+=$cflags" >> $config_target_mak
+
+if test "$softfloat3" = "yes"; then
+  echo "CONFIG_SOFTFLOAT3=y" >> $config_target_mak
+  # These control the specialisations of SoftFloats code
+  if test "$softfloat3_fastint64" = "yes"; then
+    echo "CONFIG_SOFTFLOAT3_FAST_INT64=y" >> $config_target_mak
+  fi
+  if test "$softfloat3_fastdiv32to16" = "yes"; then
+    echo "CONFIG_SOFTFLOAT3_FAST_DIV32TO16=y" >> $config_target_mak
+  fi
+  if test "$softfloat3_fastdiv64to32" = "yes"; then
+    echo "CONFIG_SOFTFLOAT3_FAST_DIV64TO32=y" >> $config_target_mak
+  fi
+fi
 
 done # for target in $targets
 
