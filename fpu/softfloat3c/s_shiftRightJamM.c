@@ -66,7 +66,7 @@ void
         } while ( i );
         ptr = zPtr;
     }
-    if ( wordDist < size_words ) {
+    if ( wordDist <= size_words ) {
         aPtr += indexMultiwordHiBut( size_words, wordDist );
         innerDist = dist & 31;
         if ( innerDist ) {
