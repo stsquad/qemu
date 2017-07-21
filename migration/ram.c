@@ -1317,6 +1317,13 @@ static int ram_find_and_save_block(RAMState *rs, bool last_stage)
         }
     } while (!pages && again);
 
+    if (!pages && !again && pss.complete_round && rs->migration_dirty_pages)
+    {
+        /* Should make this fail migration ? */
+        fprintf(stderr, "%s: no page found, yet dirty_pages=%"PRIu64"\n",
+                __func__, rs->migration_dirty_pages);
+    }
+
     rs->last_seen_block = pss.block;
     rs->last_page = pss.page;
 
