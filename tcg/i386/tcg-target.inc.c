@@ -329,6 +329,7 @@ static inline int tcg_target_const_match(tcg_target_long val, TCGType type,
 #define OPC_MOVSLQ	(0x63 | P_REXW)
 #define OPC_MOVZBL	(0xb6 | P_EXT)
 #define OPC_MOVZWL	(0xb7 | P_EXT)
+#define OPC_PDEP        (0xf5 | P_EXT38 | P_SIMDF2)
 #define OPC_PEXT        (0xf5 | P_EXT38 | P_SIMDF3)
 #define OPC_POP_r32	(0x58)
 #define OPC_POPCNT      (0xb8 | P_EXT | P_SIMDF3)
@@ -554,14 +555,12 @@ static void tcg_out_sfx_pool_imm(TCGContext *s, int r, tcg_target_ulong data)
     tcg_out32(s, 0);
 }
 
-#if 0
 static void tcg_out_opc_pool_imm(TCGContext *s, int opc, int r,
                                  tcg_target_ulong data)
 {
     tcg_out_opc(s, opc, r, 0, 0);
     tcg_out_sfx_pool_imm(s, r, data);
 }
-#endif
 
 static void tcg_out_vex_pool_imm(TCGContext *s, int opc, int r, int v,
                                  tcg_target_ulong data)
@@ -1902,7 +1901,7 @@ static void tcg_out_qemu_st(TCGContext *s, const TCGArg *args, bool is64)
 static inline void tcg_out_op(TCGContext *s, TCGOpcode opc,
                               const TCGArg *args, const int *const_args)
 {
-    TCGArg a0, a1, a2, a3;
+    TCGArg a0, a1, a2, a3, a4;
     int c, const_a2, vexop, rexw = 0;
 
 #if TCG_TARGET_REG_BITS == 64
@@ -2262,17 +2261,68 @@ static inline void tcg_out_op(TCGContext *s, TCGOpcode opc,
 #endif
 
     OP_32_64(deposit):
-        if (args[3] == 0 && args[4] == 8) {
-            /* load bits 0..7 */
-            tcg_out_modrm(s, OPC_MOVB_EvGv | P_REXB_R | P_REXB_RM, a2, a0);
-        } else if (args[3] == 8 && args[4] == 8) {
-            /* load bits 8..15 */
-            tcg_out_modrm(s, OPC_MOVB_EvGv, a2, a0 + 4);
-        } else if (args[3] == 0 && args[4] == 16) {
-            /* load bits 0..15 */
-            tcg_out_modrm(s, OPC_MOVL_EvGv | P_DATA16, a2, a0);
-        } else {
-            tcg_abort();
+        a3 = args[3];
+        a4 = args[4];
+        {
+            tcg_target_ulong mask = deposit64(0, a3, a4, -1);
+
+            if (const_args[1]) {
+                tcg_debug_assert(have_bmi2);
+                if (a3 == 0 && a0 == a2) {
+                    if (a4 <= 32) {
+                        tgen_arithi(s, ARITH_AND, a0, mask, 0);
+                    } else {
+                        tcg_out_opc_pool_imm(s, OPC_ARITH_GvEv + P_REXW
+                                             + ARITH_AND * 8, a0, mask);
+                    }
+                } else {
+                    tcg_out_vex_pool_imm(s, OPC_PDEP
+                                         + (a3 + a4 > 32) * P_REXW,
+                                         a0, a2, mask);
+                }
+                a1 &= ~mask;
+                if (a1 != 0) {
+                    if (!rexw || a1 == (int)a1) {
+                        tgen_arithi(s, ARITH_OR + rexw, a0, a1, 0);
+                    } else {
+                        tcg_out_opc_pool_imm(s, OPC_ARITH_GvEv + P_REXW
+                                             + ARITH_OR * 8, a0, a1);
+                    }
+                }
+            } else if (a0 == a1 && a3 == 0 && a4 == 8) {
+                /* load bits 0..7 */
+                tcg_out_modrm(s, OPC_MOVB_EvGv | P_REXB_R | P_REXB_RM, a2, a0);
+            } else if (a0 == a1 && a3 == 8 && a4 == 8 && a0 < 4 && a2 < 8) {
+                /* load bits 8..15 */
+                tcg_out_modrm(s, OPC_MOVB_EvGv, a2, a0 + 4);
+            } else if (a0 == a1 && a3 == 0 && a4 == 16) {
+                /* load bits 0..15 */
+                tcg_out_modrm(s, OPC_MOVL_EvGv | P_DATA16, a2, a0);
+            } else {
+                TCGType type = rexw ? TCG_TYPE_I64 : TCG_TYPE_I32;
+                TCGReg t1 = tcg_reg_alloc_new(s, type);
+                TCGReg t2 = t1;
+
+                tcg_debug_assert(have_bmi2);
+                tcg_out_movi(s, type, t1, mask);
+                if (a0 == a2) {
+                    t2 = tcg_reg_alloc_new(s, type);
+                    tcg_out_vex_modrm(s, OPC_ANDN + rexw, t2, t1, a1);
+                    if (a3 == 0) {
+                        tgen_arithr(s, ARITH_AND + rexw, a0, t1);
+                    } else {
+                        tcg_out_vex_modrm(s, OPC_PDEP + rexw, a0, a2, t1);
+                    }
+                } else {
+                    tcg_out_vex_modrm(s, OPC_ANDN + rexw, a0, t1, a1);
+                    if (a3 == 0) {
+                        tgen_arithr(s, ARITH_AND + rexw, t1, a2);
+                    } else {
+                        tcg_out_vex_modrm(s, OPC_PDEP + rexw, t1, a2, t1);
+                    }
+                }
+                tgen_arithr(s, ARITH_OR + rexw, a0, t2);
+            }
         }
         break;
 
@@ -2480,7 +2530,9 @@ static const TCGTargetOpDef *tcg_target_op_def(TCGOpcode op)
         {
             static const TCGTargetOpDef dep
                 = { .args_ct_str = { "Q", "0", "Q" } };
-            return &dep;
+            static const TCGTargetOpDef pdep
+                = { .args_ct_str = { "r", "ri", "r" } };
+            return have_bmi2 ? &pdep : &dep;
         }
     case INDEX_op_setcond_i32:
     case INDEX_op_setcond_i64:

@@ -148,7 +148,9 @@ extern bool have_popcnt;
 #endif
 
 #define TCG_TARGET_deposit_i32_valid(ofs, len) \
-    (((ofs) == 0 && (len) == 8) || ((ofs) == 8 && (len) == 8) || \
+    (have_bmi2 ||                              \
+     ((ofs) == 0 && (len) == 8) ||             \
+     ((ofs) == 8 && (len) == 8) ||             \
      ((ofs) == 0 && (len) == 16))
 #define TCG_TARGET_deposit_i64_valid    TCG_TARGET_deposit_i32_valid
 
