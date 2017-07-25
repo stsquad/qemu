@@ -76,6 +76,7 @@ typedef enum {
 #endif
 
 extern bool have_bmi1;
+extern bool have_bmi2;
 extern bool have_popcnt;
 
 /* optional instructions */
@@ -153,9 +154,10 @@ extern bool have_popcnt;
 
 /* Check for the possibility of high-byte extraction and, for 64-bit,
    zero-extending 32-bit right-shift.  */
-#define TCG_TARGET_extract_i32_valid(ofs, len) ((ofs) == 8 && (len) == 8)
+#define TCG_TARGET_extract_i32_valid(ofs, len) \
+    (have_bmi2 || ((ofs) == 8 && (len) == 8))
 #define TCG_TARGET_extract_i64_valid(ofs, len) \
-    (((ofs) == 8 && (len) == 8) || ((ofs) + (len)) == 32)
+    (have_bmi2 || ((ofs) == 8 && (len) == 8) || ((ofs) + (len)) == 32)
 
 #if TCG_TARGET_REG_BITS == 64
 # define TCG_AREG0 TCG_REG_R14
