@@ -655,6 +655,7 @@ struct TCGContext {
     uintptr_t *tb_jmp_insn_offset; /* tb->jmp_target_arg if direct_jump */
     uintptr_t *tb_jmp_target_addr; /* tb->jmp_target_arg if !direct_jump */
 
+    TCGRegSet regs_in_use;
     TCGRegSet reserved_regs;
     intptr_t current_frame_offset;
     intptr_t frame_start;
