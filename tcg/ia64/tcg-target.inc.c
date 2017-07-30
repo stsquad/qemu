@@ -1565,29 +1565,19 @@ typedef struct TCGLabelQemuLdst {
     struct TCGLabelQemuLdst *next;
 } TCGLabelQemuLdst;
 
-typedef struct TCGBackendData {
-    TCGLabelQemuLdst *labels;
-} TCGBackendData;
-
-static inline void tcg_out_tb_init(TCGContext *s)
-{
-    s->be->labels = NULL;
-}
-
 static void add_qemu_ldst_label(TCGContext *s, bool is_ld, TCGMemOp opc,
                                 tcg_insn_unit *label_ptr)
 {
-    TCGBackendData *be = s->be;
     TCGLabelQemuLdst *l = tcg_malloc(sizeof(*l));
 
     l->is_ld = is_ld;
     l->size = opc & MO_SIZE;
     l->label_ptr = label_ptr;
-    l->next = be->labels;
-    be->labels = l;
+    l->next = s->ldst_labels;
+    s->ldst_labels = l;
 }
 
-static bool tcg_out_tb_finalize(TCGContext *s)
+static bool tcg_out_ldst_finalize(TCGContext *s)
 {
     static const void * const helpers[8] = {
         helper_ret_stb_mmu,
@@ -1602,7 +1592,7 @@ static bool tcg_out_tb_finalize(TCGContext *s)
     tcg_insn_unit *thunks[8] = { };
     TCGLabelQemuLdst *l;
 
-    for (l = s->be->labels; l != NULL; l = l->next) {
+    for (l = s->ldst_labels; l != NULL; l = l->next) {
         long x = l->is_ld * 4 + l->size;
         tcg_insn_unit *dest = thunks[x];
 
@@ -1767,7 +1757,6 @@ static inline void tcg_out_qemu_st(TCGContext *s, const TCGArg *args)
 }
 
 #else /* !CONFIG_SOFTMMU */
-# include "tcg-be-null.h"
 
 static inline void tcg_out_qemu_ld(TCGContext *s, const TCGArg *args)
 {
