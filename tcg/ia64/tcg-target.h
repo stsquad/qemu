@@ -174,6 +174,7 @@ typedef enum {
 #define TCG_TARGET_HAS_extrl_i64_i32    0
 #define TCG_TARGET_HAS_extrh_i64_i32    0
 #define TCG_TARGET_HAS_goto_ptr         0
+#define TCG_TARGET_HAS_direct_jump      0
 
 #define TCG_TARGET_deposit_i32_valid(ofs, len) ((len) <= 16)
 #define TCG_TARGET_deposit_i64_valid(ofs, len) ((len) <= 16)
@@ -194,5 +195,8 @@ static inline void flush_icache_range(uintptr_t start, uintptr_t stop)
     }
     asm volatile (";;sync.i;;srlz.i;;");
 }
+
+/* not defined -- call should be eliminated at compile time */
+void tb_target_set_jmp_target(uintptr_t, uintptr_t, uintptr_t);
 
 #endif
