@@ -458,7 +458,7 @@ typedef struct CPUARMState {
          * map these registers when changing states.
          */
         float64 regs[64];
-
+        /* VFP system registers */
         uint32_t xregs[16];
         /* We store these fpcsr fields separately for convenience.  */
         int vec_len;
