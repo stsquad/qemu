@@ -44,3 +44,8 @@ DEF_HELPER_FLAGS_3(crc32_64, TCG_CALL_NO_RWG_SE, i64, i64, i64, i32)
 DEF_HELPER_FLAGS_3(crc32c_64, TCG_CALL_NO_RWG_SE, i64, i64, i64, i32)
 DEF_HELPER_FLAGS_4(paired_cmpxchg64_le, TCG_CALL_NO_WG, i64, env, i64, i64, i64)
 DEF_HELPER_FLAGS_4(paired_cmpxchg64_be, TCG_CALL_NO_WG, i64, env, i64, i64, i64)
+
+DEF_HELPER_3(advsimd_default_2op, void, vec, vec, i32)
+DEF_HELPER_4(advsimd_default_env_2op, void, env, vec, vec, i32)
+DEF_HELPER_4(advsimd_default_3op, void, vec, vec, vec, i32)
+DEF_HELPER_5(advsimd_default_env_3op, void, env, vec, vec, vec, i32)

@@ -30,6 +30,7 @@
 #include "exec/exec-all.h"
 #include "exec/cpu_ldst.h"
 #include "qemu/int128.h"
+#include "advsimd_helper_flags.h"
 #include "tcg.h"
 #include <zlib.h> /* For crc32 */
 
@@ -536,4 +537,33 @@ uint64_t HELPER(paired_cmpxchg64_be)(CPUARMState *env, uint64_t addr,
     }
 
     return !success;
+}
+
+/* Vectorised Helpers */
+
+/* Just a catch-all helper for now */
+void HELPER(advsimd_default_2op) (void *d, void *s, uint32_t flags)
+{
+    fprintf(stderr, "%s: flags = 0x%4x\n", __func__, flags);
+    abort();
+}
+
+void HELPER(advsimd_default_3op) (void *d, void *a, void *b, uint32_t flags)
+{
+    fprintf(stderr, "%s: flags = 0x%4x\n", __func__, flags);
+    abort();
+}
+
+void HELPER(advsimd_default_env_2op) (CPUARMState *env,
+                                      void *d, void *s, uint32_t flags)
+{
+    fprintf(stderr, "%s: flags = 0x%4x\n", __func__, flags);
+    abort();
+}
+
+void HELPER(advsimd_default_env_3op) (CPUARMState *env,
+                                      void *d, void *a, void *b, uint32_t flags)
+{
+    fprintf(stderr, "%s: flags = 0x%4x\n", __func__, flags);
+    abort();
 }
