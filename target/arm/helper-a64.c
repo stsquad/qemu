@@ -567,3 +567,512 @@ void HELPER(advsimd_default_env_3op) (CPUARMState *env,
     fprintf(stderr, "%s: flags = 0x%4x\n", __func__, flags);
     abort();
 }
+
+#define MAX_LANES       16
+#define LANE_WIDTH      1
+#define MAX_BITS        (MAX_LANES * LANE_WIDTH)
+
+typedef union {
+    uint8_t  u8[MAX_LANES] __attribute__((aligned(LANE_WIDTH)));
+    int16_t  s16[MAX_LANES / 2];
+    uint16_t u16[MAX_LANES / 2];
+    int32_t  s32[MAX_LANES / 4];
+    uint32_t u32[MAX_LANES / 4];
+    int64_t  s64[MAX_LANES / 8];
+    uint64_t u64[MAX_LANES / 8];
+} Vec;
+
+#define GET_SIMD_DATA(t, d) extract32(d,    \
+        ADVSIMD_ ## t ## _SHIFT,            \
+        ADVSIMD_ ## t ## _BITS)
+
+
+void HELPER(advsimd_shrn8)(void *d, void *s, uint32_t simd_data)
+{
+    int opr_elt = GET_SIMD_DATA(OPR_ELT, simd_data);
+    int all_elt = GET_SIMD_DATA(ALL_ELT, simd_data);
+    int shift = GET_SIMD_DATA(DATA, simd_data);
+    Vec *in = (Vec *) s;
+    Vec *out = (Vec *) d;
+    int i;
+
+    for (i = 0; i < opr_elt; i++) {
+        out->u8[i] = in->u16[i] >> shift;
+    }
+    for (i = opr_elt; i < all_elt; i++) {
+        out->u8[i] = 0;
+    }
+}
+
+static inline void set_csat(CPUARMState *env, bool sat)
+{
+    if (sat) {
+        env->vfp.xregs[ARM_VFP_FPSCR] |= CPSR_Q;
+    }
+}
+
+/* Signed saturating shift right */
+void HELPER(advsimd_sqshrn_s8)(CPUARMState *env,
+                                void *d, void *s, uint32_t simd_data)
+{
+    int opr_elt = GET_SIMD_DATA(OPR_ELT, simd_data);
+    int all_elt = GET_SIMD_DATA(ALL_ELT, simd_data);
+    int doff_elt = GET_SIMD_DATA(DOFF_ELT, simd_data);
+    int shift = GET_SIMD_DATA(DATA, simd_data);
+    Vec *in = (Vec *) s;
+    Vec *out = (Vec *) d;
+    int i;
+    bool sat = false;
+    Vec in_copy;
+
+    /* Detect same/same narrow */
+    if (d == s) {
+        in_copy = *in;
+        in = &in_copy;
+    }
+
+    for (i = 0; i < opr_elt; i++) {
+        int16_t shifted = in->s16[i] >> shift;
+        if (shifted > INT8_MAX) {
+            shifted = INT8_MAX;
+            sat |= true;
+        } else if (shifted < INT8_MIN) {
+            shifted = INT8_MIN;
+            sat |= true;
+        }
+        out->u8[i + doff_elt] = (uint8_t) shifted;
+    }
+    for (i = opr_elt; i < all_elt; i++) {
+        out->u8[i] = 0;
+    }
+
+    set_csat(env, sat);
+}
+
+/* Rounding signed saturating shift right */
+void HELPER(advsimd_sqrshrn_s8)(CPUARMState *env,
+                                 void *d, void *s, uint32_t simd_data)
+{
+    int opr_elt = GET_SIMD_DATA(OPR_ELT, simd_data);
+    int all_elt = GET_SIMD_DATA(ALL_ELT, simd_data);
+    int doff_elt = GET_SIMD_DATA(DOFF_ELT, simd_data);
+    int shift = GET_SIMD_DATA(DATA, simd_data);
+    Vec *in = (Vec *) s;
+    Vec *out = (Vec *) d;
+    int32_t rc = 1 << (shift - 1);
+    int i;
+    bool sat = false;
+    Vec in_copy;
+
+    /* Detect same/same narrow */
+    if (d == s) {
+        in_copy = *in;
+        in = &in_copy;
+    }
+
+    for (i = 0; i < opr_elt; i++) {
+        int32_t shifted = (in->s16[i] + rc) >> shift;
+        if (shifted > INT8_MAX) {
+            shifted = INT8_MAX;
+            sat |= true;
+        } else if (shifted < INT8_MIN) {
+            shifted = INT8_MIN;
+            sat |= true;
+        }
+        out->u8[i + doff_elt] = (uint8_t) shifted;
+    }
+    for (i = opr_elt; i < all_elt; i++) {
+        out->u8[i] = 0;
+    }
+
+    set_csat(env, sat);
+}
+
+/* Signed saturating shift right */
+void HELPER(advsimd_sqshrn_s16)(CPUARMState *env,
+                                void *d, void *s, uint32_t simd_data)
+{
+    int opr_elt = GET_SIMD_DATA(OPR_ELT, simd_data);
+    int all_elt = GET_SIMD_DATA(ALL_ELT, simd_data);
+    int doff_elt = GET_SIMD_DATA(DOFF_ELT, simd_data);
+    int shift = GET_SIMD_DATA(DATA, simd_data);
+    Vec *in = (Vec *) s;
+    Vec *out = (Vec *) d;
+    int i;
+    Vec in_copy;
+    bool sat = false;
+
+    /* Detect same/same narrow */
+    if (d == s) {
+        in_copy = *in;
+        in = &in_copy;
+    }
+
+    for (i = 0; i < opr_elt; i++) {
+        int32_t shifted = in->s32[i] >> shift;
+        if (shifted > INT16_MAX) {
+            shifted = INT16_MAX;
+            sat |= true;
+        } else if (shifted < INT16_MIN) {
+            shifted = INT16_MIN;
+            sat |= true;
+        }
+        out->u16[i + doff_elt] = (uint16_t) shifted;
+    }
+    for (i = opr_elt; i < all_elt; i++) {
+        out->u16[i] = 0;
+    }
+
+    set_csat(env, sat);
+}
+
+/* Rounding signed saturating shift right */
+void HELPER(advsimd_sqrshrn_s16)(CPUARMState *env,
+                                 void *d, void *s, uint32_t simd_data)
+{
+    int opr_elt = GET_SIMD_DATA(OPR_ELT, simd_data);
+    int all_elt = GET_SIMD_DATA(ALL_ELT, simd_data);
+    int doff_elt = GET_SIMD_DATA(DOFF_ELT, simd_data);
+    int shift = GET_SIMD_DATA(DATA, simd_data);
+    Vec *in = (Vec *) s;
+    Vec *out = (Vec *) d;
+    int64_t rc = 1UL << (shift - 1);
+    int i;
+    bool sat = false;
+    Vec in_copy;
+
+    /* Detect same/same narrow */
+    if (d == s) {
+        in_copy = *in;
+        in = &in_copy;
+    }
+
+    for (i = 0; i < opr_elt; i++) {
+        int64_t shifted = (in->s32[i] + rc) >> shift;
+        if (shifted > INT16_MAX) {
+            shifted = INT16_MAX;
+            sat |= true;
+        } else if (shifted < INT16_MIN) {
+            shifted = INT16_MIN;
+            sat |= true;
+        }
+        out->u16[i + doff_elt] = (uint16_t) shifted;
+    }
+    for (i = opr_elt; i < all_elt; i++) {
+        out->u16[i] = 0;
+    }
+
+    set_csat(env, sat);
+}
+
+/* Signed saturating shift right */
+void HELPER(advsimd_sqshrn_s32)(CPUARMState *env,
+                                void *d, void *s, uint32_t simd_data)
+{
+    int opr_elt = GET_SIMD_DATA(OPR_ELT, simd_data);
+    int all_elt = GET_SIMD_DATA(ALL_ELT, simd_data);
+    int doff_elt = GET_SIMD_DATA(DOFF_ELT, simd_data);
+    int shift = GET_SIMD_DATA(DATA, simd_data);
+    Vec *in = (Vec *) s;
+    Vec *out = (Vec *) d;
+    int i;
+    bool sat = false;
+    Vec in_copy;
+
+    /* Detect same/same narrow */
+    if (d == s) {
+        in_copy = *in;
+        in = &in_copy;
+    }
+
+    for (i = 0; i < opr_elt; i++) {
+        int64_t shifted = in->s64[i] >> shift;
+        if (shifted > INT32_MAX) {
+            shifted = INT32_MAX;
+            sat |= true;
+        } else if (shifted < INT32_MIN) {
+            shifted = INT32_MIN;
+            sat |= true;
+        }
+        out->s32[i + doff_elt] = (uint32_t) shifted;
+    }
+    for (i = opr_elt; i < all_elt; i++) {
+        out->s32[i] = 0;
+    }
+}
+
+/* Rounding signed saturating shift right */
+void HELPER(advsimd_sqrshrn_s32)(CPUARMState *env,
+                                 void *d, void *s, uint32_t simd_data)
+{
+    int opr_elt = GET_SIMD_DATA(OPR_ELT, simd_data);
+    int all_elt = GET_SIMD_DATA(ALL_ELT, simd_data);
+    int doff_elt = GET_SIMD_DATA(DOFF_ELT, simd_data);
+    int shift = GET_SIMD_DATA(DATA, simd_data);
+    Vec *in = (Vec *) s;
+    Vec *out = (Vec *) d;
+    Int128 rc = int128_make64(1ULL << (shift - 1));
+    Int128 s32max = int128_exts64(INT32_MAX);
+    Int128 s32min = int128_exts64(INT32_MIN);
+    int i;
+    bool sat = false;
+    Vec in_copy;
+
+    /* Detect same/same narrow */
+    if (d == s) {
+        in_copy = *in;
+        in = &in_copy;
+    }
+
+    for (i = 0; i < opr_elt; i++) {
+        Int128 rounded = int128_add(int128_exts64(in->s64[i]), rc);
+        Int128 shifted = int128_rshift(rounded, shift);
+        if (int128_gt(shifted, s32max)) {
+            shifted = s32max;
+            sat |= true;
+        } else if (int128_lt(shifted, s32min)) {
+            shifted = s32min;
+            sat |= true;
+        }
+        out->u32[i + doff_elt] = (uint32_t) int128_getlo(shifted);
+    }
+    for (i = opr_elt; i < all_elt; i++) {
+        out->u32[i] = 0;
+    }
+
+    set_csat(env, sat);
+}
+
+/* Signed saturating shift right with unsigned narrow */
+void HELPER(advsimd_sqshrn_u8)(CPUARMState *env,
+                               void *d, void *s, uint32_t simd_data)
+{
+    int opr_elt = GET_SIMD_DATA(OPR_ELT, simd_data);
+    int all_elt = GET_SIMD_DATA(ALL_ELT, simd_data);
+    int doff_elt = GET_SIMD_DATA(DOFF_ELT, simd_data);
+    int shift = GET_SIMD_DATA(DATA, simd_data);
+    Vec *in = (Vec *) s;
+    Vec *out = (Vec *) d;
+    bool sat = false;
+    int i;
+    Vec in_copy;
+
+    /* Detect same/same narrow */
+    if (d == s) {
+        in_copy = *in;
+        in = &in_copy;
+    }
+
+    for (i = 0; i < opr_elt; i++) {
+        int16_t shifted = in->s16[i] >> shift;
+        if (shifted > UINT8_MAX) {
+            shifted = UINT8_MAX;
+            sat |= true;
+        } else if (shifted < 0) {
+            shifted = 0;
+            sat |= true;
+        }
+        out->u8[i + doff_elt] = (uint8_t) shifted;
+    }
+    for (i = opr_elt; i < all_elt; i++) {
+        out->u8[i] = 0;
+    }
+
+    set_csat(env, sat);
+}
+
+/* Rounding signed saturating shift right with unsigned narrow */
+void HELPER(advsimd_sqrshrn_u8)(CPUARMState *env,
+                                 void *d, void *s, uint32_t simd_data)
+{
+    int opr_elt = GET_SIMD_DATA(OPR_ELT, simd_data);
+    int all_elt = GET_SIMD_DATA(ALL_ELT, simd_data);
+    int doff_elt = GET_SIMD_DATA(DOFF_ELT, simd_data);
+    int shift = GET_SIMD_DATA(DATA, simd_data);
+    Vec *in = (Vec *) s;
+    Vec *out = (Vec *) d;
+    int16_t rc = 1 << (shift - 1);
+    bool sat = false;
+    int i;
+    Vec in_copy;
+
+    /* Detect same/same narrow */
+    if (d == s) {
+        in_copy = *in;
+        in = &in_copy;
+    }
+
+    for (i = 0; i < opr_elt; i++) {
+        int16_t shifted = (in->s16[i] + rc) >> shift;
+        if (shifted > UINT8_MAX) {
+            shifted = UINT8_MAX;
+            sat |= true;
+        } else if (shifted < 0) {
+            shifted = 0;
+            sat |= true;
+        }
+        out->u8[i + doff_elt] = (uint8_t) shifted;
+    }
+    for (i = opr_elt; i < all_elt; i++) {
+        out->u8[i] = 0;
+    }
+
+    set_csat(env, sat);
+}
+
+/* Saturating shift right */
+void HELPER(advsimd_sqshrn_u16)(CPUARMState *env,
+                                void *d, void *s, uint32_t simd_data)
+{
+    int opr_elt = GET_SIMD_DATA(OPR_ELT, simd_data);
+    int all_elt = GET_SIMD_DATA(ALL_ELT, simd_data);
+    int doff_elt = GET_SIMD_DATA(DOFF_ELT, simd_data);
+    int shift = GET_SIMD_DATA(DATA, simd_data);
+    Vec *in = (Vec *) s;
+    Vec *out = (Vec *) d;
+    bool sat = false;
+    int i;
+    Vec in_copy;
+
+    /* Detect same/same narrow */
+    if (d == s) {
+        in_copy = *in;
+        in = &in_copy;
+    }
+
+    for (i = 0; i < opr_elt; i++) {
+        int32_t shifted = in->s32[i] >> shift;
+        if (shifted > UINT16_MAX) {
+            shifted = UINT16_MAX;
+            sat |= true;
+        } else if (shifted < 0) {
+            shifted = 0;
+            sat |= true;
+        }
+        out->u16[i + doff_elt] = (uint16_t) shifted;
+    }
+    for (i = opr_elt; i < all_elt; i++) {
+        out->u16[i] = 0;
+    }
+
+    set_csat(env, sat);
+}
+
+/* Rounding saturating shift right */
+void HELPER(advsimd_sqrshrn_u16)(CPUARMState *env,
+                                 void *d, void *s, uint32_t simd_data)
+{
+    int opr_elt = GET_SIMD_DATA(OPR_ELT, simd_data);
+    int all_elt = GET_SIMD_DATA(ALL_ELT, simd_data);
+    int doff_elt = GET_SIMD_DATA(DOFF_ELT, simd_data);
+    int shift = GET_SIMD_DATA(DATA, simd_data);
+    Vec *in = (Vec *) s;
+    Vec *out = (Vec *) d;
+    int64_t rc = 1UL << (shift - 1);
+    bool sat = false;
+    int i;
+    Vec in_copy;
+
+    /* Detect same/same narrow */
+    if (d == s) {
+        in_copy = *in;
+        in = &in_copy;
+    }
+
+    for (i = 0; i < opr_elt; i++) {
+        int32_t shifted = (in->s32[i] + rc) >> shift;
+        if (shifted > UINT16_MAX) {
+            shifted = UINT16_MAX;
+            sat |= true;
+        } else if (shifted < 0) {
+            shifted = 0;
+            sat |= true;
+        }
+        out->u16[i + doff_elt] = (uint16_t) shifted;
+    }
+    for (i = opr_elt; i < all_elt; i++) {
+        out->u16[i] = 0;
+    }
+
+    set_csat(env, sat);
+}
+
+/* Saturating shift right */
+void HELPER(advsimd_sqshrn_u32)(CPUARMState *env,
+                                void *d, void *s, uint32_t simd_data)
+{
+    int opr_elt = GET_SIMD_DATA(OPR_ELT, simd_data);
+    int all_elt = GET_SIMD_DATA(ALL_ELT, simd_data);
+    int doff_elt = GET_SIMD_DATA(DOFF_ELT, simd_data);
+    int shift = GET_SIMD_DATA(DATA, simd_data);
+    Vec *in = (Vec *) s;
+    Vec *out = (Vec *) d;
+    bool sat = false;
+    int i;
+    Vec in_copy;
+
+    /* Detect same/same narrow */
+    if (d == s) {
+        in_copy = *in;
+        in = &in_copy;
+    }
+
+    for (i = 0; i < opr_elt; i++) {
+        int64_t shifted = in->s64[i] >> shift;
+        if (shifted > UINT32_MAX) {
+            shifted = UINT32_MAX;
+            sat |= true;
+        } else if (shifted < 0) {
+            shifted = 0;
+            sat |= true;
+        }
+        out->u32[i + doff_elt] = (uint32_t) shifted;
+    }
+    for (i = opr_elt; i < all_elt; i++) {
+        out->u32[i] = 0;
+    }
+
+    set_csat(env, sat);
+}
+
+/* Rounding saturating shift right */
+void HELPER(advsimd_sqrshrn_u32)(CPUARMState *env,
+                                 void *d, void *s, uint32_t simd_data)
+{
+    int opr_elt = GET_SIMD_DATA(OPR_ELT, simd_data);
+    int all_elt = GET_SIMD_DATA(ALL_ELT, simd_data);
+    int doff_elt = GET_SIMD_DATA(DOFF_ELT, simd_data);
+    int shift = GET_SIMD_DATA(DATA, simd_data);
+    Vec *in = (Vec *) s;
+    Vec *out = (Vec *) d;
+    Int128 rc = int128_make64(1ULL << (shift - 1));
+    Int128 u32max = int128_make64(UINT32_MAX);
+    Int128 u32zero = int128_make64(0);
+    bool sat = false;
+    int i;
+    Vec in_copy;
+
+    /* Detect same/same narrow */
+    if (d == s) {
+        in_copy = *in;
+        in = &in_copy;
+    }
+
+    for (i = 0; i < opr_elt; i++) {
+        Int128 rounded = int128_add(int128_exts64(in->s64[i]), rc);
+        Int128 shifted = int128_rshift(rounded, shift);
+        if (int128_gt(shifted, u32max)) {
+            shifted = u32max;
+            sat |= true;
+        } else if (int128_lt(shifted, u32zero)) {
+            shifted = u32zero;
+            sat |= true;
+        }
+        out->u32[i + doff_elt] = (uint32_t) int128_getlo(shifted);
+    }
+    for (i = opr_elt; i < all_elt; i++) {
+        out->u32[i] = 0;
+    }
+
+    set_csat(env, sat);
+}

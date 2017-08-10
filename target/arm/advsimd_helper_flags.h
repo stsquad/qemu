@@ -25,19 +25,22 @@
  * identical operations on different registers this should propergate
  * nicely in the TCG.
  *
- * There are two element counts:
- *   ADVSIMD_OPR_ELT - the count of elements affected
- *   ADVSIMD_ALL_ELT - the total count of elements (e.g. clear all-opr elements)
+ * The following control element iteration:
+ *   ADVSIMD_OPR_ELT  - the count of elements affected
+ *   ADVSIMD_ALL_ELT  - the total count of elements (e.g. clear all-opr elements)
+ *   ADVSIMD_DOFF_ELT - the offset for the destination register (e.g. foo2 ops)
  *
  * We encode immediate data in:
- *   ADVSIMD_IMM_DATA
+ *   ADVSIMD_DATA
  *
  * Typically this is things like shift counts and the like.
  */
 
-#define ADVSIMD_OPR_ELT_BITS      8
+#define ADVSIMD_OPR_ELT_BITS      5
 #define ADVSIMD_OPR_ELT_SHIFT     0
-#define ADVSIMD_ALL_ELT_BITS      8
-#define ADVSIMD_ALL_ELT_SHIFT     8
+#define ADVSIMD_ALL_ELT_BITS      5
+#define ADVSIMD_ALL_ELT_SHIFT     5
+#define ADVSIMD_DOFF_ELT_BITS     5
+#define ADVSIMD_DOFF_ELT_SHIFT   10
 #define ADVSIMD_DATA_BITS        16
 #define ADVSIMD_DATA_SHIFT       16

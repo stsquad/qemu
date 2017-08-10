@@ -34,6 +34,8 @@
 #include "exec/helper-gen.h"
 #include "exec/log.h"
 
+#include "advsimd_helper_flags.h"
+
 #include "trace-tcg.h"
 
 /* Global registers */
@@ -6584,7 +6586,15 @@ static void handle_scalar_simd_shli(DisasContext *s, bool insert,
 }
 
 /* SQSHRN/SQSHRUN - Saturating (signed/unsigned) shift right with
- * (signed/unsigned) narrowing */
+ * (signed/unsigned) narrowing
+ *
+ * Covers: SQSHRN/SQSHRN2
+ *         SQRSHRN/SQRSHRN2
+ */
+
+typedef void AdvSIMDGenTwoOpVectorFn(TCGv_vec, TCGv_vec, TCGv_i32);
+typedef void AdvSIMDGenTwoOpEnvVectorFn(TCGv_ptr, TCGv_vec, TCGv_vec, TCGv_i32);
+
 static void handle_vec_simd_sqshrn(DisasContext *s, bool is_scalar, bool is_q,
                                    bool is_u_shift, bool is_u_narrow,
                                    int immh, int immb, int opcode,
@@ -6595,30 +6605,55 @@ static void handle_vec_simd_sqshrn(DisasContext *s, bool is_scalar, bool is_q,
     int esize = 8 << size;
     int shift = (2 * esize) - immhb;
     int elements = is_scalar ? 1 : (64 / esize);
-    bool round = extract32(opcode, 0, 1);
-    TCGMemOp ldop = (size + 1) | (is_u_shift ? 0 : MO_SIGN);
-    TCGv_i64 tcg_rn, tcg_rd, tcg_round;
-    TCGv_i32 tcg_rd_narrowed;
-    TCGv_i64 tcg_final;
+    bool is_round = extract32(opcode, 0, 1);
+    uint32_t simd_info = 0;
+    TCGv_i32 tcg_simd_info;
 
-    static NeonGenNarrowEnvFn * const signed_narrow_fns[4][2] = {
-        { gen_helper_neon_narrow_sat_s8,
-          gen_helper_neon_unarrow_sat8 },
-        { gen_helper_neon_narrow_sat_s16,
-          gen_helper_neon_unarrow_sat16 },
-        { gen_helper_neon_narrow_sat_s32,
-          gen_helper_neon_unarrow_sat32 },
+    /* Saturating signed shift right with [un]signed narrow */
+    static AdvSIMDGenTwoOpEnvVectorFn * const signed_fns[3][2][2] = {
+        /*               without rounding,                with rounding */
+        {
+            {gen_helper_advsimd_sqshrn_s8, gen_helper_advsimd_sqrshrn_s8},
+            {gen_helper_advsimd_sqshrn_u8, gen_helper_advsimd_sqrshrn_u8},
+        },
+        /* sat_s16 */
+        {
+            {gen_helper_advsimd_sqshrn_s16, gen_helper_advsimd_sqrshrn_s16},
+            {gen_helper_advsimd_sqshrn_u16, gen_helper_advsimd_sqrshrn_u16},
+        },
+        /* sat_s32 */
+        {
+            {gen_helper_advsimd_sqshrn_s32, gen_helper_advsimd_sqrshrn_s32},
+            {gen_helper_advsimd_sqshrn_u32, gen_helper_advsimd_sqrshrn_u32},
+        }
+        /* { gen_helper_advsimd_default_2op, */
+        /*   gen_helper_advsimd_shrn8, */
+        /* }, */
+        /* { gen_helper_advsimd_sqrshn16, */
+        /*   gen_helper_advsimd_default_2op */
+        /* }, */
+        /* { gen_helper_advsimd_default_2op, */
+        /*   gen_helper_advsimd_default_2op */
+        /* }, */
+        /* { gen_helper_neon_narrow_sat_s8, */
+        /*   gen_helper_neon_unarrow_sat8 }, */
+        /* { gen_helper_neon_narrow_sat_s16, */
+        /*   gen_helper_neon_unarrow_sat16 }, */
+        /* { gen_helper_neon_narrow_sat_s32, */
+        /*   gen_helper_neon_unarrow_sat32 }, */
+    };
+
+    static AdvSIMDGenTwoOpEnvVectorFn * const unsigned_fns[3][2] = {
         { NULL, NULL },
+        { NULL, NULL },
+        { NULL, NULL },
+        /* gen_helper_neon_narrow_sat_u8, */
+        /* gen_helper_neon_narrow_sat_u16, */
+        /* gen_helper_neon_narrow_sat_u32, */
+        /* { NULL, NULL }, */
     };
-    static NeonGenNarrowEnvFn * const unsigned_narrow_fns[4] = {
-        gen_helper_neon_narrow_sat_u8,
-        gen_helper_neon_narrow_sat_u16,
-        gen_helper_neon_narrow_sat_u32,
-        NULL
-    };
-    NeonGenNarrowEnvFn *narrowfn;
 
-    int i;
+    AdvSIMDGenTwoOpEnvVectorFn *fn;
 
     assert(size < 4);
 
@@ -6631,47 +6666,48 @@ static void handle_vec_simd_sqshrn(DisasContext *s, bool is_scalar, bool is_q,
         return;
     }
 
+    /* fprintf(stderr, "%s: sqshrn/sqshrun %x -> sz:%d rnd:%d us:%d un:%d\n", */
+    /*         __func__, opcode, size, is_round, is_u_shift, is_u_narrow); */
+
     if (is_u_shift) {
-        narrowfn = unsigned_narrow_fns[size];
+        fn = unsigned_fns[size][is_round ? 1 : 0];
     } else {
-        narrowfn = signed_narrow_fns[size][is_u_narrow ? 1 : 0];
+        fn = signed_fns[size][is_u_narrow ? 1 : 0][is_round ? 1 : 0];
     }
 
-    tcg_rn = tcg_temp_new_i64();
-    tcg_rd = tcg_temp_new_i64();
-    tcg_rd_narrowed = tcg_temp_new_i32();
-    tcg_final = tcg_const_i64(0);
+    assert(fn);
 
-    if (round) {
-        uint64_t round_const = 1ULL << (shift - 1);
-        tcg_round = tcg_const_i64(round_const);
-    } else {
-        TCGV_UNUSED_I64(tcg_round);
-    }
+    /* Save the shift data */
+    simd_info = deposit32(0, ADVSIMD_DATA_SHIFT, ADVSIMD_DATA_BITS, shift);
 
-    for (i = 0; i < elements; i++) {
-        read_vec_element(s, tcg_rn, rn, i, ldop);
-        handle_shri_with_rndacc(tcg_rd, tcg_rn, tcg_round,
-                                false, is_u_shift, size+1, shift);
-        narrowfn(tcg_rd_narrowed, cpu_env, tcg_rd);
-        tcg_gen_extu_i32_i64(tcg_rd, tcg_rd_narrowed);
-        tcg_gen_deposit_i64(tcg_final, tcg_final, tcg_rd, esize * i, esize);
-    }
-
+    /* Operation and total element counts */
+    simd_info = deposit32(simd_info,
+                          ADVSIMD_OPR_ELT_SHIFT, ADVSIMD_OPR_ELT_BITS,
+                          elements);
     if (!is_q) {
-        clear_vec_high(s, rd);
-        write_vec_element(s, tcg_final, rd, 0, MO_64);
+        /* clear remaining elements */
+        if (is_scalar) {
+            int remainder = (64 / esize) << 1;
+            simd_info = deposit32(simd_info,
+                                  ADVSIMD_ALL_ELT_SHIFT, ADVSIMD_ALL_ELT_BITS,
+                                  remainder);
+        } else {
+            simd_info = deposit32(simd_info,
+                                  ADVSIMD_ALL_ELT_SHIFT, ADVSIMD_ALL_ELT_BITS,
+                                  elements << 1);
+        }
     } else {
-        write_vec_element(s, tcg_final, rd, 1, MO_64);
+        /* store result in top half of vector */
+        simd_info = deposit32(simd_info,
+                              ADVSIMD_DOFF_ELT_SHIFT, ADVSIMD_DOFF_ELT_BITS,
+                              elements);
     }
 
-    if (round) {
-        tcg_temp_free_i64(tcg_round);
-    }
-    tcg_temp_free_i64(tcg_rn);
-    tcg_temp_free_i64(tcg_rd);
-    tcg_temp_free_i32(tcg_rd_narrowed);
-    tcg_temp_free_i64(tcg_final);
+    tcg_simd_info = tcg_const_i32(simd_info);
+
+    fn(cpu_env, cpu_V[rd], cpu_V[rn], tcg_simd_info);
+
+    tcg_temp_free_i32(tcg_simd_info);
     return;
 }
 
@@ -7930,7 +7966,6 @@ static void handle_2misc_narrow(DisasContext *s, bool scalar,
         switch (opcode) {
         case 0x12: /* XTN, SQXTUN */
         {
-            fprintf(stderr, "%s: xtx/sqxtun %d\n", __func__, size);
             static NeonGenNarrowFn * const xtnfns[3] = {
                 gen_helper_neon_narrow_u8,
                 gen_helper_neon_narrow_u16,
