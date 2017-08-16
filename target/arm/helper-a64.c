@@ -1076,3 +1076,30 @@ void HELPER(advsimd_sqrshrn_u32)(CPUARMState *env,
 
     set_csat(env, sat);
 }
+
+/* Multiply Long (vector, by element) */
+void HELPER(advsimd_smull_idx_s32)(void *d, void *n, uint32_t m, uint32_t simd_data)
+{
+    int doff_elt = GET_SIMD_DATA(DOFF_ELT, simd_data);
+    Vec *rd = (Vec *) d;
+    Vec *rn = (Vec *) n;
+    int16_t rm = (int16_t) m;
+    int i;
+    Vec rn_copy;
+
+    /* Detect same->same operation */
+    if (d == n) {
+        rn_copy = *rn;
+        rn = &rn_copy;
+    }
+
+    for (i = 0; i < 4; i++) {
+        int32_t result = rn->s16[i + doff_elt] * rm;
+        rd->s32[i] = result;
+    }
+}
+
+void HELPER(advsimd_smull_idx_s64)(void *d, void *n, uint64_t rm, uint32_t simd_data)
+{
+    assert(false);
+}

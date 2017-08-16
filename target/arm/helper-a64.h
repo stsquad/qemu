@@ -64,3 +64,6 @@ DEF_HELPER_4(advsimd_sqshrn_u16, void, env, vec, vec, i32)
 DEF_HELPER_4(advsimd_sqrshrn_u16, void, env, vec, vec, i32)
 DEF_HELPER_4(advsimd_sqshrn_u32, void, env, vec, vec, i32)
 DEF_HELPER_4(advsimd_sqrshrn_u32, void, env, vec, vec, i32)
+
+DEF_HELPER_4(advsimd_smull_idx_s32, void, vec, vec, i32, i32)
+DEF_HELPER_4(advsimd_smull_idx_s64, void, vec, vec, i64, i32)
