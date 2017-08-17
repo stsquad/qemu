@@ -604,7 +604,7 @@ int tcg_global_mem_new_internal(TCGType type, TCGv_ptr base,
     return temp_idx(s, ts);
 }
 
-static int tcg_temp_new_internal(TCGType type, int temp_local)
+int tcg_temp_new_internal(TCGType type, bool temp_local)
 {
     TCGContext *s = &tcg_ctx;
     TCGTemp *ts;
@@ -650,7 +650,7 @@ static int tcg_temp_new_internal(TCGType type, int temp_local)
     return idx;
 }
 
-TCGv_i32 tcg_temp_new_internal_i32(int temp_local)
+TCGv_i32 tcg_temp_new_internal_i32(bool temp_local)
 {
     int idx;
 
@@ -658,7 +658,7 @@ TCGv_i32 tcg_temp_new_internal_i32(int temp_local)
     return MAKE_TCGV_I32(idx);
 }
 
-TCGv_i64 tcg_temp_new_internal_i64(int temp_local)
+TCGv_i64 tcg_temp_new_internal_i64(bool temp_local)
 {
     int idx;
 
@@ -666,7 +666,7 @@ TCGv_i64 tcg_temp_new_internal_i64(int temp_local)
     return MAKE_TCGV_I64(idx);
 }
 
-static void tcg_temp_free_internal(int idx)
+void tcg_temp_free_internal(int idx)
 {
     TCGContext *s = &tcg_ctx;
     TCGTemp *ts;

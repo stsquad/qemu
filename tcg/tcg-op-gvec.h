@@ -40,6 +40,10 @@ typedef struct {
     /* Similarly, but load up a constant and re-use across lanes.  */
     void (*fni8x)(TCGv_i64, TCGv_i64, TCGv_i64, TCGv_i64);
     uint64_t extra_value;
+    /* Operations with host vector ops.  */
+    TCGOpcode op_v256;
+    TCGOpcode op_v128;
+    TCGOpcode op_v64;
     /* Larger sizes: expand out-of-line helper w/size descriptor.  */
     void (*fno)(TCGv_ptr, TCGv_ptr, TCGv_ptr, TCGv_i32);
 } GVecGen3;
