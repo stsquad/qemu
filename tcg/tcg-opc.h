@@ -212,13 +212,13 @@ DEF(qemu_st_i64, 0, TLADDR_ARGS + DATA64_ARGS, 1,
 /* Host integer vector operations.  */
 /* These opcodes are required whenever the base vector size is enabled.  */
 
-DEF(mov_v64, 1, 1, 0, IMPL(TCG_TARGET_HAS_v64))
-DEF(mov_v128, 1, 1, 0, IMPL(TCG_TARGET_HAS_v128))
-DEF(mov_v256, 1, 1, 0, IMPL(TCG_TARGET_HAS_v256))
+DEF(mov_v64, 1, 1, 0, TCG_OPF_NOT_PRESENT)
+DEF(mov_v128, 1, 1, 0, TCG_OPF_NOT_PRESENT)
+DEF(mov_v256, 1, 1, 0, TCG_OPF_NOT_PRESENT)
 
-DEF(movi_v64, 1, 0, 1, IMPL(TCG_TARGET_HAS_v64))
-DEF(movi_v128, 1, 0, 1, IMPL(TCG_TARGET_HAS_v128))
-DEF(movi_v256, 1, 0, 1, IMPL(TCG_TARGET_HAS_v256))
+DEF(movi_v64, 1, 0, 1, TCG_OPF_NOT_PRESENT)
+DEF(movi_v128, 1, 0, 1, TCG_OPF_NOT_PRESENT)
+DEF(movi_v256, 1, 0, 1, TCG_OPF_NOT_PRESENT)
 
 DEF(ld_v64, 1, 1, 1, IMPL(TCG_TARGET_HAS_v64))
 DEF(ld_v128, 1, 1, 1, IMPL(TCG_TARGET_HAS_v128))
