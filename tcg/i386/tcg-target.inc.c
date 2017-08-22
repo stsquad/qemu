@@ -3050,7 +3050,7 @@ static void tcg_target_init(TCGContext *s)
         if (c & bit_OSXSAVE) {
             unsigned xcrl, xcrh;
             asm ("xgetbv" : "=a" (xcrl), "=d" (xcrh) : "c" (0));
-            if (xcrl & 6 == 6) {
+            if ((xcrl & 6) == 6) {
                 have_avx1 = (c & bit_AVX) != 0;
                 have_avx2 = (b7 & bit_AVX2) != 0;
             }
