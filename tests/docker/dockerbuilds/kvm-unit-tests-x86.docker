@@ -1,0 +1,21 @@
+#
+# Build KVM Unit Tests for x86
+#
+FROM qemu:debian9
+
+# Need git to build direct from source
+RUN apt update
+RUN apt install -yy git automake gdb libc6-dbg qemu-system-x86
+
+# Download an unpack the source
+RUN GIT_SSL_NO_VERIFY=true git clone https://git.kernel.org/pub/scm/virt/kvm/kvm-unit-tests.git kvm-unit-tests.git
+
+# The J arg can be over-ridden with --build-arg=J=9 when building directly
+# or exporting J=n via the --env options of docker.py build
+ARG J=1
+
+# Configure and build
+WORKDIR /kvm-unit-tests.git
+RUN ./configure
+RUN make -j${J:-1}
+RUN make install
