@@ -149,3 +149,5 @@ trace-dtrace-root.dtrace
 trace-ust-all.h
 trace-ust-all.c
 /target/arm/decode-sve.inc.c
+qemu-plugins-ld.symbols
+qemu-plugins-ld64.symbols
