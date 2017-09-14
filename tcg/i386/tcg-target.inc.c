@@ -2491,7 +2491,7 @@ static inline void tcg_out_op(TCGContext *s, TCGOpcode opc,
         if (have_avx1) {
             tcg_out_vex_modrm(s, OPC_PANDN, a0, a2, a1);
         } else {
-            tcg_out_modrm(s, c, a0, a1);
+            tcg_out_modrm(s, OPC_PANDN, a0, a1);
         }
         break;
 
