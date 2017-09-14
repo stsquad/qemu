@@ -171,6 +171,24 @@ typedef uint64_t TCGRegSet;
 # error "Missing unsigned widening multiply"
 #endif
 
+#if !defined(TCG_TARGET_HAS_v64) \
+    && !defined(TCG_TARGET_HAS_v128) \
+    && !defined(TCG_TARGET_HAS_v256)
+#define TCG_TARGET_HAS_neg_vec          0
+#define TCG_TARGET_HAS_not_vec          0
+#define TCG_TARGET_HAS_andc_vec         0
+#define TCG_TARGET_HAS_orc_vec          0
+#endif
+#ifndef TCG_TARGET_HAS_v64
+#define TCG_TARGET_HAS_v64              0
+#endif
+#ifndef TCG_TARGET_HAS_v128
+#define TCG_TARGET_HAS_v128             0
+#endif
+#ifndef TCG_TARGET_HAS_v256
+#define TCG_TARGET_HAS_v256             0
+#endif
+
 #ifndef TARGET_INSN_START_EXTRA_WORDS
 # define TARGET_INSN_START_WORDS 1
 #else
@@ -247,6 +265,11 @@ typedef struct TCGPool {
 typedef enum TCGType {
     TCG_TYPE_I32,
     TCG_TYPE_I64,
+
+    TCG_TYPE_V64,
+    TCG_TYPE_V128,
+    TCG_TYPE_V256,
+
     TCG_TYPE_COUNT, /* number of different types */
 
     /* An alias for the size of the host register.  */
@@ -397,6 +420,8 @@ typedef tcg_target_ulong TCGArg;
     * TCGv_i32 : 32 bit integer type
     * TCGv_i64 : 64 bit integer type
     * TCGv_ptr : a host pointer type
+    * TCGv_vec : a host vector type; the exact size is not exposed
+                 to the CPU front-end code.
     * TCGv : an integer type the same size as target_ulong
              (an alias for either TCGv_i32 or TCGv_i64)
    The compiler's type checking will complain if you mix them
@@ -422,6 +447,7 @@ typedef tcg_target_ulong TCGArg;
 typedef struct TCGv_i32_d *TCGv_i32;
 typedef struct TCGv_i64_d *TCGv_i64;
 typedef struct TCGv_ptr_d *TCGv_ptr;
+typedef struct TCGv_vec_d *TCGv_vec;
 typedef TCGv_ptr TCGv_env;
 #if TARGET_LONG_BITS == 32
 #define TCGv TCGv_i32
@@ -446,6 +472,11 @@ static inline TCGv_ptr QEMU_ARTIFICIAL MAKE_TCGV_PTR(intptr_t i)
     return (TCGv_ptr)i;
 }
 
+static inline TCGv_vec QEMU_ARTIFICIAL MAKE_TCGV_VEC(intptr_t i)
+{
+    return (TCGv_vec)i;
+}
+
 static inline intptr_t QEMU_ARTIFICIAL GET_TCGV_I32(TCGv_i32 t)
 {
     return (intptr_t)t;
@@ -461,6 +492,11 @@ static inline intptr_t QEMU_ARTIFICIAL GET_TCGV_PTR(TCGv_ptr t)
     return (intptr_t)t;
 }
 
+static inline intptr_t QEMU_ARTIFICIAL GET_TCGV_VEC(TCGv_vec t)
+{
+    return (intptr_t)t;
+}
+
 #if TCG_TARGET_REG_BITS == 32
 #define TCGV_LOW(t) MAKE_TCGV_I32(GET_TCGV_I64(t))
 #define TCGV_HIGH(t) MAKE_TCGV_I32(GET_TCGV_I64(t) + 1)
@@ -469,15 +505,18 @@ static inline intptr_t QEMU_ARTIFICIAL GET_TCGV_PTR(TCGv_ptr t)
 #define TCGV_EQUAL_I32(a, b) (GET_TCGV_I32(a) == GET_TCGV_I32(b))
 #define TCGV_EQUAL_I64(a, b) (GET_TCGV_I64(a) == GET_TCGV_I64(b))
 #define TCGV_EQUAL_PTR(a, b) (GET_TCGV_PTR(a) == GET_TCGV_PTR(b))
+#define TCGV_EQUAL_VEC(a, b) (GET_TCGV_VEC(a) == GET_TCGV_VEC(b))
 
 /* Dummy definition to avoid compiler warnings.  */
 #define TCGV_UNUSED_I32(x) ((x) = NULL)
 #define TCGV_UNUSED_I64(x) ((x) = NULL)
 #define TCGV_UNUSED_PTR(x) ((x) = NULL)
+#define TCGV_UNUSED_VEC(x) ((x) = NULL)
 
 #define TCGV_IS_UNUSED_I32(x) (GET_TCGV_I32(x) == 0)
 #define TCGV_IS_UNUSED_I64(x) (GET_TCGV_I64(x) == 0)
 #define TCGV_IS_UNUSED_PTR(x) (GET_TCGV_PTR(x) == 0)
+#define TCGV_IS_UNUSED_VEC(x) (GET_TCGV_VEC(x) == 0)
 
 /* call flags */
 /* Helper does not read globals (either directly or through an exception). It
@@ -786,6 +825,11 @@ static inline TCGArg tcgv_ptr_arg(TCGv_ptr t)
     return index_arg(GET_TCGV_PTR(t));
 }
 
+static inline TCGArg tcgv_vec_arg(TCGv_vec t)
+{
+    return index_arg(GET_TCGV_VEC(t));
+}
+
 static inline void tcg_set_insn_param(int op_idx, int arg, TCGArg v)
 {
     tcg_ctx->gen_op_buf[op_idx].args[arg] = v;
@@ -848,9 +892,12 @@ int tcg_global_mem_new_internal(TCGType, TCGv_ptr, intptr_t, const char *);
 
 TCGv_i32 tcg_temp_new_internal_i32(int temp_local);
 TCGv_i64 tcg_temp_new_internal_i64(int temp_local);
+TCGv_vec tcg_temp_new_vec(TCGType type);
+TCGv_vec tcg_temp_new_vec_matching(TCGv_vec match);
 
 void tcg_temp_free_i32(TCGv_i32 arg);
 void tcg_temp_free_i64(TCGv_i64 arg);
+void tcg_temp_free_vec(TCGv_vec arg);
 
 static inline TCGv_i32 tcg_global_mem_new_i32(TCGv_ptr reg, intptr_t offset,
                                               const char *name)
