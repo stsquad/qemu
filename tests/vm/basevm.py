@@ -27,9 +27,9 @@ import shutil
 import multiprocessing
 import traceback
 
-SSH_KEY = open(os.path.join(od.path.dirname(__file__),
+SSH_KEY = open(os.path.join(os.path.dirname(__file__),
                "..", "keys", "id_rsa")).read()
-SSH_PUB_KEY = open(os.path.join(od.path.dirname(__file__),
+SSH_PUB_KEY = open(os.path.join(os.path.dirname(__file__),
                    "..", "keys", "id_rsa.pub")).read()
 
 class BaseVM(object):
