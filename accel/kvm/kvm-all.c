@@ -1940,7 +1940,7 @@ int kvm_cpu_exec(CPUState *cpu)
                           run->io.direction,
                           run->io.size,
                           run->io.count);
-            ret = 0;
+            ret = cpu->singlestep_enabled ? EXCP_DEBUG : 0;
             break;
         case KVM_EXIT_MMIO:
             DPRINTF("handle_mmio\n");
@@ -1950,7 +1950,7 @@ int kvm_cpu_exec(CPUState *cpu)
                              run->mmio.data,
                              run->mmio.len,
                              run->mmio.is_write);
-            ret = 0;
+            ret = cpu->singlestep_enabled ? EXCP_DEBUG : 0;
             break;
         case KVM_EXIT_IRQ_WINDOW_OPEN:
             DPRINTF("irq_window_open\n");
