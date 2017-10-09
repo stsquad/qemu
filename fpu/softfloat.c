@@ -3532,6 +3532,197 @@ static void normalizeFloat16Subnormal(uint32_t aSig, int *zExpPtr,
     *zExpPtr = 1 - shiftCount;
 }
 
+/*----------------------------------------------------------------------------
+| Returns the result of adding the absolute values of the half-precision
+| floating-point values `a' and `b'.  If `zSign' is 1, the sum is negated
+| before being returned.  `zSign' is ignored if the result is a NaN.
+| The addition is performed according to the IEC/IEEE Standard for Binary
+| Floating-Point Arithmetic.
+*----------------------------------------------------------------------------*/
+
+static float16 addFloat16Sigs(float16 a, float16 b, flag zSign,
+                              float_status *status)
+{
+    int aExp, bExp, zExp;
+    uint16_t aSig, bSig, zSig;
+    int expDiff;
+
+    aSig = extractFloat16Frac( a );
+    aExp = extractFloat16Exp( a );
+    bSig = extractFloat16Frac( b );
+    bExp = extractFloat16Exp( b );
+    expDiff = aExp - bExp;
+    aSig <<= 3;
+    bSig <<= 3;
+    if ( 0 < expDiff ) {
+        if ( aExp == 0x1F ) {
+            if (aSig) {
+                return propagateFloat16NaN(a, b, status);
+            }
+            return a;
+        }
+        if ( bExp == 0 ) {
+            --expDiff;
+        }
+        else {
+            bSig |= 0x20000000;
+        }
+        shift16RightJamming( bSig, expDiff, &bSig );
+        zExp = aExp;
+    }
+    else if ( expDiff < 0 ) {
+        if ( bExp == 0x1F ) {
+            if (bSig) {
+                return propagateFloat16NaN(a, b, status);
+            }
+            return packFloat16( zSign, 0x1F, 0 );
+        }
+        if ( aExp == 0 ) {
+            ++expDiff;
+        }
+        else {
+            aSig |= 0x0400;
+        }
+        shift16RightJamming( aSig, - expDiff, &aSig );
+        zExp = bExp;
+    }
+    else {
+        if ( aExp == 0x1F ) {
+            if (aSig | bSig) {
+                return propagateFloat16NaN(a, b, status);
+            }
+            return a;
+        }
+        if ( aExp == 0 ) {
+            if (status->flush_to_zero) {
+                if (aSig | bSig) {
+                    float_raise(float_flag_output_denormal, status);
+                }
+                return packFloat16(zSign, 0, 0);
+            }
+            return packFloat16( zSign, 0, ( aSig + bSig )>>3 );
+        }
+        zSig = 0x0400 + aSig + bSig;
+        zExp = aExp;
+        goto roundAndPack;
+    }
+    aSig |= 0x0400;
+    zSig = ( aSig + bSig )<<1;
+    --zExp;
+    if ( (int16_t) zSig < 0 ) {
+        zSig = aSig + bSig;
+        ++zExp;
+    }
+ roundAndPack:
+    return roundAndPackFloat16(zSign, zExp, zSig, true, status);
+
+}
+
+/*----------------------------------------------------------------------------
+| Returns the result of subtracting the absolute values of the half-
+| precision floating-point values `a' and `b'.  If `zSign' is 1, the
+| difference is negated before being returned.  `zSign' is ignored if the
+| result is a NaN.  The subtraction is performed according to the IEC/IEEE
+| Standard for Binary Floating-Point Arithmetic.
+*----------------------------------------------------------------------------*/
+
+static float16 subFloat16Sigs(float16 a, float16 b, flag zSign,
+                              float_status *status)
+{
+    int aExp, bExp, zExp;
+    uint16_t aSig, bSig, zSig;
+    int expDiff;
+
+    aSig = extractFloat16Frac( a );
+    aExp = extractFloat16Exp( a );
+    bSig = extractFloat16Frac( b );
+    bExp = extractFloat16Exp( b );
+    expDiff = aExp - bExp;
+    aSig <<= 7;
+    bSig <<= 7;
+    if ( 0 < expDiff ) goto aExpBigger;
+    if ( expDiff < 0 ) goto bExpBigger;
+    if ( aExp == 0xFF ) {
+        if (aSig | bSig) {
+            return propagateFloat16NaN(a, b, status);
+        }
+        float_raise(float_flag_invalid, status);
+        return float16_default_nan(status);
+    }
+    if ( aExp == 0 ) {
+        aExp = 1;
+        bExp = 1;
+    }
+    if ( bSig < aSig ) goto aBigger;
+    if ( aSig < bSig ) goto bBigger;
+    return packFloat16(status->float_rounding_mode == float_round_down, 0, 0);
+ bExpBigger:
+    if ( bExp == 0xFF ) {
+        if (bSig) {
+            return propagateFloat16NaN(a, b, status);
+        }
+        return packFloat16( zSign ^ 1, 0xFF, 0 );
+    }
+    if ( aExp == 0 ) {
+        ++expDiff;
+    }
+    else {
+        aSig |= 0x40000000;
+    }
+    shift16RightJamming( aSig, - expDiff, &aSig );
+    bSig |= 0x40000000;
+ bBigger:
+    zSig = bSig - aSig;
+    zExp = bExp;
+    zSign ^= 1;
+    goto normalizeRoundAndPack;
+ aExpBigger:
+    if ( aExp == 0xFF ) {
+        if (aSig) {
+            return propagateFloat16NaN(a, b, status);
+        }
+        return a;
+    }
+    if ( bExp == 0 ) {
+        --expDiff;
+    }
+    else {
+        bSig |= 0x40000000;
+    }
+    shift16RightJamming( bSig, expDiff, &bSig );
+    aSig |= 0x40000000;
+ aBigger:
+    zSig = aSig - bSig;
+    zExp = aExp;
+ normalizeRoundAndPack:
+    --zExp;
+    return normalizeRoundAndPackFloat16(zSign, zExp, zSig, status);
+
+}
+
+/*----------------------------------------------------------------------------
+| Returns the result of adding the half-precision floating-point values `a'
+| and `b'.  The operation is performed according to the IEC/IEEE Standard for
+| Binary Floating-Point Arithmetic.
+*----------------------------------------------------------------------------*/
+
+float16 float16_add(float16 a, float16 b, float_status *status)
+{
+    flag aSign, bSign;
+    a = float16_squash_input_denormal(a, status);
+    b = float16_squash_input_denormal(b, status);
+
+    aSign = extractFloat16Sign( a );
+    bSign = extractFloat16Sign( b );
+    if ( aSign == bSign ) {
+        return addFloat16Sigs(a, b, aSign, status);
+    }
+    else {
+        return subFloat16Sigs(a, b, aSign, status);
+    }
+
+}
+
 /* Half precision floats come in two formats: standard IEEE and "ARM" format.
    The latter gains extra exponent range by omitting the NaN/Inf encodings.  */
 
