@@ -696,3 +696,4 @@ uint32_t HELPER(advsimd_acgt_f16)(float16 a, float16 b, void *fpstp)
     int compare = float16_compare(f0, f1, fpst);
     return ADVSIMD_CMPRES(compare == float_relation_greater);
 }
+
