@@ -3734,8 +3734,7 @@ float16 float16_mul(float16 a, float16 b, float_status *status)
     flag aSign, bSign, zSign;
     int aExp, bExp, zExp;
     uint32_t aSig, bSig;
-    uint32_t zSig32;
-    uint16_t zSig;
+    uint32_t zSig32; /* no zSig as zSig32 passed into rp&f */
 
     a = float16_squash_input_denormal(a, status);
     b = float16_squash_input_denormal(b, status);
@@ -3775,17 +3774,21 @@ float16 float16_mul(float16 a, float16 b, float_status *status)
         if ( bSig == 0 ) return packFloat16( zSign, 0, 0 );
         normalizeFloat16Subnormal( bSig, &bExp, &bSig );
     }
-    zExp = aExp + bExp - 0x7F;
+    zExp = aExp + bExp - 0xF;
+    /* Add implicit bit */
     aSig = ( aSig | 0x0400 )<<4;
     bSig = ( bSig | 0x0400 )<<5;
-    shift32RightJamming( ( (uint32_t) aSig ) * bSig, 16, &zSig32 );
-    zSig = zSig32;
-    if ( 0 <= (int16_t) ( zSig<<1 ) ) {
-        zSig <<= 1;
+    /* Max (format " => 0x%x" (* (lsh #x400 4)  (lsh #x400 5))) => 0x20000000
+     * So shift so binary point from 30/29 to 23/22
+     */
+    shift32RightJamming( ( (uint32_t) aSig ) * bSig, 7, &zSig32 );
+    /* At this point the significand is at the same point as
+     * float32_mul, so we can do the same test */
+    if ( 0 <= (int32_t) ( zSig32<<1 ) ) {
+        zSig32 <<= 1;
         --zExp;
     }
-    return roundAndPackFloat16(zSign, zExp, zSig, true, status);
-
+    return roundAndPackFloat16(zSign, zExp, zSig32, true, status);
 }
 
 /* Half precision floats come in two formats: standard IEEE and "ARM" format.
