@@ -3724,6 +3724,29 @@ float16 float16_add(float16 a, float16 b, float_status *status)
 }
 
 /*----------------------------------------------------------------------------
+| Returns the result of subtracting the half-precision floating-point values
+| `a' and `b'.  The operation is performed according to the IEC/IEEE Standard
+| for Binary Floating-Point Arithmetic.
+*----------------------------------------------------------------------------*/
+
+float16 float16_sub(float16 a, float16 b, float_status *status)
+{
+    flag aSign, bSign;
+    a = float16_squash_input_denormal(a, status);
+    b = float16_squash_input_denormal(b, status);
+
+    aSign = extractFloat16Sign( a );
+    bSign = extractFloat16Sign( b );
+    if ( aSign == bSign ) {
+        return subFloat16Sigs(a, b, aSign, status);
+    }
+    else {
+        return addFloat16Sigs(a, b, aSign, status);
+    }
+
+}
+
+/*----------------------------------------------------------------------------
 | Returns the result of multiplying the half-precision floating-point values
 | `a' and `b'.  The operation is performed according to the IEC/IEEE Standard
 | for Binary Floating-Point Arithmetic.
@@ -3789,6 +3812,76 @@ float16 float16_mul(float16 a, float16 b, float_status *status)
         --zExp;
     }
     return roundAndPackFloat16(zSign, zExp, zSig32, true, status);
+}
+
+/*----------------------------------------------------------------------------
+| Returns the result of dividing the half-precision floating-point value `a'
+| by the corresponding value `b'.  The operation is performed according to the
+| IEC/IEEE Standard for Binary Floating-Point Arithmetic.
+*----------------------------------------------------------------------------*/
+
+float16 float16_div(float16 a, float16 b, float_status *status)
+{
+    flag aSign, bSign, zSign;
+    int aExp, bExp, zExp;
+    uint32_t aSig, bSig, zSig;
+    a = float16_squash_input_denormal(a, status);
+    b = float16_squash_input_denormal(b, status);
+
+    aSig = extractFloat16Frac( a );
+    aExp = extractFloat16Exp( a );
+    aSign = extractFloat16Sign( a );
+    bSig = extractFloat16Frac( b );
+    bExp = extractFloat16Exp( b );
+    bSign = extractFloat16Sign( b );
+    zSign = aSign ^ bSign;
+    if ( aExp == 0xFF ) {
+        if (aSig) {
+            return propagateFloat16NaN(a, b, status);
+        }
+        if ( bExp == 0xFF ) {
+            if (bSig) {
+                return propagateFloat16NaN(a, b, status);
+            }
+            float_raise(float_flag_invalid, status);
+            return float16_default_nan(status);
+        }
+        return packFloat16( zSign, 0xFF, 0 );
+    }
+    if ( bExp == 0xFF ) {
+        if (bSig) {
+            return propagateFloat16NaN(a, b, status);
+        }
+        return packFloat16( zSign, 0, 0 );
+    }
+    if ( bExp == 0 ) {
+        if ( bSig == 0 ) {
+            if ( ( aExp | aSig ) == 0 ) {
+                float_raise(float_flag_invalid, status);
+                return float16_default_nan(status);
+            }
+            float_raise(float_flag_divbyzero, status);
+            return packFloat16( zSign, 0xFF, 0 );
+        }
+        normalizeFloat16Subnormal( bSig, &bExp, &bSig );
+    }
+    if ( aExp == 0 ) {
+        if ( aSig == 0 ) return packFloat16( zSign, 0, 0 );
+        normalizeFloat16Subnormal( aSig, &aExp, &aSig );
+    }
+    zExp = aExp - bExp + 0x7D;
+    aSig = ( aSig | 0x00800000 )<<7;
+    bSig = ( bSig | 0x00800000 )<<8;
+    if ( bSig <= ( aSig + aSig ) ) {
+        aSig >>= 1;
+        ++zExp;
+    }
+    zSig = ( ( (uint64_t) aSig )<<16 ) / bSig;
+    if ( ( zSig & 0x3F ) == 0 ) {
+        zSig |= ( (uint64_t) bSig * zSig != ( (uint64_t) aSig )<<16 );
+    }
+    return roundAndPackFloat16(zSign, zExp, zSig, true, status);
+
 }
 
 /* Half precision floats come in two formats: standard IEEE and "ARM" format.
