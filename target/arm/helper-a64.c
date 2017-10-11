@@ -551,6 +551,10 @@ float16 ADVSIMD_HELPER(name, h)(float16 a, float16 b, void *fpstp) \
     return float16_ ## name(a, b, fpst);    \
 }
 
+ADVSIMD_HALFOP(add)
+ADVSIMD_HALFOP(sub)
+ADVSIMD_HALFOP(mul)
+ADVSIMD_HALFOP(div)
 ADVSIMD_HALFOP(min)
 ADVSIMD_HALFOP(max)
 ADVSIMD_HALFOP(minnum)
@@ -567,12 +571,6 @@ uint32_t HELPER(advsimd_acgt_f16)(float16 a, float16 b, void *fpstp)
 }
 
 /* Data processing - scalar floating-point and advanced SIMD */
-
-float16 HELPER(advsimd_addh)(float16 a, float16 b, void *fpstp)
-{
-    float_status *fpst = fpstp;
-    return float16_add(a, b, fpst);
-}
 
 float16 HELPER(advsimd_mulxh)(float16 a, float16 b, void *fpstp)
 {
