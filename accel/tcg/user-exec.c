@@ -37,6 +37,7 @@
 #undef EIP
 #ifdef __linux__
 #include <sys/ucontext.h>
+#include <execinfo.h>
 #endif
 
 //#define DEBUG_SIGNAL
@@ -121,8 +122,26 @@ static inline int handle_cpu_signal(uintptr_t pc, unsigned long address,
 
     /* Now we have a real cpu fault.  Since this is the exact location of
      * the exception, we must undo the adjustment done by cpu_restore_state
-     * for handling call return addresses.  */
-    cpu_restore_state(cpu, pc + GETPC_ADJ);
+     * for handling call return addresses.
+     */
+    if (!cpu_restore_state(cpu, pc + GETPC_ADJ)) {
+#ifdef __linux__
+        int i, nptrs;
+        void *frame_ptrs[100];
+
+        nptrs = backtrace(frame_ptrs, 100);
+        for (i = 0; i < nptrs; i++) {
+            if (cpu_restore_state(cpu, (uintptr_t) frame_ptrs[i])) {
+                /* found a PC we could resolve */
+                break;
+            }
+        }
+#else
+        qemu_log_mask(LOG_UNIMP,
+                      "%s: failed to cleanly resolve guest PC from %#"
+                      PRIxPTR "\n", __func__, pc);
+#endif
+    }
 
     sigprocmask(SIG_SETMASK, old_set, NULL);
     cpu_loop_exit(cpu);
