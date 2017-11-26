@@ -440,6 +440,7 @@ static void sd_reset(DeviceState *dev)
     uint64_t size;
     uint64_t sect;
 
+    trace_sdcard_reset();
     if (sd->blk) {
         blk_get_geometry(sd->blk, &sect);
     } else {
@@ -491,7 +492,10 @@ static void sd_cardchange(void *opaque, bool load, Error **errp)
     bool readonly = sd_get_readonly(sd);
 
     if (inserted) {
+        trace_sdcard_inserted(readonly);
         sd_reset(dev);
+    } else {
+        trace_sdcard_ejected();
     }
 
     /* The IRQ notification is for legacy non-QOM SD controller devices;
@@ -623,6 +627,7 @@ static void sd_erase(SDState *sd)
     uint64_t erase_start = sd->erase_start;
     uint64_t erase_end = sd->erase_end;
 
+    trace_sdcard_erase();
     if (!sd->erase_start || !sd->erase_end) {
         sd->card_status |= ERASE_SEQ_ERROR;
         return;
@@ -712,6 +717,11 @@ static void sd_lock_command(SDState *sd)
     else
         pwd_len = 0;
 
+    if (lock) {
+        trace_sdcard_lock();
+    } else {
+        trace_sdcard_unlock();
+    }
     if (erase) {
         if (!(sd->card_status & CARD_IS_LOCKED) || sd->blk_len > 1 ||
                         set_pwd || clr_pwd || lock || sd->wp_switch ||
@@ -1635,6 +1645,7 @@ void sd_write_data(SDState *sd, uint8_t value)
     if (sd->card_status & (ADDRESS_ERROR | WP_VIOLATION))
         return;
 
+    trace_sdcard_write_data(value);
     switch (sd->current_cmd) {
     case 24:	/* CMD24:  WRITE_SINGLE_BLOCK */
         sd->data[sd->data_offset ++] = value;
@@ -1772,6 +1783,7 @@ uint8_t sd_read_data(SDState *sd)
 
     io_len = (sd->ocr & (1 << 30)) ? 512 : sd->blk_len;
 
+    trace_sdcard_read_data(io_len);
     switch (sd->current_cmd) {
     case 6:	/* CMD6:   SWITCH_FUNCTION */
         ret = sd->data[sd->data_offset ++];

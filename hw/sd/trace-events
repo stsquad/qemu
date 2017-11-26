@@ -18,8 +18,16 @@ sdhci_led(bool state) "LED: %u"
 # hw/sd/sd.c
 sdcard_normal_command(uint8_t cmd, uint32_t arg, const char *state) "CMD%d arg 0x%08x (state %s)"
 sdcard_app_command(uint8_t acmd, uint32_t arg) "ACMD%d arg 0x%08x"
+sdcard_reset(void) ""
+sdcard_inserted(bool readonly) "read_only: %u"
+sdcard_ejected(void) ""
+sdcard_erase(void) ""
+sdcard_lock(void) ""
+sdcard_unlock(void) ""
 sdcard_read_block(uint64_t addr, uint32_t len) "addr 0x%" PRIx64 " size 0x%x"
 sdcard_write_block(uint64_t addr, uint32_t len) "addr 0x%" PRIx64 " size 0x%x"
+sdcard_write_data(uint8_t value) "value 0x%02x"
+sdcard_read_data(int length) "len %d"
 
 # hw/sd/milkymist-memcard.c
 milkymist_memcard_memory_read(uint32_t addr, uint32_t value) "addr 0x%08x value 0x%08x"
