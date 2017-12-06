@@ -6151,86 +6151,115 @@ static void disas_simd_mod_imm(DisasContext *s, uint32_t insn)
     bool is_neg = extract32(insn, 29, 1);
     bool is_q = extract32(insn, 30, 1);
     uint64_t imm = 0;
+    bool expand_imm = true;
     TCGv_i64 tcg_rd, tcg_imm;
     int i;
 
-    if (o2 != 0 || ((cmode == 0xf) && is_neg && !is_q)) {
-        unallocated_encoding(s);
-        return;
+    if (!arm_dc_feature(s, ARM_FEATURE_V8_FP16)) {
+        if (o2 != 0 || ((cmode == 0xf) && is_neg && !is_q)) {
+            unallocated_encoding(s);
+            return;
+        }
+    } else {
+        if (!(o2 && cmode == 0xf)) {
+            unallocated_encoding(s);
+            return;
+        }
+        /* FMOV (vector, immediate) - half-precision
+         *
+         * We don't need fancy immediate expansion, just:
+         * imm16 = imm8<7>:NOT(imm8<6>):Replicate(imm8<6>,2):imm8<5:0>:Zeros(6);
+         */
+        uint32_t imm8_5_0 = extract32(abcdefgh, 0, 6);
+        uint32_t imm8_6 = extract32(abcdefgh, 6, 1);
+        uint32_t imm8_7 = extract32(abcdefgh, 7, 1);
+        uint32_t imm8_6_rep = imm8_6 << 1 | imm8_6;
+        uint32_t imm8_6_not = ~imm8_6;
+        expand_imm = false;
+        imm = deposit64(imm, 6, 6, imm8_5_0);
+        imm = deposit64(imm, 12, 2, imm8_6_rep);
+        imm = deposit64(imm, 14, 1, imm8_6_not);
+        imm = deposit64(imm, 15, 1, imm8_7);
+        /* now duplicate across the lanes */
+        imm = deposit64(imm, 16, 16, imm);
+        imm = deposit64(imm, 32, 16, imm);
+        imm = deposit64(imm, 48, 16, imm);
     }
 
     if (!fp_access_check(s)) {
         return;
     }
 
-    /* See AdvSIMDExpandImm() in ARM ARM */
-    switch (cmode_3_1) {
-    case 0: /* Replicate(Zeros(24):imm8, 2) */
-    case 1: /* Replicate(Zeros(16):imm8:Zeros(8), 2) */
-    case 2: /* Replicate(Zeros(8):imm8:Zeros(16), 2) */
-    case 3: /* Replicate(imm8:Zeros(24), 2) */
-    {
-        int shift = cmode_3_1 * 8;
-        imm = bitfield_replicate(abcdefgh << shift, 32);
-        break;
-    }
-    case 4: /* Replicate(Zeros(8):imm8, 4) */
-    case 5: /* Replicate(imm8:Zeros(8), 4) */
-    {
-        int shift = (cmode_3_1 & 0x1) * 8;
-        imm = bitfield_replicate(abcdefgh << shift, 16);
-        break;
-    }
-    case 6:
-        if (cmode_0) {
-            /* Replicate(Zeros(8):imm8:Ones(16), 2) */
-            imm = (abcdefgh << 16) | 0xffff;
-        } else {
-            /* Replicate(Zeros(16):imm8:Ones(8), 2) */
-            imm = (abcdefgh << 8) | 0xff;
+    if (expand_imm) {
+        /* See AdvSIMDExpandImm() in ARM ARM */
+        switch (cmode_3_1) {
+        case 0: /* Replicate(Zeros(24):imm8, 2) */
+        case 1: /* Replicate(Zeros(16):imm8:Zeros(8), 2) */
+        case 2: /* Replicate(Zeros(8):imm8:Zeros(16), 2) */
+        case 3: /* Replicate(imm8:Zeros(24), 2) */
+        {
+            int shift = cmode_3_1 * 8;
+            imm = bitfield_replicate(abcdefgh << shift, 32);
+            break;
         }
-        imm = bitfield_replicate(imm, 32);
-        break;
-    case 7:
-        if (!cmode_0 && !is_neg) {
-            imm = bitfield_replicate(abcdefgh, 8);
-        } else if (!cmode_0 && is_neg) {
-            int i;
-            imm = 0;
-            for (i = 0; i < 8; i++) {
-                if ((abcdefgh) & (1 << i)) {
-                    imm |= 0xffULL << (i * 8);
-                }
-            }
-        } else if (cmode_0) {
-            if (is_neg) {
-                imm = (abcdefgh & 0x3f) << 48;
-                if (abcdefgh & 0x80) {
-                    imm |= 0x8000000000000000ULL;
-                }
-                if (abcdefgh & 0x40) {
-                    imm |= 0x3fc0000000000000ULL;
-                } else {
-                    imm |= 0x4000000000000000ULL;
-                }
+        case 4: /* Replicate(Zeros(8):imm8, 4) */
+        case 5: /* Replicate(imm8:Zeros(8), 4) */
+        {
+            int shift = (cmode_3_1 & 0x1) * 8;
+            imm = bitfield_replicate(abcdefgh << shift, 16);
+            break;
+        }
+        case 6:
+            if (cmode_0) {
+                /* Replicate(Zeros(8):imm8:Ones(16), 2) */
+                imm = (abcdefgh << 16) | 0xffff;
             } else {
-                imm = (abcdefgh & 0x3f) << 19;
-                if (abcdefgh & 0x80) {
-                    imm |= 0x80000000;
-                }
-                if (abcdefgh & 0x40) {
-                    imm |= 0x3e000000;
-                } else {
-                    imm |= 0x40000000;
-                }
-                imm |= (imm << 32);
+                /* Replicate(Zeros(16):imm8:Ones(8), 2) */
+                imm = (abcdefgh << 8) | 0xff;
             }
+            imm = bitfield_replicate(imm, 32);
+            break;
+        case 7:
+            if (!cmode_0 && !is_neg) {
+                imm = bitfield_replicate(abcdefgh, 8);
+            } else if (!cmode_0 && is_neg) {
+                int i;
+                imm = 0;
+                for (i = 0; i < 8; i++) {
+                    if ((abcdefgh) & (1 << i)) {
+                        imm |= 0xffULL << (i * 8);
+                    }
+                }
+            } else if (cmode_0) {
+                if (is_neg) {
+                    imm = (abcdefgh & 0x3f) << 48;
+                    if (abcdefgh & 0x80) {
+                        imm |= 0x8000000000000000ULL;
+                    }
+                    if (abcdefgh & 0x40) {
+                        imm |= 0x3fc0000000000000ULL;
+                    } else {
+                        imm |= 0x4000000000000000ULL;
+                    }
+                } else {
+                    imm = (abcdefgh & 0x3f) << 19;
+                    if (abcdefgh & 0x80) {
+                        imm |= 0x80000000;
+                    }
+                    if (abcdefgh & 0x40) {
+                        imm |= 0x3e000000;
+                    } else {
+                        imm |= 0x40000000;
+                    }
+                    imm |= (imm << 32);
+                }
+            }
+            break;
         }
-        break;
-    }
 
-    if (cmode_3_1 != 7 && is_neg) {
-        imm = ~imm;
+        if (cmode_3_1 != 7 && is_neg) {
+            imm = ~imm;
+        }
     }
 
     tcg_imm = tcg_const_i64(imm);
