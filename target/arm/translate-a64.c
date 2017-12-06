@@ -10773,6 +10773,7 @@ static void disas_simd_two_reg_misc_fp16(DisasContext *s, uint32_t insn)
     TCGv_i32 tcg_rmode;
     TCGv_ptr tcg_fpstatus;
     bool need_rmode = false;
+    bool need_fpst = true;
     int rmode;
 
     if (!arm_dc_feature(s, ARM_FEATURE_V8_FP16)) {
@@ -10889,6 +10890,9 @@ static void disas_simd_two_reg_misc_fp16(DisasContext *s, uint32_t insn)
         need_rmode = true;
         rmode = FPROUNDING_ZERO;
         break;
+    case 0x6f: /* FNEG */
+        need_fpst = false;
+        break;
     default:
         fprintf(stderr,"%s: insn %#04x fpop %#2x\n", __func__, insn, fpop);
         g_assert_not_reached();
@@ -10912,7 +10916,11 @@ static void disas_simd_two_reg_misc_fp16(DisasContext *s, uint32_t insn)
         return;
     }
 
-    tcg_fpstatus = get_fpstatus_ptr();
+    if (need_fpst) {
+        tcg_fpstatus = get_fpstatus_ptr();
+    } else {
+        TCGV_UNUSED_PTR(tcg_fpstatus);
+    }
 
     if (need_rmode) {
         tcg_rmode = tcg_const_i32(arm_rmode_to_sf(rmode));
@@ -10937,6 +10945,9 @@ static void disas_simd_two_reg_misc_fp16(DisasContext *s, uint32_t insn)
         case 0x7a: /* FCVTPU */
         case 0x7b: /* FCVTZU */
             gen_helper_advsimd_f16touinth(tcg_res, tcg_op, tcg_fpstatus);
+            break;
+        case 0x6f: /* FNEG */
+            gen_helper_vfp_negh(tcg_res, tcg_op);
             break;
         default:
             g_assert_not_reached();
@@ -10976,6 +10987,9 @@ static void disas_simd_two_reg_misc_fp16(DisasContext *s, uint32_t insn)
             case 0x59: /* FRINTX */
                 gen_helper_advsimd_rinth_exact(tcg_res, tcg_op, tcg_fpstatus);
                 break;
+            case 0x6f: /* FNEG */
+                gen_helper_vfp_negh(tcg_res, tcg_op);
+                break;
             default:
                 g_assert_not_reached();
             }
@@ -10996,7 +11010,9 @@ static void disas_simd_two_reg_misc_fp16(DisasContext *s, uint32_t insn)
         tcg_temp_free_i32(tcg_rmode);
     }
 
-    tcg_temp_free_ptr(tcg_fpstatus);
+    if (need_fpst) {
+        tcg_temp_free_ptr(tcg_fpstatus);
+    }
 }
 
 /* AdvSIMD scalar x indexed element
