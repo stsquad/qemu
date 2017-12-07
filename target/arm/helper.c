@@ -10875,6 +10875,7 @@ float32 HELPER(rsqrts_f32)(float32 a, float32 b, CPUARMState *env)
  * int->float conversions at run-time.  */
 #define float64_256 make_float64(0x4070000000000000LL)
 #define float64_512 make_float64(0x4080000000000000LL)
+#define float16_maxnorm make_float16(0x7bff)
 #define float32_maxnorm make_float32(0x7f7fffff)
 #define float64_maxnorm make_float64(0x7fefffffffffffffLL)
 
@@ -10965,6 +10966,60 @@ static bool round_to_inf(float_status *fpst, bool sign_bit)
     }
 
     g_assert_not_reached();
+}
+
+float16 HELPER(recpe_f16)(float16 input, void *fpstp)
+{
+    float_status *fpst = fpstp;
+    float16 f16 = float16_squash_input_denormal(input, fpst);
+    uint32_t f16_val = float16_val(f16);
+    uint32_t f16_sbit = 0x8000 & f16_val;
+    int32_t f16_exp = extract32(f16_val, 10, 5);
+    uint32_t f16_frac = extract32(f16_val, 0, 10);
+    float64 f64, r64;
+    uint64_t r64_val;
+    int64_t r64_exp;
+    uint64_t r64_frac;
+
+    if (float16_is_any_nan(f16)) {
+        float16 nan = f16;
+        if (float16_is_signaling_nan(f16, fpst)) {
+            float_raise(float_flag_invalid, fpst);
+            nan = float16_maybe_silence_nan(f16, fpst);
+        }
+        if (fpst->default_nan_mode) {
+            nan =  float16_default_nan(fpst);
+        }
+        return nan;
+    } else if (float16_is_infinity(f16)) {
+        return float16_set_sign(float16_zero, float16_is_neg(f16));
+    } else if (float16_is_zero(f16)) {
+        float_raise(float_flag_divbyzero, fpst);
+        return float16_set_sign(float16_infinity, float16_is_neg(f16));
+    } else if ((f16_val & ~(1 << 15)) < (1 << 9)) {
+        /* Abs(value) < 2.0^-14 */
+        float_raise(float_flag_overflow | float_flag_inexact, fpst);
+        if (round_to_inf(fpst, f16_sbit)) {
+            return float16_set_sign(float16_infinity, float16_is_neg(f16));
+        } else {
+            return float16_set_sign(float16_maxnorm, float16_is_neg(f16));
+        }
+    } else if (f16_exp >= 14 && fpst->flush_to_zero) {
+        float_raise(float_flag_underflow, fpst);
+        return float16_set_sign(float16_zero, float16_is_neg(f16));
+    }
+
+
+    f64 = make_float64(((int64_t)(f16_exp) << 52) | (int64_t)(f16_frac) << 29);
+    r64 = call_recip_estimate(f64, 253, fpst);
+    r64_val = float64_val(r64);
+    r64_exp = extract64(r64_val, 52, 11);
+    r64_frac = extract64(r64_val, 0, 52);
+
+    /* result = sign : result_exp<4:0> : fraction<51:41>; */
+    return make_float16(f16_sbit |
+                        (r64_exp & 0x1f) << 10 |
+                        extract64(r64_frac, 29, 10));
 }
 
 float32 HELPER(recpe_f32)(float32 input, void *fpstp)
