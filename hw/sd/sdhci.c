@@ -46,35 +46,30 @@
 #define SDHC_CAPAB_64BITBUS       0ul        /* 64-bit System Bus Support */
 #define SDHC_CAPAB_ADMA1          1ul        /* ADMA1 support */
 #define SDHC_CAPAB_ADMA2          1ul        /* ADMA2 support */
-/* Maximum clock frequency for SDclock in MHz
- * value in range 10-63 MHz, 0 - not defined */
-#define SDHC_CAPAB_BASECLKFREQ    52ul
-#define SDHC_CAPAB_TOUNIT         1ul  /* Timeout clock unit 0 - kHz, 1 - MHz */
-/* Timeout clock frequency 1-63, 0 - not defined */
-#define SDHC_CAPAB_TOCLKFREQ      52ul
 
 /* Now check all parameters and calculate CAPABILITIES REGISTER value */
-#if SDHC_CAPAB_64BITBUS > 1 || SDHC_CAPAB_ADMA2 > 1 || SDHC_CAPAB_ADMA1 > 1 || \
-    SDHC_CAPAB_TOUNIT > 1
+#if SDHC_CAPAB_64BITBUS > 1 || SDHC_CAPAB_ADMA2 > 1 || SDHC_CAPAB_ADMA1 > 1
 #error Capabilities features can have value 0 or 1 only!
-#endif
-
-#if (SDHC_CAPAB_BASECLKFREQ > 0 && SDHC_CAPAB_BASECLKFREQ < 10) || \
-    SDHC_CAPAB_BASECLKFREQ > 63
-#error SDclock frequency can have value in range 0, 10-63 only!
-#endif
-
-#if SDHC_CAPAB_TOCLKFREQ > 63
-#error Timeout clock frequency can have value in range 0-63 only!
 #endif
 
 #define SDHC_CAPAB_REG_DEFAULT                                 \
    ((SDHC_CAPAB_64BITBUS << 28) | (SDHC_CAPAB_ADMA1 << 20) |   \
-    (SDHC_CAPAB_ADMA2 << 19) |                                 \
-    (SDHC_CAPAB_BASECLKFREQ << 8) | (SDHC_CAPAB_TOUNIT << 7) | \
-    (SDHC_CAPAB_TOCLKFREQ))
+    (SDHC_CAPAB_ADMA2 << 19))
 
 #define MASKED_WRITE(reg, mask, val)  (reg = (reg & (mask)) | (val))
+
+static void sdhci_check_capab_freq_range(SDHCIState *s, const char *desc,
+                                         uint8_t freq, Error **errp)
+{
+    switch (freq) {
+    case 0:
+    case 10 ... 63:
+        break;
+        error_setg(errp, "SD %s clock frequency can have value"
+                   "in range 0-63 only", desc);
+        return;
+    }
+}
 
 static void sdhci_init_capareg(SDHCIState *s, Error **errp)
 {
@@ -83,6 +78,16 @@ static void sdhci_init_capareg(SDHCIState *s, Error **errp)
 
     switch (s->spec_version) {
     case 1:
+        sdhci_check_capab_freq_range(s, "Timeout", s->cap.timeout_clk_freq,
+                                     errp);
+        capareg = FIELD_DP64(capareg, SDHC_CAPAB, TOCLKFREQ,
+                             s->cap.timeout_clk_freq);
+        sdhci_check_capab_freq_range(s, "Base", s->cap.base_clk_freq_mhz, errp);
+        capareg = FIELD_DP64(capareg, SDHC_CAPAB, BASECLKFREQ,
+                             s->cap.base_clk_freq_mhz);
+        capareg = FIELD_DP64(capareg, SDHC_CAPAB, TOUNIT,
+                             s->cap.timeout_clk_in_mhz);
+
         val = ctz32(s->cap.max_blk_len >> 9);
         if (val >= 0b11) {
             error_setg(errp, "block size can be 512, 1024 or 2048 only");
@@ -1303,6 +1308,13 @@ const VMStateDescription sdhci_vmstate = {
  * specific host controller implementation */
 static Property sdhci_properties[] = {
     DEFINE_PROP_UINT8("sd-spec-version", SDHCIState, spec_version, 2),
+
+    /* Timeout clock frequency 1-63, 0 - not defined */
+    DEFINE_PROP_UINT8("timeout-freq", SDHCIState, cap.timeout_clk_freq, 0),
+    /* Timeout clock unit 0 - kHz, 1 - MHz */
+    DEFINE_PROP_BOOL("freq-in-mhz", SDHCIState, cap.timeout_clk_in_mhz, true),
+    /* Maximum base clock frequency for SD clock in MHz (range 10-63 MHz, 0) */
+    DEFINE_PROP_UINT8("max-frequency", SDHCIState, cap.base_clk_freq_mhz, 0),
 
     /* Maximum host controller R/W buffers size
      * Possible values: 512, 1024, 2048 bytes */
