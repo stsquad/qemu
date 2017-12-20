@@ -65,7 +65,7 @@ typedef struct SDHCIState {
     /* Buffer Data Port Register - virtual access point to R and W buffers */
     uint32_t prnsts;       /* Present State Register */
     /* 0x28 */
-    uint8_t  hostctl;      /* Host Control Register */
+    uint8_t  hostctl1;     /* Host Control Register */
     uint8_t  pwrcon;       /* Power control Register */
     uint8_t  blkgap;       /* Block Gap Control Register */
     uint8_t  wakcon;       /* WakeUp Control Register */
