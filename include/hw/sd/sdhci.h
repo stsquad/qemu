@@ -103,6 +103,7 @@ typedef struct SDHCIState {
     bool pending_insert_quirk; /* Quirk for Raspberry Pi card insert int */
     uint8_t spec_version;
     struct {
+        uint16_t max_blk_len;
         bool suspend;
         bool high_speed;
         bool sdma;
