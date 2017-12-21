@@ -9,6 +9,7 @@
 #include "qemu/osdep.h"
 #include "libqtest.h"
 
+#define SDHC_CAPAB                      0x40
 #define SDHC_HCVER                      0xFE
 
 static const struct sdhci_t {
@@ -40,6 +41,13 @@ static uint32_t sdhci_readl(uintptr_t base, uint32_t reg_addr)
     return qtest_readl(qtest, base + reg_addr);
 }
 
+static uint64_t sdhci_readq(uintptr_t base, uint32_t reg_addr)
+{
+    QTestState *qtest = global_qtest;
+
+    return qtest_readq(qtest, base + reg_addr);
+}
+
 static void check_specs_version(uintptr_t addr, uint8_t version)
 {
     uint32_t v;
@@ -50,12 +58,21 @@ static void check_specs_version(uintptr_t addr, uint8_t version)
     g_assert_cmpuint(v, ==, version);
 }
 
+static void check_capab_capareg(uintptr_t addr, uint64_t expected_capab)
+{
+    uint64_t capab;
+
+    capab = sdhci_readq(addr, SDHC_CAPAB);
+    g_assert_cmphex(capab, ==, expected_capab);
+}
+
 static void test_machine(const void *data)
 {
     const struct sdhci_t *test = data;
 
     global_qtest = qtest_startf("-machine %s -d unimp", test->machine);
 
+    check_capab_capareg(test->sdhci.addr, test->sdhci.capab.reg);
     check_specs_version(test->sdhci.addr, test->sdhci.version);
 
     qtest_quit(global_qtest);
