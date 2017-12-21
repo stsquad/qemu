@@ -44,12 +44,6 @@
  * 0 - not supported, 1 - supported, other - prohibited.
  */
 #define SDHC_CAPAB_64BITBUS       0ul        /* 64-bit System Bus Support */
-#define SDHC_CAPAB_18V            1ul        /* Voltage support 1.8v */
-#define SDHC_CAPAB_30V            0ul        /* Voltage support 3.0v */
-#define SDHC_CAPAB_33V            1ul        /* Voltage support 3.3v */
-#define SDHC_CAPAB_SUSPRESUME     0ul        /* Suspend/resume support */
-#define SDHC_CAPAB_SDMA           1ul        /* SDMA support */
-#define SDHC_CAPAB_HIGHSPEED      1ul        /* High speed support */
 #define SDHC_CAPAB_ADMA1          1ul        /* ADMA1 support */
 #define SDHC_CAPAB_ADMA2          1ul        /* ADMA2 support */
 /* Maximum host controller R/W buffers size
@@ -63,9 +57,7 @@
 #define SDHC_CAPAB_TOCLKFREQ      52ul
 
 /* Now check all parameters and calculate CAPABILITIES REGISTER value */
-#if SDHC_CAPAB_64BITBUS > 1 || SDHC_CAPAB_18V > 1 || SDHC_CAPAB_30V > 1 ||     \
-    SDHC_CAPAB_33V > 1 || SDHC_CAPAB_SUSPRESUME > 1 || SDHC_CAPAB_SDMA > 1 ||  \
-    SDHC_CAPAB_HIGHSPEED > 1 || SDHC_CAPAB_ADMA2 > 1 || SDHC_CAPAB_ADMA1 > 1 ||\
+#if SDHC_CAPAB_64BITBUS > 1 || SDHC_CAPAB_ADMA2 > 1 || SDHC_CAPAB_ADMA1 > 1 || \
     SDHC_CAPAB_TOUNIT > 1
 #error Capabilities features can have value 0 or 1 only!
 #endif
@@ -90,15 +82,32 @@
 #endif
 
 #define SDHC_CAPAB_REG_DEFAULT                                 \
-   ((SDHC_CAPAB_64BITBUS << 28) | (SDHC_CAPAB_18V << 26) |     \
-    (SDHC_CAPAB_30V << 25) | (SDHC_CAPAB_33V << 24) |          \
-    (SDHC_CAPAB_SUSPRESUME << 23) | (SDHC_CAPAB_SDMA << 22) |  \
-    (SDHC_CAPAB_HIGHSPEED << 21) | (SDHC_CAPAB_ADMA1 << 20) |  \
+   ((SDHC_CAPAB_64BITBUS << 28) | (SDHC_CAPAB_ADMA1 << 20) |   \
     (SDHC_CAPAB_ADMA2 << 19) | (MAX_BLOCK_LENGTH << 16) |      \
     (SDHC_CAPAB_BASECLKFREQ << 8) | (SDHC_CAPAB_TOUNIT << 7) | \
     (SDHC_CAPAB_TOCLKFREQ))
 
 #define MASKED_WRITE(reg, mask, val)  (reg = (reg & (mask)) | (val))
+
+static void sdhci_init_capareg(SDHCIState *s, Error **errp)
+{
+    uint64_t capareg = 0;
+
+    switch (s->spec_version) {
+    case 1:
+        capareg = FIELD_DP64(capareg, SDHC_CAPAB, HIGHSPEED, s->cap.high_speed);
+        capareg = FIELD_DP64(capareg, SDHC_CAPAB, SDMA, s->cap.sdma);
+        capareg = FIELD_DP64(capareg, SDHC_CAPAB, SUSPRESUME, s->cap.suspend);
+        capareg = FIELD_DP64(capareg, SDHC_CAPAB, V33, s->cap.v33);
+        capareg = FIELD_DP64(capareg, SDHC_CAPAB, V30, s->cap.v30);
+        capareg = FIELD_DP64(capareg, SDHC_CAPAB, V18, s->cap.v18);
+        break;
+
+    default:
+        error_setg(errp, "Unsupported spec version: %u", s->spec_version);
+    }
+    s->capareg = capareg;
+}
 
 static uint8_t sdhci_slotint(SDHCIState *s)
 {
@@ -1032,7 +1041,7 @@ sdhci_write(void *opaque, hwaddr offset, uint64_t val, unsigned size)
     case SDHC_TRNMOD:
         /* DMA can be enabled only if it is supported as indicated by
          * capabilities register */
-        if (!(s->capareg & SDHC_CAN_DO_DMA)) {
+        if (!(s->capareg & R_SDHC_CAPAB_SDMA_MASK)) {
             value &= ~SDHC_TRNS_DMA;
         }
         MASKED_WRITE(s->trnmod, mask, value & SDHC_TRNMOD_MASK);
@@ -1186,6 +1195,10 @@ static void sdhci_init_readonly_registers(SDHCIState *s, Error **errp)
         return;
     }
     s->version = (SDHC_HCVER_VENDOR << 8) | (s->spec_version - 1);
+
+    if (s->capareg == UINT64_MAX) {
+        sdhci_init_capareg(s, errp);
+    }
 }
 
 static void sdhci_initfn(SDHCIState *s)
@@ -1305,8 +1318,21 @@ const VMStateDescription sdhci_vmstate = {
  * specific host controller implementation */
 static Property sdhci_properties[] = {
     DEFINE_PROP_UINT8("sd-spec-version", SDHCIState, spec_version, 2),
-    DEFINE_PROP_UINT64("capareg", SDHCIState, capareg,
-            SDHC_CAPAB_REG_DEFAULT),
+
+    /* DMA */
+    DEFINE_PROP_BOOL("sdma", SDHCIState, cap.sdma, true),
+    /* Suspend/resume support */
+    DEFINE_PROP_BOOL("suspend", SDHCIState, cap.suspend, false),
+    /* High speed support */
+    DEFINE_PROP_BOOL("high-speed", SDHCIState, cap.high_speed, true),
+    /* Voltage support 3.3/3.0/1.8V */
+    DEFINE_PROP_BOOL("3v3", SDHCIState, cap.v33, true),
+    DEFINE_PROP_BOOL("3v0", SDHCIState, cap.v30, false),
+    DEFINE_PROP_BOOL("1v8", SDHCIState, cap.v18, false),
+
+    /* capareg: deprecated */
+    DEFINE_PROP_UINT64("capareg", SDHCIState, capareg, UINT64_MAX),
+
     DEFINE_PROP_UINT64("maxcurr", SDHCIState, maxcurr, 0),
     DEFINE_PROP_BOOL("pending-insert-quirk", SDHCIState, pending_insert_quirk,
                      false),
