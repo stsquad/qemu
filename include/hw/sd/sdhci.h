@@ -114,6 +114,8 @@ typedef struct SDHCIState {
         /* v2 */
         bool adma1, adma2;
         bool bus64;
+        /* v3 */
+        uint8_t slot_type, sdr, strength;
     } cap;
 } SDHCIState;
 
