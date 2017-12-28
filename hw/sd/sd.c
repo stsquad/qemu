@@ -1188,9 +1188,6 @@ static sd_rsp_type_t sd_normal_command(SDState *sd, SDRequest req)
             goto unimplemented_cmd;
         switch (sd->state) {
         case sd_transfer_state:
-            /* Writing in SPI mode not implemented.  */
-            if (sd->spi)
-                break;
             sd->state = sd_receivingdata_state;
             sd->data_start = addr;
             sd->data_offset = 0;
@@ -1214,9 +1211,6 @@ static sd_rsp_type_t sd_normal_command(SDState *sd, SDRequest req)
             goto unimplemented_cmd;
         switch (sd->state) {
         case sd_transfer_state:
-            /* Writing in SPI mode not implemented.  */
-            if (sd->spi)
-                break;
             sd->state = sd_receivingdata_state;
             sd->data_start = addr;
             sd->data_offset = 0;
