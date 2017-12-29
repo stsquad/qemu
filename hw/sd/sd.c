@@ -2221,6 +2221,7 @@ static void sd_realize(DeviceState *dev, Error **errp)
         ret = blk_set_perm(sd->blk, BLK_PERM_CONSISTENT_READ | BLK_PERM_WRITE,
                            BLK_PERM_ALL, errp);
         if (ret < 0) {
+            error_setg(errp, "Backing file incorrect permission");
             return;
         }
 
