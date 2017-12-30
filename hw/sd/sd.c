@@ -460,7 +460,7 @@ static int sd_req_crc_validate(SDRequest *req)
     return sd_crc7(buffer, 5) != req->crc;	/* TODO */
 }
 
-static void sd_response_r1_make(SDState *sd, uint8_t *response)
+static size_t sd_response_r1_make(SDState *sd, uint8_t *response)
 {
     uint32_t status = sd->card_status;
     /* Clear the "clear on read" status bits */
@@ -470,14 +470,25 @@ static void sd_response_r1_make(SDState *sd, uint8_t *response)
     response[1] = (status >> 16) & 0xff;
     response[2] = (status >> 8) & 0xff;
     response[3] = (status >> 0) & 0xff;
+
+    return 4;
 }
 
-static void sd_response_r3_make(SDState *sd, uint8_t *response)
+static size_t sd_response_r2s_make(SDState *sd, uint8_t *response)
+{
+    memcpy(response, sd->csd, sizeof(sd->csd));
+
+    return 16;
+}
+
+static size_t sd_response_r3_make(SDState *sd, uint8_t *response)
 {
     response[0] = (sd->ocr >> 24) & 0xff;
     response[1] = (sd->ocr >> 16) & 0xff;
     response[2] = (sd->ocr >> 8) & 0xff;
     response[3] = (sd->ocr >> 0) & 0xff;
+
+    return 4;
 }
 
 static void sd_response_r6_make(SDState *sd, uint8_t *response)
@@ -1513,8 +1524,7 @@ send_response:
     switch (rtype) {
     case sd_r1:
     case sd_r1b:
-        sd_response_r1_make(sd, response);
-        rsplen = 4;
+        rsplen = sd_response_r1_make(sd, response);
         break;
 
     case sd_r2_i:
@@ -1523,13 +1533,11 @@ send_response:
         break;
 
     case sd_r2_s:
-        memcpy(response, sd->csd, sizeof(sd->csd));
-        rsplen = 16;
+        rsplen = sd_response_r2s_make(sd, response);
         break;
 
     case sd_r3:
-        sd_response_r3_make(sd, response);
-        rsplen = 4;
+        rsplen = sd_response_r3_make(sd, response);
         break;
 
     case sd_r6:
