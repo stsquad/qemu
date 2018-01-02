@@ -16,8 +16,8 @@ sdhci_write_dataport(uint16_t data_count) "write buffer filled with %u bytes of 
 sdhci_led(bool state) "LED: %u"
 
 # hw/sd/sd.c
-sdcard_normal_command(uint8_t cmd, uint32_t arg, const char *state) "CMD%d arg 0x%08x (state %s)"
-sdcard_app_command(uint8_t acmd, uint32_t arg) "ACMD%d arg 0x%08x"
+sdcard_normal_command(const char *proto, const char *cmd_desc, uint8_t cmd, uint32_t arg, const char *state) "%s %20s/ CMD%02d arg 0x%08x (state %s)"
+sdcard_app_command(const char *proto, const char *acmd_desc, uint8_t acmd, uint32_t arg, const char *state) "%s %23s/ACMD%02d arg 0x%08x (state %s)"
 sdcard_reset(void) ""
 sdcard_inserted(bool readonly) "read_only: %u"
 sdcard_ejected(void) ""
