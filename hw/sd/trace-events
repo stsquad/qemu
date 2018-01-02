@@ -28,6 +28,7 @@ sdcard_read_block(uint64_t addr, uint32_t len) "addr 0x%" PRIx64 " size 0x%x"
 sdcard_write_block(uint64_t addr, uint32_t len) "addr 0x%" PRIx64 " size 0x%x"
 sdcard_write_data(uint8_t value) "value 0x%02x"
 sdcard_read_data(int length) "len %d"
+sdcard_capacity(const char *capacity, int64_t size) "%s card (%" PRId64 " B)"
 
 # hw/sd/milkymist-memcard.c
 milkymist_memcard_memory_read(uint32_t addr, uint32_t value) "addr 0x%08x value 0x%08x"
