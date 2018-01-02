@@ -1,5 +1,5 @@
 # SD/MMC subsystem core
-common-obj-$(CONFIG_SD) += core.o
+common-obj-$(CONFIG_SD) += core.o sdbus-qmp.o
 
 # SD/MMC host adapters
 common-obj-$(CONFIG_PL181) += pl181.o

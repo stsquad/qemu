@@ -6539,3 +6539,46 @@
 # Since 2.9
 ##
 { 'command': 'query-vm-generation-id', 'returns': 'GuidInfo' }
+
+##
+# @SDBusCommandResponse:
+#
+# SD Bus command response.
+#
+# @base64: the command response encoded as a Base64 string
+#
+# Since: 2.12
+##
+{ 'struct': 'SDBusCommandResponse', 'data': {'base64': 'str'} }
+
+##
+# @x-debug-sdbus-command:
+#
+# Execute a command on a SD Bus and return the response.
+# This command is only intended for use during unit testing
+# (hence the x-debug- prefix).
+#
+# @qom-path: the SD Bus path
+# @command: the SD protocol command to execute in the bus
+# @arg: a 64-bit command argument (optional)
+# @crc: the command/argument CRC (optional)
+#
+# Returns: the response of the command encoded as a Base64 string
+#
+# Since: 2.12
+#
+# -> { "execute": "x-debug-sdbus-command",
+#      "arguments": { "qom-path": "/machine/unattached/device[42]/sdbus-0",
+#                     "command": 3
+#      }
+#    }
+# <- { "return": {'base64': 'A='} }
+#
+##
+{ 'command': 'x-debug-sdbus-command',
+  'data': { 'qom-path': 'str',
+            'command': 'uint8',
+            '*arg': 'uint64',
+            '*crc': 'uint16' },
+  'returns': 'SDBusCommandResponse'
+}
