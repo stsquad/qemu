@@ -59,6 +59,11 @@ do { fprintf(stderr, "SD: " fmt , ## __VA_ARGS__); } while (0)
 #define SDCARD_CMD_MAX 64
 
 typedef enum {
+    SD_PHY_SPEC_VER_2_00 = 200,
+    SD_PHY_SPEC_VER_3_01 = 301, /* not yet supported */
+} sd_phy_spec_ver_t;
+
+typedef enum {
     sd_r0 = 0,    /* no response */
     sd_r1,        /* normal response command */
     sd_r2_i,      /* CID register */
@@ -114,6 +119,7 @@ struct SDState {
     uint32_t pwd_len;
     uint8_t function_group[6];
 
+    int spec_version;
     bool spi;
 
     uint32_t mode;    /* current card mode, one of SDCardModes */
@@ -1977,6 +1983,7 @@ static void sd_realize(DeviceState *dev, Error **errp)
     int ret;
 
     sd->proto_name = sd->spi ? "SPI" : "SD";
+    sd->spec_version = SD_PHY_SPEC_VER_2_00;
 
     if (sd->blk && blk_is_read_only(sd->blk)) {
         error_setg(errp, "Cannot use read-only drive as SD card");
