@@ -58,6 +58,7 @@
 typedef enum {
     PROTO_SD =  0,
     PROTO_SPI = 1 << 1,
+    PROTO_MMC = 1 << 2,
 } sd_bus_protocol_t;
 
 typedef enum {

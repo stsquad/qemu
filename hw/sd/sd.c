@@ -64,6 +64,13 @@ typedef enum {
 } sd_phy_spec_ver_t;
 
 typedef enum {
+    MMC_SPEC_VER_2_2    = 202,  /* not well supported */
+    /* e.MMC */
+    MMC_SPEC_VER_4_51   = 451,
+    MMC_SPEC_VER_5_1    = 501,  /* not supported */
+} mmc_phy_spec_ver_t;
+
+typedef enum {
     sd_capacity_unknown,
     sd_capacity_sdsc,           /* not well supported */
     sd_capacity_sdhc,
@@ -157,6 +164,8 @@ static const char *sd_protocol_name(sd_bus_protocol_t protocol)
         return "SD";
     case PROTO_SPI:
         return "SPI";
+    case PROTO_MMC:
+        return "MMC";
     default:
         g_assert_not_reached();
     }
@@ -299,78 +308,90 @@ typedef struct {
     struct {
         uint16_t version;
         uint32_t ccc_mask;
-    } sd, spi;
+    } sd, spi, mmc;
 } sd_cmd_supported_t;
 
 static const sd_cmd_supported_t cmd_supported[SDCARD_CMD_MAX] = {
-     /*           SD                  SPI          */
-     [0] = {{200, BIT(0)},      {200, BIT(0)},      },
-     [1] = {{301, BIT(0)},      {200, BIT(0)},      },
-     [2] = {{200, BIT(0)},      {},                 },
-     [3] = {{200, BIT(0)},      {},                 },
-     [4] = {{200, BIT(0)},      {},                 },
-     [5] = {{200, BIT(9)},      {200, BIT(9)},      },
-     [6] = {{200, BIT(10)},     {200, BIT(10)},     },
-     [7] = {{200, BIT(0)},      {},                 },
-     [8] = {{200, BIT(0)},      {200, BIT(0)},      },
-     [9] = {{200, BIT(0)},      {200, BIT(0)},      },
-    [10] = {{200, BIT(0)},      {200, BIT(0)},      },
-    [12] = {{200, BIT(0)},      {200, BIT(0)},      },
-    [13] = {{200, BIT(0)},      {200, BIT(0)},      },
-    [14] = {{200, BIT(0)},      {},                 },
-    [15] = {{200, BIT(0)},      {},                 },
-    [16] = {{200, BIT_2_4_7},   {200, BIT_2_4_7},   },
-    [17] = {{200, BIT(2)},      {200, BIT(2)},      },
-    [18] = {{200, BIT(2)},      {200, BIT(2)},      },
-    [23] = {{301, BIT_2_4},     {},                 },
-    [24] = {{200, BIT(4)},      {200, BIT(4)},      },
-    [25] = {{200, BIT(4)},      {200, BIT(4)},      },
-    [26] = {{200, BIT_MANUF},   {/*?*/},            },
-    [27] = {{200, BIT(4)},      {200, BIT(4)},      },
-    [28] = {{200, BIT(6)},      {200, BIT(6)},      },
-    [29] = {{200, BIT(6)},      {200, BIT(6)},      },
-    [30] = {{200, BIT(6)},      {200, BIT(6)},      },
-    [32] = {{200, BIT(5)},      {200, BIT(5)},      },
-    [33] = {{200, BIT(5)},      {200, BIT(5)},      },
-    [34] = {{200, BIT(10)},     {200, BIT(10)},     },
-    [35] = {{200, BIT(10)},     {200, BIT(10)},     },
-    [36] = {{200, BIT(10)},     {200, BIT(10)},     },
-    [37] = {{200, BIT(10)},     {200, BIT(10)},     },
-    [38] = {{200, BIT(5)},      {200, BIT(5)},      },
-    [42] = {{200, BIT(7)},      {200, BIT(7)},      },
-    [50] = {{200, BIT(10)},     {200, BIT(10)},     },
-    [52] = {{200, BIT(9)},      {200, BIT(9)},      },
-    [53] = {{200, BIT(9)},      {200, BIT(9)},      },
-    [54] = {{/* 2.00 SDIO */},  {/* 2.00 SDIO */},  },
-    [55] = {{200, BIT(8)},      {200, BIT(8)},      },
-    [56] = {{200, BIT(8)},      {200, BIT(8)},      },
-    [57] = {{200, BIT(10)},     {200, BIT(10)},     },
-    [58] = {{301, BIT(0)},      {200, BIT(0)},      },
-    [59] = {{301, BIT(0)},      {200, BIT(0)},      },
-    [60] = {{200, BIT_MANUF},   {/*?*/},            },
-    [61] = {{200, BIT_MANUF},   {/*?*/},            },
-    [62] = {{200, BIT_MANUF},   {/*?*/},            },
-    [63] = {{200, BIT_MANUF},   {/*?*/},            },
+     /*           SD                  SPI                 eMMC         */
+     [0] = {{200, BIT(0)},      {200, BIT(0)},      {451, BIT(0)}       },
+     [1] = {{301, BIT(0)},      {200, BIT(0)},      {451, BIT(0)}       },
+     [2] = {{200, BIT(0)},      {},                 {451, BIT(0)}       },
+     [3] = {{200, BIT(0)},      {},                 {451, BIT(0)}       },
+     [4] = {{200, BIT(0)},      {},                 {451, BIT(0)}       },
+     [5] = {{200, BIT(9)},      {200, BIT(9)},      {451, BIT(0)}       },
+     [6] = {{200, BIT(10)},     {200, BIT(10)},     {451, BIT(0)}       },
+     [7] = {{200, BIT(0)},      {},                 {451, BIT(0)}       },
+     [8] = {{200, BIT(0)},      {200, BIT(0)},      {451, BIT(0)}       },
+     [9] = {{200, BIT(0)},      {200, BIT(0)},      {451, BIT(0)}       },
+    [10] = {{200, BIT(0)},      {200, BIT(0)},      {451, BIT(0)}       },
+    [12] = {{200, BIT(0)},      {200, BIT(0)},      {451, BIT(0)}       },
+    [13] = {{200, BIT(0)},      {200, BIT(0)},      {451, BIT(0)}       },
+    [14] = {{200, BIT(0)},      {},                 {451, BIT(0)}       },
+    [15] = {{200, BIT(0)},      {},                 {451, BIT(0)}       },
+    [16] = {{200, BIT_2_4_7},   {200, BIT_2_4_7},   {451, BIT_2_4_7}    },
+    [17] = {{200, BIT(2)},      {200, BIT(2)},      {451, BIT(2)}       },
+    [18] = {{200, BIT(2)},      {200, BIT(2)},      {451, BIT(2)}       },
+    [19] = {{},                 {},                 {451, BIT(0)}       },
+    [21] = {{},                 {},                 {/* HS200 */}       },
+    [23] = {{301, BIT_2_4},     {},                 {/*BIT_2_4 ?*/}     },
+    [24] = {{200, BIT(4)},      {200, BIT(4)},      {451, BIT(4)}       },
+    [25] = {{200, BIT(4)},      {200, BIT(4)},      {451, BIT(4)}       },
+    [26] = {{200, BIT_MANUF},   {/*?*/},            {/*?*/}             },
+    [27] = {{200, BIT(4)},      {200, BIT(4)},      {451, BIT(4)}       },
+    [28] = {{200, BIT(6)},      {200, BIT(6)},      {451, BIT(6)}       },
+    [29] = {{200, BIT(6)},      {200, BIT(6)},      {451, BIT(6)}       },
+    [30] = {{200, BIT(6)},      {200, BIT(6)},      {451, BIT(6)}       },
+    [31] = {{},                 {},                 {451, BIT(6)}       },
+    [32] = {{200, BIT(5)},      {200, BIT(5)},      {}                  },
+    [33] = {{200, BIT(5)},      {200, BIT(5)},      {}                  },
+    [34] = {{200, BIT(10)},     {200, BIT(10)},     {}                  },
+    [35] = {{200, BIT(10)},     {200, BIT(10)},     {451, BIT(5)}       },
+    [36] = {{200, BIT(10)},     {200, BIT(10)},     {451, BIT(5)}       },
+    [37] = {{200, BIT(10)},     {200, BIT(10)},     {},                 },
+    [38] = {{200, BIT(5)},      {200, BIT(5)},      {451, BIT(5)}       },
+    [39] = {{},                 {},                 {451, BIT(9)}       },
+    [40] = {{},                 {},                 {451, BIT(9)}       },
+    [41] = {{},                 {},                 {/*451, BIT(7)*/}   },
+    [42] = {{200, BIT(7)},      {200, BIT(7)},      {451, BIT(4)}       },
+    [44] = {{},                 {},                 {501, BIT(10)}      },
+    [45] = {{},                 {},                 {501, BIT(10)}      },
+    [46] = {{},                 {},                 {501, BIT(10)}      },
+    [47] = {{},                 {},                 {501, BIT(10)}      },
+    [48] = {{},                 {},                 {501, BIT(10)}      },
+    [49] = {{},                 {},                 {451, BIT(4)}       },
+    [50] = {{200, BIT(10)},     {200, BIT(10)},     {}                  },
+    [52] = {{200, BIT(9)},      {200, BIT(9)},      {}                  },
+    [53] = {{200, BIT(9)},      {200, BIT(9)},      {451, BIT(10)}      },
+    [54] = {{/* 2.00 SDIO */},  {/* 2.00 SDIO */},  {451, BIT(10)}      },
+    [55] = {{200, BIT(8)},      {200, BIT(8)},      {451, BIT(8)}       },
+    [56] = {{200, BIT(8)},      {200, BIT(8)},      {451, BIT(8)}       },
+    [57] = {{200, BIT(10)},     {200, BIT(10)},     {}                  },
+    [58] = {{301, BIT(0)},      {200, BIT(0)},      {}                  },
+    [59] = {{301, BIT(0)},      {200, BIT(0)},      {}                  },
+    [60] = {{200, BIT_MANUF},   {/*?*/},            {/*?*/}             },
+    [61] = {{200, BIT_MANUF},   {/*?*/},            {/*?*/}             },
+    [62] = {{200, BIT_MANUF},   {/*?*/},            {/*?*/}             },
+    [63] = {{200, BIT_MANUF},   {/*?*/},            {/*?*/}             },
 }, acmd_supported[SDCARD_CMD_MAX] = {
-     /*           SD                  SPI          */
-     [6] = {{200, BIT(8)},      {},                 },
-    [13] = {{200, BIT(8)},      {200, BIT(8)},      },
-    [18] = {{200, BIT_SECU},    {200, BIT_SECU},    },
-    [22] = {{200, BIT(8)},      {200, BIT(8)},      },
-    [23] = {{200, BIT(8)},      {200, BIT(8)},      },
-    [25] = {{200, BIT_SECU},    {200, BIT_SECU},    },
-    [26] = {{200, BIT_SECU},    {200, BIT_SECU},    },
-    [38] = {{200, BIT_SECU},    {200, BIT_SECU},    },
-    [41] = {{200, BIT(8)},      {200, BIT(8)},      },
-    [42] = {{200, BIT(8)},      {200, BIT(8)},      },
-    [43] = {{200, BIT_SECU},    {200, BIT_SECU},    },
-    [44] = {{200, BIT_SECU},    {200, BIT_SECU},    },
-    [45] = {{200, BIT_SECU},    {200, BIT_SECU},    },
-    [46] = {{200, BIT_SECU},    {200, BIT_SECU},    },
-    [47] = {{200, BIT_SECU},    {200, BIT_SECU},    },
-    [48] = {{200, BIT_SECU},    {200, BIT_SECU},    },
-    [49] = {{200, BIT_SECU},    {200, BIT_SECU},    },
-    [51] = {{200, BIT(8)},      {200, BIT(8)},      },
+     /*           SD                  SPI                 eMMC         */
+     [6] = {{200, BIT(8)},      {},                 {451, BIT(0)}       },
+    [13] = {{200, BIT(8)},      {200, BIT(8)},      {451, BIT(0)}       },
+    [18] = {{200, BIT_SECU},    {200, BIT_SECU},    {451, BIT(0)}       },
+    [22] = {{200, BIT(8)},      {200, BIT(8)},      {451, BIT(4)}       },
+    [23] = {{200, BIT(8)},      {200, BIT(8)},      {451, BIT(4)}       },
+    [25] = {{200, BIT_SECU},    {200, BIT_SECU},    {451, BIT(0)}       },
+    [26] = {{200, BIT_SECU},    {200, BIT_SECU},    {451, BIT(0)}       },
+    [38] = {{200, BIT_SECU},    {200, BIT_SECU},    {451, BIT(0)}       },
+    [41] = {{200, BIT(8)},      {200, BIT(8)},      {451, BIT(8)}       },
+    [42] = {{200, BIT(8)},      {200, BIT(8)},      {451, BIT(0)}       },
+    [43] = {{200, BIT_SECU},    {200, BIT_SECU},    {451, BIT(0)}       },
+    [44] = {{200, BIT_SECU},    {200, BIT_SECU},    {451, BIT(0)}       },
+    [45] = {{200, BIT_SECU},    {200, BIT_SECU},    {451, BIT(0)}       },
+    [46] = {{200, BIT_SECU},    {200, BIT_SECU},    {451, BIT(0)}       },
+    [47] = {{200, BIT_SECU},    {200, BIT_SECU},    {451, BIT(0)}       },
+    [48] = {{200, BIT_SECU},    {200, BIT_SECU},    {451, BIT(0)}       },
+    [49] = {{200, BIT_SECU},    {200, BIT_SECU},    {451, BIT(0)}       },
+    [51] = {{200, BIT(8)},      {200, BIT(8)},      {451, BIT(8)}       },
 };
 
 static const char *spec_version_name(uint16_t spec_version)
@@ -378,8 +399,14 @@ static const char *spec_version_name(uint16_t spec_version)
     switch (spec_version) {
     case SD_PHY_SPEC_VER_2_00:
         return "v2.00";
+    case MMC_SPEC_VER_2_2:
+        return "v2.2";
     case SD_PHY_SPEC_VER_3_01:
         return "v3.01";
+    case MMC_SPEC_VER_4_51:
+        return "v4.51";
+    case MMC_SPEC_VER_5_1:
+        return "v5.1";
     default:
         g_assert_not_reached();
     }
@@ -396,6 +423,9 @@ static bool cmd_version_supported(SDState *sd, uint8_t cmd, bool is_acmd)
         break;
     case PROTO_SPI:
         cmd_version = cmdset[cmd].spi.version;
+        break;
+    case PROTO_MMC:
+        cmd_version = cmdset[cmd].mmc.version;
         break;
     default:
         g_assert_not_reached();
@@ -423,6 +453,9 @@ static bool cmd_class_supported(SDState *sd, uint8_t cmd, uint8_t class,
     case PROTO_SPI:
         /* class 1, 3 and 9 are not supported in SPI mode */
         cmd_ccc_mask = cmdset[cmd].spi.ccc_mask;
+        break;
+    case PROTO_MMC:
+        cmd_ccc_mask = cmdset[cmd].mmc.ccc_mask;
         break;
     default:
         g_assert_not_reached();
@@ -602,7 +635,7 @@ static void sd_reset_csd(SDState *sd, uint64_t size)
 
 static void sd_reset_rca(SDState *sd)
 {
-    sd->rca = 0;
+    sd->rca = sd->bus_protocol == PROTO_MMC;
 }
 
 static void sd_set_rca(SDState *sd)
@@ -906,6 +939,9 @@ static SDState *sdcard_init(BlockBackend *blk, sd_bus_protocol_t bus_protocol)
     switch (bus_protocol) {
     case PROTO_SPI:
         qdev_prop_set_bit(dev, "spi", true);
+        break;
+    case PROTO_MMC:
+        qdev_prop_set_bit(dev, "mmc", true);
         break;
     default:
         break;
@@ -2163,7 +2199,11 @@ static void sd_realize(DeviceState *dev, Error **errp)
     int ret;
 
     sd->proto_name = sd_protocol_name(sd->bus_protocol);
-    sd->spec_version = SD_PHY_SPEC_VER_2_00;
+    if (sd->bus_protocol == PROTO_MMC) {
+        sd->spec_version = MMC_SPEC_VER_4_51;
+    } else {
+        sd->spec_version = SD_PHY_SPEC_VER_2_00;
+    }
 
     if (sd->blk && blk_is_read_only(sd->blk)) {
         error_setg(errp, "Cannot use read-only drive as SD card");
@@ -2209,6 +2249,7 @@ static Property sd_properties[] = {
      * board to ensure that ssi transfers only occur when the chip select
      * is asserted.  */
     DEFINE_PROP_BIT("spi", SDState, bus_protocol, 1, false),
+    DEFINE_PROP_BIT("mmc", SDState, bus_protocol, 2, false),
     DEFINE_PROP_END_OF_LIST()
 };
 
