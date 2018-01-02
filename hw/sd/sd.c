@@ -466,29 +466,59 @@ static size_t sd_response_r1_make(SDState *sd, uint8_t *response)
     /* Clear the "clear on read" status bits */
     sd->card_status &= ~CARD_STATUS_C;
 
-    response[0] = (status >> 24) & 0xff;
-    response[1] = (status >> 16) & 0xff;
-    response[2] = (status >> 8) & 0xff;
-    response[3] = (status >> 0) & 0xff;
+    if (sd->spi) {
+        response[0] = 0xff; /* XXX */
+        return 1;
+    } else {
+        response[0] = (status >> 24) & 0xff;
+        response[1] = (status >> 16) & 0xff;
+        response[2] = (status >> 8) & 0xff;
+        response[3] = (status >> 0) & 0xff;
+        return 4;
+    }
+}
 
-    return 4;
+static size_t sd_response_r1b_make(SDState *sd, uint8_t *response)
+{
+    /* This response token is identical to the R1 format with the
+     * optional addition of the busy signal. */
+    if (sd->spi) {
+        /* The busy signal token can be any number of bytes. A zero value
+         * indicates card is busy. A non-zero value indicates the card is
+         * ready for the next command. */
+        size_t sz = sd_response_r1_make(sd, response);
+
+        response[sz++] = 0x42;
+
+        return sz;
+    }
+    return sd_response_r1_make(sd, response);
 }
 
 static size_t sd_response_r2s_make(SDState *sd, uint8_t *response)
 {
-    memcpy(response, sd->csd, sizeof(sd->csd));
-
-    return 16;
+    if (sd->spi) {
+        /* TODO */
+        return 2;
+    } else {
+        memcpy(response, sd->csd, sizeof(sd->csd));
+        return 16;
+    }
 }
 
 static size_t sd_response_r3_make(SDState *sd, uint8_t *response)
 {
-    response[0] = (sd->ocr >> 24) & 0xff;
-    response[1] = (sd->ocr >> 16) & 0xff;
-    response[2] = (sd->ocr >> 8) & 0xff;
-    response[3] = (sd->ocr >> 0) & 0xff;
+    int ofs = 0;
 
-    return 4;
+    if (sd->spi) {
+        ofs += sd_response_r1_make(sd, response);
+    }
+    response[ofs++] = (sd->ocr >> 24) & 0xff;
+    response[ofs++] = (sd->ocr >> 16) & 0xff;
+    response[ofs++] = (sd->ocr >> 8) & 0xff;
+    response[ofs++] = (sd->ocr >> 0) & 0xff;
+
+    return ofs;
 }
 
 static void sd_response_r6_make(SDState *sd, uint8_t *response)
@@ -1249,7 +1279,7 @@ static sd_rsp_type_t sd_normal_command(SDState *sd, SDRequest req)
             *(uint32_t *) sd->data = sd_wpbits(sd, req.arg);
             sd->data_start = addr;
             sd->data_offset = 0;
-            return sd_r1b;
+            return sd->spi ? sd_r1 : sd_r1b;
         }
         break;
 
@@ -1306,9 +1336,11 @@ static sd_rsp_type_t sd_normal_command(SDState *sd, SDRequest req)
 
     /* Application specific commands (Class 8) */
     case 55:	/* CMD55:  APP_CMD */
-        if (sd->rca != rca)
-            return sd_r0;
-
+        if (!sd->spi) {
+            if (sd->rca != rca) {
+                return sd_r0;
+            }
+        }
         sd->expecting_acmd = true;
         sd->card_status |= APP_CMD;
         return sd_r1;
@@ -1374,7 +1406,7 @@ static sd_rsp_type_t sd_app_command(SDState *sd, SDRequest req)
             sd->state = sd_sendingdata_state;
             sd->data_start = 0;
             sd->data_offset = 0;
-            return sd_r1;
+            return sd->spi ? sd_r2_s : sd_r1;
         }
         break;
 
@@ -1569,8 +1601,11 @@ int sd_do_command(SDState *sd, SDRequest *req,
 send_response:
     switch (rtype) {
     case sd_r1:
-    case sd_r1b:
         rsplen = sd_response_r1_make(sd, response);
+        break;
+
+    case sd_r1b:
+        rsplen = sd_response_r1b_make(sd, response);
         break;
 
     case sd_r2_i:
