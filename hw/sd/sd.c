@@ -305,7 +305,7 @@ typedef struct {
 static const sd_cmd_supported_t cmd_supported[SDCARD_CMD_MAX] = {
      /*           SD                  SPI          */
      [0] = {{200, BIT(0)},      {200, BIT(0)},      },
-     [1] = {{},                 {200, BIT(0)},      },
+     [1] = {{301, BIT(0)},      {200, BIT(0)},      },
      [2] = {{200, BIT(0)},      {},                 },
      [3] = {{200, BIT(0)},      {},                 },
      [4] = {{200, BIT(0)},      {},                 },
@@ -322,6 +322,7 @@ static const sd_cmd_supported_t cmd_supported[SDCARD_CMD_MAX] = {
     [16] = {{200, BIT_2_4_7},   {200, BIT_2_4_7},   },
     [17] = {{200, BIT(2)},      {200, BIT(2)},      },
     [18] = {{200, BIT(2)},      {200, BIT(2)},      },
+    [23] = {{301, BIT_2_4},     {},                 },
     [24] = {{200, BIT(4)},      {200, BIT(4)},      },
     [25] = {{200, BIT(4)},      {200, BIT(4)},      },
     [26] = {{200, BIT_MANUF},   {/*?*/},            },
@@ -344,8 +345,8 @@ static const sd_cmd_supported_t cmd_supported[SDCARD_CMD_MAX] = {
     [55] = {{200, BIT(8)},      {200, BIT(8)},      },
     [56] = {{200, BIT(8)},      {200, BIT(8)},      },
     [57] = {{200, BIT(10)},     {200, BIT(10)},     },
-    [58] = {{},                 {200, BIT(0)},      },
-    [59] = {{},                 {200, BIT(0)},      },
+    [58] = {{301, BIT(0)},      {200, BIT(0)},      },
+    [59] = {{301, BIT(0)},      {200, BIT(0)},      },
     [60] = {{200, BIT_MANUF},   {/*?*/},            },
     [61] = {{200, BIT_MANUF},   {/*?*/},            },
     [62] = {{200, BIT_MANUF},   {/*?*/},            },
@@ -372,6 +373,18 @@ static const sd_cmd_supported_t cmd_supported[SDCARD_CMD_MAX] = {
     [51] = {{200, BIT(8)},      {200, BIT(8)},      },
 };
 
+static const char *spec_version_name(uint16_t spec_version)
+{
+    switch (spec_version) {
+    case SD_PHY_SPEC_VER_2_00:
+        return "v2.00";
+    case SD_PHY_SPEC_VER_3_01:
+        return "v3.01";
+    default:
+        g_assert_not_reached();
+    }
+}
+
 static bool cmd_version_supported(SDState *sd, uint8_t cmd, bool is_acmd)
 {
     const sd_cmd_supported_t *cmdset = is_acmd ? acmd_supported : cmd_supported;
@@ -387,11 +400,12 @@ static bool cmd_version_supported(SDState *sd, uint8_t cmd, bool is_acmd)
     default:
         g_assert_not_reached();
     }
-    if (cmd_version) {
+    if (cmd_version >= sd->spec_version) {
         return true;
     }
-    qemu_log_mask(LOG_GUEST_ERROR, "%s: Unsupported %s%02u\n",
-                  sd->proto_name, is_acmd ? "ACMD" : "CMD", cmd);
+    qemu_log_mask(LOG_GUEST_ERROR, "%s: Unsupported %s%02u (%s)\n",
+                  sd->proto_name, is_acmd ? "ACMD" : "CMD", cmd,
+                  spec_version_name(cmd_version));
 
     return false;
 }
@@ -416,8 +430,9 @@ static bool cmd_class_supported(SDState *sd, uint8_t cmd, uint8_t class,
     if (cmd_ccc_mask & BIT(class)) {
         return true;
     }
-    qemu_log_mask(LOG_GUEST_ERROR, "%s: Unsupported %s%02u (class %d)\n",
-                  sd->proto_name, is_acmd ? "ACMD" : "CMD", cmd, class);
+    qemu_log_mask(LOG_GUEST_ERROR, "%s: Unsupported %s%02u (class %d, %s)\n",
+                  sd->proto_name, is_acmd ? "ACMD" : "CMD", cmd, class,
+                  spec_version_name(sd->spec_version));
 
     return false;
 }
