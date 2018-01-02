@@ -318,6 +318,7 @@ static uint16_t sd_crc16(void *message, size_t width)
     return shift_reg;
 }
 
+FIELD(OCR, CARD_CAPACITY,              30, 1); /* 0:SDSC, 1:SDHC/SDXC */
 FIELD(OCR, CARD_POWER_UP,              31, 1);
 
 #define OCR_POWER_DELAY_NS      500000 /* 0.5ms */
@@ -336,6 +337,10 @@ static void sd_ocr_powerup(void *opaque)
 
     /* card power-up OK */
     sd->ocr = FIELD_DP32(sd->ocr, OCR, CARD_POWER_UP, 1);
+
+    if (sd->capacity >= sd_capacity_sdhc) {
+        sd->ocr = FIELD_DP32(sd->ocr, OCR, CARD_CAPACITY, 1);
+    }
 }
 
 static void sd_reset_scr(SDState *sd)
@@ -440,7 +445,6 @@ static void sd_reset_csd(SDState *sd, uint64_t size)
         sd->csd[13] = 0x40;
         sd->csd[14] = 0x00;
         sd->csd[15] = 0x00;
-        sd->ocr |= 1 << 30;     /* High Capacity SD Memory Card */
     }
 }
 
