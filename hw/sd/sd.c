@@ -1438,6 +1438,9 @@ static sd_rsp_type_t sd_app_command(SDState *sd,
         }
         break;
 
+    case 55:    /* Not exist */
+        break;
+
     default:
         /* Fall back to standard commands.  */
         return sd_normal_command(sd, req);
