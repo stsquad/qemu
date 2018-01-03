@@ -1071,8 +1071,6 @@ static sd_rsp_type_t sd_normal_command(SDState *sd, SDRequest req)
         return sd_r1;
 
     case 2:	/* CMD2:   ALL_SEND_CID */
-        if (sd->spi)
-            goto bad_cmd;
         if (sd->state == sd_ready_state) {
             sd->state = sd_identification_state;
             return sd_r2_i;
@@ -1080,8 +1078,6 @@ static sd_rsp_type_t sd_normal_command(SDState *sd, SDRequest req)
         break;
 
     case 3:	/* CMD3:   SEND_RELATIVE_ADDR */
-        if (sd->spi)
-            goto bad_cmd;
         switch (sd->state) {
         case sd_identification_state:
         case sd_standby_state:
@@ -1095,8 +1091,6 @@ static sd_rsp_type_t sd_normal_command(SDState *sd, SDRequest req)
         break;
 
     case 4:	/* CMD4:   SEND_DSR */
-        if (sd->spi)
-            goto bad_cmd;
         switch (sd->state) {
         case sd_standby_state:
             break;
@@ -1110,8 +1104,6 @@ static sd_rsp_type_t sd_normal_command(SDState *sd, SDRequest req)
         return sd_illegal;
 
     case 6:	/* CMD6:   SWITCH_FUNCTION */
-        if (sd->spi)
-            goto bad_cmd;
         if (sd->mode == sd_data_transfer_mode) {
             sd_function_switch(sd, req.arg);
             sd->state = sd_sendingdata_state;
@@ -1122,8 +1114,6 @@ static sd_rsp_type_t sd_normal_command(SDState *sd, SDRequest req)
         break;
 
     case 7:	/* CMD7:   SELECT/DESELECT_CARD */
-        if (sd->spi)
-            goto bad_cmd;
         switch (sd->state) {
         case sd_standby_state:
             if (sd->rca != rca)
@@ -1224,8 +1214,6 @@ static sd_rsp_type_t sd_normal_command(SDState *sd, SDRequest req)
         break;
 
     case 11:	/* CMD11:  READ_DAT_UNTIL_STOP */
-        if (sd->spi)
-            goto bad_cmd;
         if (sd->state == sd_transfer_state) {
             sd->state = sd_sendingdata_state;
             sd->data_start = req.arg;
@@ -1264,8 +1252,6 @@ static sd_rsp_type_t sd_normal_command(SDState *sd, SDRequest req)
         break;
 
     case 15:	/* CMD15:  GO_INACTIVE_STATE */
-        if (sd->spi)
-            goto bad_cmd;
         if (sd->mode == sd_data_transfer_mode) {
             if (sd->rca != rca)
                 return sd_r0;
@@ -1358,8 +1344,6 @@ static sd_rsp_type_t sd_normal_command(SDState *sd, SDRequest req)
         break;
 
     case 26:	/* CMD26:  PROGRAM_CID */
-        if (sd->spi)
-            goto bad_cmd;
         if (sd->state == sd_transfer_state) {
             sd->state = sd_receivingdata_state;
             sd->data_start = 0;
@@ -1528,9 +1512,6 @@ static sd_rsp_type_t sd_app_command(SDState *sd, SDRequest req)
     sd->card_status |= APP_CMD;
     switch (req.cmd) {
     case 6:	/* ACMD6:  SET_BUS_WIDTH */
-        if (sd->spi) {
-            goto unimplemented_cmd;
-        }
         if (sd->state == sd_transfer_state) {
             sd->sd_status[0] &= 0x3f;
             sd->sd_status[0] |= (req.arg & 0x03) << 6;
