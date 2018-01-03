@@ -56,6 +56,11 @@
 #define OCR_CCS_BITN        30
 
 typedef enum {
+    PROTO_SD =  0,
+    PROTO_SPI = 1 << 1,
+} sd_bus_protocol_t;
+
+typedef enum {
     sd_none = -1,
     sd_bc = 0,	/* broadcast -- no response */
     sd_bcr,	/* broadcast with response */
