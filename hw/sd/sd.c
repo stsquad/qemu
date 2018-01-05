@@ -1024,7 +1024,7 @@ static void sd_erase(SDState *sd)
         return;
     }
 
-    if (extract32(sd->ocr, OCR_CCS_BITN, 1)) {
+    if (sd->capacity >= sd_capacity_sdhc) {
         /* High capacity memory card: erase units are 512 byte blocks */
         erase_start *= 512;
         erase_end *= 512;
