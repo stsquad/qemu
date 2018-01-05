@@ -101,6 +101,7 @@ typedef struct SDHCIState {
     bool     pending_insert_state;
     /* Configurable properties */
     bool pending_insert_quirk; /* Quirk for Raspberry Pi card insert int */
+    uint8_t data_lines;
     uint8_t spec_version;
     struct {
         /* v1 */

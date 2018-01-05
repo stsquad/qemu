@@ -896,6 +896,10 @@ static uint64_t sdhci_read(void *opaque, hwaddr offset, unsigned size)
         break;
     case SDHC_PRNSTS:
         ret = s->prnsts;
+        ret = FIELD_DP64(ret, SDHC_PRNSTS, DAT_LVL,
+                         sdbus_get_dat_lines(&s->sdbus));
+        ret = FIELD_DP64(ret, SDHC_PRNSTS, CMD_LVL,
+                         sdbus_get_cmd_line(&s->sdbus));
         break;
     case SDHC_HOSTCTL:
         ret = s->hostctl1 | (s->pwrcon << 8) | (s->blkgap << 16) |
@@ -1344,6 +1348,7 @@ static Property sdhci_properties[] = {
     DEFINE_PROP_UINT8("driver-strength", SDHCIState, cap.strength, 0),
 
     DEFINE_PROP_UINT64("maxcurr", SDHCIState, maxcurr, 0),
+    DEFINE_PROP_UINT8("data-lines", SDHCIState, data_lines, 4),
     DEFINE_PROP_BOOL("pending-insert-quirk", SDHCIState, pending_insert_quirk,
                      false),
     DEFINE_PROP_LINK("dma-memory", SDHCIState, dma_mr,
