@@ -51,6 +51,7 @@
 #define ERASE_RESET		(1 << 13)
 #define CURRENT_STATE		(7 << 9)
 #define READY_FOR_DATA		(1 << 8)
+#define SWITCH_ERROR        (1 << 7)
 #define APP_CMD			(1 << 5)
 #define AKE_SEQ_ERROR		(1 << 3)
 
@@ -59,6 +60,20 @@ typedef enum {
     PROTO_SPI = 1 << 1,
     PROTO_MMC = 1 << 2,
 } sd_bus_protocol_t;
+
+typedef enum {
+    SD_VOLTAGE_0_4V     = 400,
+    SD_VOLTAGE_1_8V     = 1800,
+    SD_VOLTAGE_3_0V     = 3000,
+    SD_VOLTAGE_3_3V     = 3300,
+} sd_voltage_mv_t;
+
+typedef enum  {
+    UHS_NOT_SUPPORTED   = 0,
+    UHS_I               = 1,
+    UHS_II              = 2,
+    UHS_III             = 3,
+} sd_uhs_mode_t;
 
 typedef enum {
     sd_none = -1,
