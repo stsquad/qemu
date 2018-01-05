@@ -1686,7 +1686,7 @@ static sd_rsp_type_t sd_normal_command(SDState *sd, SDRequest req)
         return sd_illegal;
     }
 
-    qemu_log_mask(LOG_GUEST_ERROR, "SD: CMD%i in a wrong state\n", req.cmd);
+    qemu_log_mask(LOG_GUEST_ERROR, "SD: CMD%i card in wrong state\n", req.cmd);
     return sd_illegal;
 }
 
@@ -1819,12 +1819,12 @@ static sd_rsp_type_t sd_app_command(SDState *sd, SDRequest req)
 
     unimplemented_cmd:
         /* Commands that are recognised but not yet implemented in SPI mode.  */
-        qemu_log_mask(LOG_UNIMP, "SD: CMD%i not implemented in SPI mode\n",
+        qemu_log_mask(LOG_UNIMP, "SD: ACMD%i not implemented in SPI mode\n",
                       req.cmd);
         return sd_illegal;
     }
 
-    qemu_log_mask(LOG_GUEST_ERROR, "SD: ACMD%i in a wrong state\n", req.cmd);
+    qemu_log_mask(LOG_GUEST_ERROR, "SD: ACMD%i card in wrong state\n", req.cmd);
     return sd_illegal;
 }
 
