@@ -2179,6 +2179,10 @@ bool sd_data_ready(SDState *sd)
 
 void sd_enable(SDState *sd, bool enable)
 {
+    trace_sdcard_set_enable(sd->enable, enable);
+    if (sd->enable == enable) {
+        qemu_log_mask(LOG_GUEST_ERROR, "sdcard_enable: inconsistent state\n");
+    }
     sd->enable = enable;
 }
 
