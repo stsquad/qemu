@@ -81,13 +81,9 @@ static void zynqmp_sdhci_slottype_handler(void *opaque, int n, int level)
 
 static void zynqmp_sdhci_reset(DeviceState *dev)
 {
-    ZynqMPSDHCIState *s = ZYNQMP_SDHCI(dev);
-    SDHCIState *ss = SYSBUS_SDHCI(dev);
     DeviceClass *dc_parent = DEVICE_CLASS(ZYNQMP_SDHCI_PARENT_CLASS);
 
     dc_parent->reset(dev);
-
-    sd_set_cb(s->card, ss->ro_cb, ss->eject_cb);
 }
 
 static void zynqmp_sdhci_realize(DeviceState *dev, Error **errp)
@@ -109,8 +105,24 @@ static void zynqmp_sdhci_realize(DeviceState *dev, Error **errp)
         index_offset++;
     }
 
-    qdev_prop_set_uint32(dev, "capareg",
-                         (uint32_t) SDHC_CAPAB_REG_DEFAULT | (1 << 28));
+    /* Compatible with:
+     * - SD Host Controller Specification Version 3.00
+     * - SDIO Specification Version 3.0
+     * - eMMC Specification Version 4.51
+     *
+     * Host clock rate variable between 0 and 208 MHz
+     * Transfers the data in SDR104, SDR50, DDR50 modes
+     * (SDR104 mode: up to 832Mbits/s using 4 parallel data lines)
+     * Transfers the data in 1 bit and 4 bit SD modes
+     * UHS speed modes, 1.8V
+     * voltage switch, tuning commands
+     */
+    qdev_prop_set_uint8(dev, "sd-spec-version", 3);
+    qdev_prop_set_bit(dev, "suspend", true);
+    qdev_prop_set_bit(dev, "1v8", true);
+    qdev_prop_set_bit(dev, "64bit", true);
+    qdev_prop_set_uint8(dev, "bus-speed", 0b111);
+    qdev_prop_set_uint8(dev, "driver-strength", 0b111);
     carddev_sd = qdev_create(qdev_get_child_bus(DEVICE(dev), "sd-bus"),
                              TYPE_SD_CARD);
     object_property_set_bool(OBJECT(carddev_sd), false, "spi", &error_fatal);
