@@ -116,6 +116,7 @@ struct SDState {
     uint8_t scr[8];
     uint8_t cid[16];
     uint8_t csd[16];
+    uint8_t ext_csd[512];
     uint16_t rca;
     uint32_t card_status;
     uint8_t sd_status[64];
@@ -579,6 +580,13 @@ static const uint8_t sd_csd_rw_mask[16] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xfc, 0xfe,
 };
 
+static void sd_reset_ext_csd(SDState *sd)
+{
+    /* FIXME: come up with sane reset value */
+    memset(sd->ext_csd, 0, sizeof(sd->ext_csd));
+    sd->ext_csd[196] = 0x3f; /* Support all timing modes */
+}
+
 static void sd_reset_csd(SDState *sd, uint64_t size)
 {
     uint32_t csize = (size >> (CMULT_SHIFT + HWBLOCK_SHIFT)) - 1;
@@ -828,6 +836,7 @@ static void sd_reset(DeviceState *dev)
     sd_reset_scr(sd);
     sd_reset_cid(sd);
     sd_reset_csd(sd, size);
+    sd_reset_ext_csd(sd);
     sd_reset_cardstatus(sd);
     sd_reset_sdstatus(sd);
 
@@ -1305,7 +1314,14 @@ static sd_rsp_type_t sd_normal_command(SDState *sd, SDRequest req)
             /* Accept.  */
             sd->vhs = req.arg;
             return sd_r7;
-
+        case sd_transfer_state:
+            if (sd->bus_protocol == PROTO_MMC) {
+                sd->state = sd_sendingdata_state;
+                memcpy(sd->data, sd->ext_csd, 512);
+                sd->data_start = 0;
+                sd->data_offset = 0;
+                return sd_r1;
+            }
         default:
             break;
         }
@@ -2121,6 +2137,15 @@ uint8_t sd_read_data(SDState *sd)
 
         if (sd->data_offset >= 64)
             sd->state = sd_transfer_state;
+        break;
+
+    case 8:     /* CMD6:   SEND_EXT_CSD */
+        assert(sd->bus_protocol == PROTO_MMC);
+        ret = sd->data[sd->data_offset++];
+
+        if (sd->data_offset >= 512) {
+            sd->state = sd_transfer_state;
+        }
         break;
 
     case 9:	/* CMD9:   SEND_CSD */
