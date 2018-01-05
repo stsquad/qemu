@@ -33,6 +33,7 @@
 
 /* Legacy functions to be used only by non-qdevified callers */
 SDState *sd_init(BlockBackend *blk, bool is_spi); /* deprecated */
+SDState *mmc_init(BlockBackend *blk); /* deprecated */
 int sd_do_command(SDState *card, SDRequest *request, uint8_t *response);
 void sd_write_data(SDState *card, uint8_t value);
 uint8_t sd_read_data(SDState *card);

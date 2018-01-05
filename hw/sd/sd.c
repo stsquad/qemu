@@ -960,6 +960,11 @@ SDState *sd_init(BlockBackend *blk, bool is_spi)
     return sdcard_init(blk, is_spi ? PROTO_SPI : PROTO_SD);
 }
 
+SDState *mmc_init(BlockBackend *blk)
+{
+    return sdcard_init(blk, PROTO_MMC);
+}
+
 void sd_set_cb(SDState *sd, qemu_irq readonly, qemu_irq insert)
 {
     sd->readonly_cb = readonly;
