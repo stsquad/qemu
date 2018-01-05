@@ -1,6 +1,7 @@
 # See docs/devel/tracing.txt for syntax documentation.
 
 # hw/sd/core.c
+sdbus_set_clock(const char *bus_name, bool current_state, bool new_state) "@%s %u -> %u"
 sdbus_set_voltage(const char *bus_name, uint16_t from_millivolts, uint16_t to_millivolts) "@%s %u -> %u (mV)"
 sdbus_get_dat_lines(const char *bus_name, uint8_t dat_lines) "@%s dat_lines: %u"
 sdbus_get_cmd_line(const char *bus_name, bool cmd_line) "@%s cmd_line: %u"

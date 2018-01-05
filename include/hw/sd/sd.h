@@ -125,6 +125,7 @@ struct SDBus {
      BusState qbus;
     /*< public >*/
 
+    bool clock_enabled;
     uint16_t millivolts;
 };
 
@@ -143,6 +144,7 @@ typedef struct {
 /* Functions to be used by qdevified callers (working via
  * an SDBus rather than directly with SDState)
  */
+void sdbus_set_clock(SDBus *sdbus, bool state);
 void sdbus_set_voltage(SDBus *sdbus, uint16_t millivolts);
 uint16_t sdbus_get_voltage(SDBus *sdbus);
 uint8_t sdbus_get_dat_lines(SDBus *sdbus);

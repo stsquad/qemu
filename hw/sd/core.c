@@ -207,11 +207,31 @@ void sdbus_reparent_card(SDBus *from, SDBus *to)
     sdbus_set_readonly(to, readonly);
 }
 
+void sdbus_set_clock(SDBus *sdbus, bool state)
+{
+    SDState *slave;
+
+    if (state == sdbus->clock_enabled) {
+        return;
+    }
+    trace_sdbus_set_clock(sdbus_name(sdbus), sdbus->clock_enabled, state);
+    sdbus->clock_enabled = state;
+
+    slave = get_card(sdbus);
+    if (slave) {
+        SDCardClass *sc = SD_CARD_GET_CLASS(slave);
+
+        assert(sc->set_clock_enable);
+        sc->set_clock_enable(slave, state);
+    }
+}
+
 static void sd_bus_instance_init(Object *obj)
 {
     SDBus *s = SD_BUS(obj);
 
     /* start clocking, 3.3V */
+    s->clock_enabled = true;
     s->millivolts = SD_VOLTAGE_3_3V;
     object_property_add_uint16_ptr(obj, "millivolts", &s->millivolts, NULL);
 }
