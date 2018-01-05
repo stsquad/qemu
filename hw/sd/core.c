@@ -23,6 +23,12 @@
 #include "hw/qdev-core.h"
 #include "sysemu/block-backend.h"
 #include "hw/sd/sd.h"
+#include "trace.h"
+
+static inline const char *sdbus_name(SDBus *sdbus)
+{
+    return sdbus->qbus.name;
+}
 
 static SDState *get_card(SDBus *sdbus)
 {
@@ -46,6 +52,7 @@ uint8_t sdbus_get_dat_lines(SDBus *sdbus)
         assert(sc->get_dat_lines);
         dat_lines = sc->get_dat_lines(slave);
     }
+    trace_sdbus_get_dat_lines(sdbus_name(sdbus), dat_lines);
 
     return dat_lines;
 }
@@ -61,6 +68,7 @@ bool sdbus_get_cmd_line(SDBus *sdbus)
         assert(sc->get_cmd_line);
         cmd_line = sc->get_cmd_line(slave);
     }
+    trace_sdbus_get_cmd_line(sdbus_name(sdbus), cmd_line);
 
     return cmd_line;
 }
