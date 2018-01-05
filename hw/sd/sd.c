@@ -504,15 +504,26 @@ static uint16_t sd_crc16(void *message, size_t width)
     return shift_reg;
 }
 
-FIELD(OCR, CARD_CAPACITY,              30, 1); /* 0:SDSC, 1:SDHC/SDXC */
-FIELD(OCR, CARD_POWER_UP,              31, 1);
-
 #define OCR_POWER_DELAY_NS      500000 /* 0.5ms */
+
+FIELD(OCR, VDD_VOLTAGE_WINDOW,          0, 24)
+FIELD(OCR, VDD_VOLTAGE_WIN_LO,          0,  8)
+FIELD(OCR, DUAL_VOLTAGE_CARD,           7,  1)
+FIELD(OCR, VDD_VOLTAGE_WIN_HI,          8, 16)
+FIELD(OCR, ACCEPT_SWITCH_1V8,          24,  1) /* Only UHS-I */
+FIELD(OCR, UHS_II_CARD,                29,  1) /* Only UHS-II */
+FIELD(OCR, CARD_CAPACITY,              30,  1) /* 0:SDSC, 1:SDHC/SDXC */
+FIELD(OCR, CARD_POWER_UP,              31,  1)
 
 static void sd_reset_ocr(SDState *sd)
 {
-    /* All voltages OK, Standard Capacity SD Memory Card, not yet powered up */
-    sd->ocr = 0x00ffff00;
+    if (sd->bus_protocol == PROTO_MMC) {
+        /* All voltages OK */
+        sd->ocr = R_OCR_VDD_VOLTAGE_WIN_HI_MASK;
+        return;
+    }
+    /* 3.0 - 3.6 V voltages OK */
+    sd->ocr = 0b111111 << 18;
 }
 
 static void sd_ocr_powerup(void *opaque)
