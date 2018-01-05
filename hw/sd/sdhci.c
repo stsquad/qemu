@@ -1459,6 +1459,7 @@ static void sdhci_sysbus_class_init(ObjectClass *klass, void *data)
 }
 
 static const TypeInfo sdhci_sysbus_info = {
+    .abstract = true,
     .name = TYPE_SYSBUS_SDHCI,
     .parent = TYPE_SYS_BUS_DEVICE,
     .instance_size = sizeof(SDHCIState),
