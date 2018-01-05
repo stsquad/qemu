@@ -155,6 +155,8 @@ struct SDState {
     QEMUTimer *ocr_power_timer;
 
     bool enable;
+    uint8_t dat_lines;
+    bool cmd_line;
     const char *proto_name;
 };
 
@@ -260,6 +262,16 @@ static const char *sd_acmd_abbreviation(uint8_t cmd)
     };
 
     return acmd_abbrev[cmd] ? acmd_abbrev[cmd] : "UNKNOWN_ACMD";
+}
+
+static uint8_t sd_get_dat_lines(SDState *sd)
+{
+    return sd->enable ? sd->dat_lines : 0;
+}
+
+static bool sd_get_cmd_line(SDState *sd)
+{
+    return sd->enable ? sd->cmd_line : false;
 }
 
 static void sd_set_mode(SDState *sd)
@@ -705,6 +717,13 @@ static void sd_reset_sdstatus(SDState *sd)
     memset(sd->sd_status, 0, 64);
 }
 
+static void sd_reset_lines(SDState *sd)
+{
+    sd->dat_lines = 0b1111;
+    sd->cmd_line = true;
+    sd->enable = true;
+}
+
 static int sd_req_crc_validate(SDRequest *req)
 {
     uint8_t buffer[5];
@@ -850,6 +869,7 @@ static void sd_reset(DeviceState *dev)
     sd_reset_ext_csd(sd);
     sd_reset_cardstatus(sd);
     sd_reset_sdstatus(sd);
+    sd_reset_lines(sd);
 
     g_free(sd->wp_groups);
     sd->wp_switch = sd->blk ? blk_is_read_only(sd->blk) : false;
@@ -2278,7 +2298,6 @@ static void sd_instance_init(Object *obj)
 {
     SDState *sd = SD_CARD(obj);
 
-    sd->enable = true;
     sd->ocr_power_timer = timer_new_ns(QEMU_CLOCK_VIRTUAL, sd_ocr_powerup, sd);
 }
 
@@ -2362,6 +2381,8 @@ static void sd_class_init(ObjectClass *klass, void *data)
     dc->reset = sd_reset;
     dc->bus_type = TYPE_SD_BUS;
 
+    sc->get_dat_lines = sd_get_dat_lines;
+    sc->get_cmd_line = sd_get_cmd_line;
     sc->do_command = sd_do_command;
     sc->write_data = sd_write_data;
     sc->read_data = sd_read_data;
