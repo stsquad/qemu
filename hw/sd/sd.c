@@ -638,9 +638,9 @@ static void sd_reset_rca(SDState *sd)
     sd->rca = sd->bus_protocol == PROTO_MMC;
 }
 
-static void sd_set_rca(SDState *sd)
+static void sd_set_rca(SDState *sd, uint16_t rca)
 {
-    sd->rca += 0x4567;
+    sd->rca = rca;
 }
 
 /* Card status bits, split by clear condition:
@@ -1181,7 +1181,11 @@ static sd_rsp_type_t sd_normal_command(SDState *sd, SDRequest req)
         case sd_identification_state:
         case sd_standby_state:
             sd->state = sd_standby_state;
-            sd_set_rca(sd);
+            if (sd->bus_protocol == PROTO_MMC) {
+                sd_set_rca(sd, req.arg);
+            } else {
+                sd_set_rca(sd, sd->rca + 0x4567);
+            }
             return sd_r6;
 
         default:
@@ -1560,14 +1564,26 @@ static sd_rsp_type_t sd_normal_command(SDState *sd, SDRequest req)
 
     /* Application specific commands (Class 8) */
     case 55:	/* CMD55:  APP_CMD */
-        if (sd->bus_protocol != PROTO_SPI) {
-            if (sd->rca != rca) {
-                return sd_r0;
+        switch (sd->state) {
+        case sd_idle_state:
+        case sd_standby_state:
+        case sd_transfer_state:
+        case sd_sendingdata_state:
+        case sd_receivingdata_state:
+        case sd_programming_state:
+        case sd_disconnect_state:
+            if (sd->bus_protocol != PROTO_SPI) {
+                if (sd->rca != rca) {
+                    return sd_r0;
+                }
             }
+            sd->expecting_acmd = true;
+            sd->card_status |= APP_CMD;
+            return sd_r1;
+        default:
+            break;
         }
-        sd->expecting_acmd = true;
-        sd->card_status |= APP_CMD;
-        return sd_r1;
+        break;
 
     case 56:	/* CMD56:  GEN_CMD */
         if (sd->state == sd_transfer_state) {
