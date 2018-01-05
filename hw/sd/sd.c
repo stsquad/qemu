@@ -266,6 +266,33 @@ static const char *sd_acmd_abbreviation(uint8_t cmd)
     return acmd_abbrev[cmd] ? acmd_abbrev[cmd] : "UNKNOWN_ACMD";
 }
 
+static bool sd_verify_voltage(SDState *sd, uint16_t millivolts)
+{
+    trace_sdcard_set_voltage(millivolts, sd->uhs_enabled);
+
+    switch (millivolts) {
+    /* SD_VOLTAGE_3_3V */
+    case 3001 ... 3600:
+        break;
+    /* SD_VOLTAGE_3_0V */
+    case 2001 ... 3000:
+        break;
+    /* SD_VOLTAGE_1_8V */
+    case 1601 ... 2000:
+        if (!sd->uhs_enabled) {
+            qemu_log_mask(LOG_GUEST_ERROR, "SD card not in correct state for"
+                          "1.8V switch\n");
+            return false;
+        }
+        break;
+    default:
+        qemu_log_mask(LOG_GUEST_ERROR, "SD card voltage not supported: %.3fV",
+                      millivolts / 1000.f);
+        return false;
+    }
+    return true;
+}
+
 static void sd_switch_voltage(SDState *sd)
 {
     trace_sdcard_switch_voltage(sd->uhs_enabled);
@@ -2519,6 +2546,12 @@ void sd_enable(SDState *sd, bool enable)
         qemu_log_mask(LOG_GUEST_ERROR, "sdcard_enable: inconsistent state\n");
     }
     sd->enable = enable;
+
+    if (enable) {
+        SDBus *sdbus = SD_BUS(qdev_get_parent_bus(DEVICE(sd)));
+
+        sd_verify_voltage(sd, sdbus_get_voltage(sdbus));
+    }
 }
 
 static void sd_instance_init(Object *obj)
