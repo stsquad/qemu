@@ -49,6 +49,42 @@ static void arasan4_9a_sdhci_realize(DeviceState *dev, Error **errp)
     }
 }
 
+/* Compatible with:
+ * - SD Host Controller Specification Version 3.00
+ * - SDIO Specification Version 3.0
+ * - eMMC Specification Version 4.51
+ *
+ * Host clock rate variable between 0 and 208 MHz
+ * Transfers the data in SDR104, SDR50, DDR50 modes
+ * (SDR104 mode: up to 832Mbits/s using 4 parallel data lines)
+ * Transfers the data in 1 bit and 4 bit SD modes
+ * UHS speed modes, 1.8V
+ * voltage switch, tuning commands
+ */
+static void arasan8_9a_sdhci_realize(DeviceState *dev, Error **errp)
+{
+    SDHCICommonClass *cc = SYSBUS_SDHCI_COMMON_GET_CLASS(dev);
+    Object *obj = OBJECT(dev);
+    Error *local_err = NULL;
+
+    object_property_set_uint(obj, 3, "sd-spec-version", &local_err);
+    object_property_set_bool(obj, true, "suspend", &local_err);
+    object_property_set_bool(obj, true, "1v8", &local_err);
+    object_property_set_bool(obj, true, "64bit", &local_err);
+    object_property_set_uint(obj, 0b111, "bus-speed", &local_err);
+    object_property_set_uint(obj, 0b111, "driver-strength", &local_err);
+    if (local_err) {
+        error_propagate(errp, local_err);
+        return;
+    }
+
+    cc->parent_realize(dev, &local_err);
+    if (local_err) {
+        error_propagate(errp, local_err);
+        return;
+    }
+}
+
 static void arasan4_9a_sdhci_class_init(ObjectClass *klass, void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
@@ -58,15 +94,31 @@ static void arasan4_9a_sdhci_class_init(ObjectClass *klass, void *data)
     dc->realize = arasan4_9a_sdhci_realize;
 }
 
+static void arasan8_9a_sdhci_class_init(ObjectClass *klass, void *data)
+{
+    DeviceClass *dc = DEVICE_CLASS(klass);
+    SDHCICommonClass *cc = SYSBUS_SDHCI_COMMON_CLASS(klass);
+
+    cc->parent_realize = dc->realize;
+    dc->realize = arasan8_9a_sdhci_realize;
+}
+
 static const TypeInfo arasan4_9a_sdhci_info = {
     .name = "arasan,sdhci-4.9a",
     .parent = TYPE_SYSBUS_SDHCI,
     .class_init = arasan4_9a_sdhci_class_init,
 };
 
+static const TypeInfo arasan8_9a_sdhci_info = {
+    .name = "arasan,sdhci-8.9a",
+    .parent = TYPE_SYSBUS_SDHCI,
+    .class_init = arasan8_9a_sdhci_class_init,
+};
+
 static void arasan_sdhci_register_types(void)
 {
     type_register_static(&arasan4_9a_sdhci_info);
+    type_register_static(&arasan8_9a_sdhci_info);
 }
 
 type_init(arasan_sdhci_register_types)
