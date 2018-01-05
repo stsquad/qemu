@@ -650,7 +650,31 @@ static void sd_set_rca(SDState *sd, uint16_t rca)
  */
 #define CARD_STATUS_A	0x02004100
 #define CARD_STATUS_B	0x00c01e00
-#define CARD_STATUS_C	0xfd39a028
+#define CARD_STATUS_C   0xfd39a0a8 /* XXX */
+
+FIELD(CSR, AKE_SEQ_ERROR,               3,  1)
+FIELD(CSR, APP_CMD,                     5,  1)
+FIELD(CSR, FX_EVENT,                    6,  1)
+FIELD(CSR, READY_FOR_DATA,              8,  1)
+FIELD(CSR, CURRENT_STATE,               9,  4)
+FIELD(CSR, ERASE_RESET,                13,  1)
+FIELD(CSR, CARD_ECC_DISABLED,          14,  1)
+FIELD(CSR, WP_ERASE_SKIP,              15,  1)
+FIELD(CSR, CSD_OVERWRITE,              16,  1)
+FIELD(CSR, DEFERRED_RESPONSE,          17,  1)
+FIELD(CSR, ERROR,                      19,  1)
+FIELD(CSR, CC_ERROR,                   20,  1)
+FIELD(CSR, CARD_ECC_FAILED,            21,  1)
+FIELD(CSR, ILLEGAL_COMMAND,            22,  1)
+FIELD(CSR, COM_CRC_ERROR,              23,  1)
+FIELD(CSR, LOCK_UNLOCK_FAILED,         24,  1)
+FIELD(CSR, CARD_IS_LOCKED,             25,  1)
+FIELD(CSR, WP_VIOLATION,               26,  1)
+FIELD(CSR, ERASE_PARAM,                27,  1)
+FIELD(CSR, ERASE_SEQ_ERROR,            28,  1)
+FIELD(CSR, BLOCK_LEN_ERROR,            29,  1)
+FIELD(CSR, ADDRESS_ERROR,              30,  1)
+FIELD(CSR, OUT_OF_RANGE,               31,  1)
 
 static void sd_reset_cardstatus(SDState *sd)
 {
@@ -709,6 +733,12 @@ static size_t sd_response_r1b_make(SDState *sd, uint8_t *response)
     return sd_response_r1_make(sd, response);
 }
 
+static size_t sd_response_r2i_make(SDState *sd, uint8_t *response)
+{
+    memcpy(response, sd->cid, sizeof(sd->cid));
+    return 16;
+}
+
 static size_t sd_response_r2s_make(SDState *sd, uint8_t *response)
 {
     if (sd->bus_protocol == PROTO_SPI) {
@@ -735,31 +765,40 @@ static size_t sd_response_r3_make(SDState *sd, uint8_t *response)
     return ofs;
 }
 
-static void sd_response_r6_make(SDState *sd, uint8_t *response)
+/* Published RCA */
+static size_t sd_response_r6_make(SDState *sd, uint8_t *response)
 {
-    uint16_t arg;
     uint16_t status;
 
     assert(sd->bus_protocol != PROTO_SPI);
-    arg = sd->rca;
-    status = ((sd->card_status >> 8) & 0xc000) |
-             ((sd->card_status >> 6) & 0x2000) |
-              (sd->card_status & 0x1fff);
-    sd->card_status &= ~(CARD_STATUS_C & 0xc81fff);
+    status = sd->card_status & MAKE_64BIT_MASK(0, 13)            <<  0;
+    status |= FIELD_EX32(sd->card_status, CSR, ERROR)            << 13;
+    status |= FIELD_EX32(sd->card_status, CSR, ILLEGAL_COMMAND)  << 14;
+    status |= FIELD_EX32(sd->card_status, CSR, COM_CRC_ERROR)    << 15;
 
-    response[0] = (arg >> 8) & 0xff;
-    response[1] = arg & 0xff;
+    response[0] = (sd->rca >> 8) & 0xff;
+    response[1] = sd->rca & 0xff;
     response[2] = (status >> 8) & 0xff;
     response[3] = status & 0xff;
+
+    /* Clear the "clear on read" status bits */
+    sd->card_status &= ~(CARD_STATUS_C |
+                         MAKE_64BIT_MASK(0, 13) |
+                         R_CSR_ERROR_MASK |
+                         R_CSR_ILLEGAL_COMMAND_MASK |
+                         R_CSR_COM_CRC_ERROR_MASK);
+    return 4;
 }
 
-static void sd_response_r7_make(SDState *sd, uint8_t *response)
+static size_t sd_response_r7_make(SDState *sd, uint8_t *response)
 {
     assert(sd->bus_protocol != PROTO_SPI);
     response[0] = (sd->vhs >> 24) & 0xff;
     response[1] = (sd->vhs >> 16) & 0xff;
     response[2] = (sd->vhs >>  8) & 0xff;
     response[3] = (sd->vhs >>  0) & 0xff;
+
+    return 4;
 }
 
 static inline uint64_t sd_addr_to_wpnum(uint64_t addr)
@@ -1852,8 +1891,7 @@ send_response:
         break;
 
     case sd_r2_i:
-        memcpy(response, sd->cid, sizeof(sd->cid));
-        rsplen = 16;
+        rsplen = sd_response_r2i_make(sd, response);
         break;
 
     case sd_r2_s:
@@ -1865,13 +1903,11 @@ send_response:
         break;
 
     case sd_r6:
-        sd_response_r6_make(sd, response);
-        rsplen = 4;
+        rsplen = sd_response_r6_make(sd, response);
         break;
 
     case sd_r7:
-        sd_response_r7_make(sd, response);
-        rsplen = 4;
+        rsplen = sd_response_r7_make(sd, response);
         break;
 
     case sd_r0:
