@@ -121,7 +121,11 @@ typedef struct {
 #define SD_BUS_GET_CLASS(obj) OBJECT_GET_CLASS(SDBusClass, (obj), TYPE_SD_BUS)
 
 struct SDBus {
-    BusState qbus;
+    /*< private >*/
+     BusState qbus;
+    /*< public >*/
+
+    uint16_t millivolts;
 };
 
 typedef struct {
@@ -139,6 +143,8 @@ typedef struct {
 /* Functions to be used by qdevified callers (working via
  * an SDBus rather than directly with SDState)
  */
+void sdbus_set_voltage(SDBus *sdbus, uint16_t millivolts);
+uint16_t sdbus_get_voltage(SDBus *sdbus);
 uint8_t sdbus_get_dat_lines(SDBus *sdbus);
 bool sdbus_get_cmd_line(SDBus *sdbus);
 int sdbus_do_command(SDBus *sd, SDRequest *req, uint8_t *response);

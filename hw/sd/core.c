@@ -41,6 +41,17 @@ static SDState *get_card(SDBus *sdbus)
     return SD_CARD(kid->child);
 }
 
+void sdbus_set_voltage(SDBus *sdbus, uint16_t millivolts)
+{
+    trace_sdbus_set_voltage(sdbus_name(sdbus), sdbus->millivolts, millivolts);
+    sdbus->millivolts = millivolts;
+}
+
+uint16_t sdbus_get_voltage(SDBus *sdbus)
+{
+    return sdbus->millivolts;
+}
+
 uint8_t sdbus_get_dat_lines(SDBus *sdbus)
 {
     SDState *slave = get_card(sdbus);
@@ -196,9 +207,19 @@ void sdbus_reparent_card(SDBus *from, SDBus *to)
     sdbus_set_readonly(to, readonly);
 }
 
+static void sd_bus_instance_init(Object *obj)
+{
+    SDBus *s = SD_BUS(obj);
+
+    /* start clocking, 3.3V */
+    s->millivolts = SD_VOLTAGE_3_3V;
+    object_property_add_uint16_ptr(obj, "millivolts", &s->millivolts, NULL);
+}
+
 static const TypeInfo sd_bus_info = {
     .name = TYPE_SD_BUS,
     .parent = TYPE_BUS,
+    .instance_init = sd_bus_instance_init,
     .instance_size = sizeof(SDBus),
     .class_size = sizeof(SDBusClass),
 };
