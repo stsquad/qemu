@@ -2274,7 +2274,7 @@ static void sd_class_init(ObjectClass *klass, void *data)
     sc->write_data = sd_write_data;
     sc->read_data = sd_read_data;
     sc->data_ready = sd_data_ready;
-    sc->enable = sd_enable;
+    sc->set_clock_enable = sd_enable;
     sc->get_inserted = sd_get_inserted;
     sc->get_readonly = sd_get_readonly;
 }
