@@ -689,7 +689,7 @@ static void sd_reset_sdstatus(SDState *sd)
 static int sd_req_crc_validate(SDRequest *req)
 {
     uint8_t buffer[5];
-    buffer[0] = 0x40 | req->cmd;
+    buffer[0] = req->cmd | (1 << 6); /* direction: host -> card */
     buffer[1] = (req->arg >> 24) & 0xff;
     buffer[2] = (req->arg >> 16) & 0xff;
     buffer[3] = (req->arg >> 8) & 0xff;
