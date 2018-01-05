@@ -124,4 +124,16 @@ typedef struct SDHCIState {
 #define SYSBUS_SDHCI(obj)                               \
      OBJECT_CHECK(SDHCIState, (obj), TYPE_SYSBUS_SDHCI)
 
+typedef struct {
+    /*< private >*/
+    BusClass parent_class;
+    /*< public >*/
+    DeviceRealize parent_realize;
+} SDHCICommonClass;
+
+#define SYSBUS_SDHCI_COMMON_CLASS(klass) \
+        OBJECT_CLASS_CHECK(SDHCICommonClass, (klass), TYPE_SYSBUS_SDHCI)
+#define SYSBUS_SDHCI_COMMON_GET_CLASS(obj) \
+        OBJECT_GET_CLASS(SDHCICommonClass, (obj), TYPE_SYSBUS_SDHCI)
+
 #endif /* SDHCI_H */
