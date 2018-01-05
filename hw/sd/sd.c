@@ -567,6 +567,20 @@ static void sd_ocr_powerup(void *opaque)
     }
 }
 
+FIELD(SCR, CMD_SUPPORT,                32,  4)
+FIELD(SCR, CMD_SPEED_CLASS_CONTROL,    32,  1)
+FIELD(SCR, CMD_SET_BLOCK_COUNT,        33,  1)
+FIELD(SCR, SD_SPEC4,                   42,  1)
+FIELD(SCR, EX_SECURITY,                43,  4)
+FIELD(SCR, SD_SPEC3,                   47,  1)
+FIELD(SCR, SD_BUS_WIDTHS,              48,  4)
+FIELD(SCR, SD_BUS_WIDTH_1BIT,          48,  1)
+FIELD(SCR, SD_BUS_WIDTH_4BIT,          50,  1)
+FIELD(SCR, SD_SECURITY,                52,  3)
+FIELD(SCR, DATA_STAT_AFTER_ERASE,      55,  1)
+FIELD(SCR, SD_SPEC,                    56,  4)
+FIELD(SCR, SCR_STRUCTURE,              60,  4)
+
 static void sd_reset_scr(SDState *sd)
 {
     sd->scr[0] = 0x00;		/* SCR Structure */
