@@ -1163,6 +1163,16 @@ sdhci_write(void *opaque, hwaddr offset, uint64_t val, unsigned size)
         break;
     case SDHC_ACMD12ERRSTS:
         MASKED_WRITE(s->acmd12errsts, mask, value);
+        s->acmd12errsts &= UINT16_MAX;
+        if (s->cap.uhs_mode >= UHS_I) {
+            MASKED_WRITE(s->hostctl2, mask >> 16, value >> 16);
+
+            if (FIELD_EX32(s->hostctl2, SDHC_HOSTCTL2, V18_ENA)) {
+                sdbus_set_voltage(&s->sdbus, SD_VOLTAGE_1_8V);
+            } else {
+                sdbus_set_voltage(&s->sdbus, SD_VOLTAGE_3_3V);
+            }
+        }
         break;
 
     case SDHC_CAPAB:
@@ -1352,6 +1362,7 @@ static Property sdhci_properties[] = {
     DEFINE_PROP_BOOL("3v3", SDHCIState, cap.v33, true),
     DEFINE_PROP_BOOL("3v0", SDHCIState, cap.v30, false),
     DEFINE_PROP_BOOL("1v8", SDHCIState, cap.v18, false),
+    DEFINE_PROP_UINT8("uhs", SDHCIState, cap.uhs_mode, UHS_NOT_SUPPORTED),
 
     DEFINE_PROP_BOOL("64bit", SDHCIState, cap.bus64, false),
     DEFINE_PROP_UINT8("slot-type", SDHCIState, cap.slot_type, 0),
