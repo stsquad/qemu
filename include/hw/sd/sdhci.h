@@ -26,115 +26,53 @@
 #define SDHCI_H
 
 #include "qemu-common.h"
-#include "hw/block/block.h"
 #include "hw/pci/pci.h"
 #include "hw/sysbus.h"
 #include "hw/sd/sd.h"
 
-/* Default SD/MMC host controller features information, which will be
- * presented in CAPABILITIES register of generic SD host controller at reset.
- * If not stated otherwise:
- * 0 - not supported, 1 - supported, other - prohibited.
- */
-#define SDHC_CAPAB_DRIVER_D       1ull       /* Driver type D support */
-#define SDHC_CAPAB_DRIVER_C       1ull       /* Driver type C support */
-#define SDHC_CAPAB_DRIVER_A       1ull       /* Driver type A support */
-#define SDHC_CAPAB_DDR50          1ull       /* DDR50 support */
-#define SDHC_CAPAB_SDR104         1ull       /* SDR104 support */
-#define SDHC_CAPAB_SDR50          1ull       /* SDR50 support */
-#define SDHC_CAPAB_64BITBUS       0ul        /* 64-bit System Bus Support */
-#define SDHC_CAPAB_18V            1ul        /* Voltage support 1.8v */
-#define SDHC_CAPAB_30V            0ul        /* Voltage support 3.0v */
-#define SDHC_CAPAB_33V            1ul        /* Voltage support 3.3v */
-#define SDHC_CAPAB_SUSPRESUME     0ul        /* Suspend/resume support */
-#define SDHC_CAPAB_SDMA           1ul        /* SDMA support */
-#define SDHC_CAPAB_HIGHSPEED      1ul        /* High speed support */
-#define SDHC_CAPAB_ADMA1          1ul        /* ADMA1 support */
-#define SDHC_CAPAB_ADMA2          1ul        /* ADMA2 support */
-/* Maximum host controller R/W buffers size
- * Possible values: 512, 1024, 2048 bytes */
-#define SDHC_CAPAB_MAXBLOCKLENGTH 512ul
-/* Maximum clock frequency for SDclock in MHz
- * value in range 10-63 MHz, 0 - not defined */
-#define SDHC_CAPAB_BASECLKFREQ    52ul
-#define SDHC_CAPAB_TOUNIT         1ul  /* Timeout clock unit 0 - kHz, 1 - MHz */
-/* Timeout clock frequency 1-63, 0 - not defined */
-#define SDHC_CAPAB_TOCLKFREQ      52ul
-
-/* Now check all parameters and calculate CAPABILITIES REGISTER value */
-#if SDHC_CAPAB_64BITBUS > 1 || SDHC_CAPAB_18V > 1 || SDHC_CAPAB_30V > 1 ||     \
-    SDHC_CAPAB_33V > 1 || SDHC_CAPAB_SUSPRESUME > 1 || SDHC_CAPAB_SDMA > 1 ||  \
-    SDHC_CAPAB_HIGHSPEED > 1 || SDHC_CAPAB_ADMA2 > 1 || SDHC_CAPAB_ADMA1 > 1 ||\
-    SDHC_CAPAB_TOUNIT > 1
-#error Capabilities features can have value 0 or 1 only!
-#endif
-
-#if SDHC_CAPAB_MAXBLOCKLENGTH == 512
-#define MAX_BLOCK_LENGTH 0ul
-#elif SDHC_CAPAB_MAXBLOCKLENGTH == 1024
-#define MAX_BLOCK_LENGTH 1ul
-#elif SDHC_CAPAB_MAXBLOCKLENGTH == 2048
-#define MAX_BLOCK_LENGTH 2ul
-#else
-#error Max host controller block size can have value 512, 1024 or 2048 only!
-#endif
-
-#if (SDHC_CAPAB_BASECLKFREQ > 0 && SDHC_CAPAB_BASECLKFREQ < 10) || \
-    SDHC_CAPAB_BASECLKFREQ > 63
-#error SDclock frequency can have value in range 0, 10-63 only!
-#endif
-
-#if SDHC_CAPAB_TOCLKFREQ > 63
-#error Timeout clock frequency can have value in range 0-63 only!
-#endif
-
-#define SDHC_CAPAB_REG_DEFAULT                                 \
-   ((SDHC_CAPAB_DRIVER_D << 38) | (SDHC_CAPAB_DRIVER_C << 37) |\
-    (SDHC_CAPAB_DRIVER_A << 36) | (SDHC_CAPAB_DDR50 << 34) |   \
-    (SDHC_CAPAB_SDR104 << 33) | (SDHC_CAPAB_SDR50 << 32) |     \
-    (SDHC_CAPAB_64BITBUS << 28) | (SDHC_CAPAB_18V << 26) |     \
-    (SDHC_CAPAB_30V << 25) | (SDHC_CAPAB_33V << 24) |          \
-    (SDHC_CAPAB_SUSPRESUME << 23) | (SDHC_CAPAB_SDMA << 22) |  \
-    (SDHC_CAPAB_HIGHSPEED << 21) | (SDHC_CAPAB_ADMA1 << 20) |  \
-    (SDHC_CAPAB_ADMA2 << 19) | (MAX_BLOCK_LENGTH << 16) |      \
-    (SDHC_CAPAB_BASECLKFREQ << 8) | (SDHC_CAPAB_TOUNIT << 7) | \
-    (SDHC_CAPAB_TOCLKFREQ))
-
-#define MASK_TRNMOD     0x0037
-
 /* SD/MMC host controller state */
 typedef struct SDHCIState {
+    /*< private >*/
     union {
         PCIDevice pcidev;
         SysBusDevice busdev;
     };
+
+    /*< public >*/
     SDBus sdbus;
     MemoryRegion iomem;
-    BlockBackend *blk;
     MemoryRegion *dma_mr;
-    AddressSpace *dma_as;
+    AddressSpace dma_as;
 
     QEMUTimer *insert_timer;       /* timer for 'changing' sd card. */
     QEMUTimer *transfer_timer;
-    qemu_irq eject_cb;
-    qemu_irq ro_cb;
     qemu_irq irq;
+    qemu_irq access_led;
+    int access_led_level;
 
+    /* Registers cleared on reset */
+    /* 0x00 */
     uint32_t sdmasysad;    /* SDMA System Address register */
     uint16_t blksize;      /* Host DMA Buff Boundary and Transfer BlkSize Reg */
     uint16_t blkcnt;       /* Blocks count for current transfer */
+    /* 0x08 */
     uint32_t argument;     /* Command Argument Register */
     uint16_t trnmod;       /* Transfer Mode Setting Register */
     uint16_t cmdreg;       /* Command Register */
+    /* 0x10 */
     uint32_t rspreg[4];    /* Response Registers 0-3 */
+    /* 0x20 */
+    /* Buffer Data Port Register - virtual access point to R and W buffers */
     uint32_t prnsts;       /* Present State Register */
-    uint8_t  hostctl;      /* Host Control Register */
+    /* 0x28 */
+    uint8_t  hostctl1;     /* Host Control Register */
     uint8_t  pwrcon;       /* Power control Register */
     uint8_t  blkgap;       /* Block Gap Control Register */
     uint8_t  wakcon;       /* WakeUp Control Register */
     uint16_t clkcon;       /* Clock control Register */
     uint8_t  timeoutcon;   /* Timeout Control Register */
     uint8_t  admaerr;      /* ADMA Error Status Register */
+    /* 0x30 */
     uint16_t norintsts;    /* Normal Interrupt Status Register */
     uint16_t errintsts;    /* Error Interrupt Status Register */
     uint16_t norintstsen;  /* Normal Interrupt Status Enable Register */
@@ -143,21 +81,45 @@ typedef struct SDHCIState {
     uint16_t errintsigen;  /* Error Interrupt Signal Enable Register */
     uint16_t acmd12errsts; /* Auto CMD12 error status register */
     uint16_t hostctl2;     /* Host Control 2 */
+    /* 0x50 */
+    /* Force Event Auto CMD12 Error Interrupt Reg - write only */
+    /* Force Event Error Interrupt Register- write only */
+    /* 0x58 */
     uint64_t admasysaddr;  /* ADMA System Address Register */
 
-    uint32_t capareg;      /* Capabilities Register */
-    uint32_t maxcurr;      /* Maximum Current Capabilities Register */
+    /* Read-only registers */
+    /* 0x40 */
+    uint64_t capareg;      /* Capabilities Register */
+    /* 0x48 */
+    uint64_t maxcurr;      /* Maximum Current Capabilities Register */
+    /* 0xfe */
+    uint16_t version;      /* Host Controller Version Register */
+
     uint8_t  *fifo_buffer; /* SD host i/o FIFO buffer */
     uint32_t buf_maxsz;
     uint16_t data_count;   /* current element in FIFO buffer */
     uint8_t  stopped_state;/* Current SDHC state */
-    bool     pending_insert_quirk;/* Quirk for Raspberry Pi card insert int */
     bool     pending_insert_state;
-    /* Buffer Data Port Register - virtual access point to R and W buffers */
-    /* Software Reset Register - always reads as 0 */
-    /* Force Event Auto CMD12 Error Interrupt Reg - write only */
-    /* Force Event Error Interrupt Register- write only */
-    /* RO Host Controller Version Register always reads as 0x2401 */
+    /* Configurable properties */
+    bool pending_insert_quirk; /* Quirk for Raspberry Pi card insert int */
+    uint8_t data_lines;
+    uint8_t spec_version;
+    struct {
+        /* v1 */
+        uint8_t timeout_clk_freq, base_clk_freq_mhz;
+        bool timeout_clk_in_mhz;
+        uint16_t max_blk_len;
+        bool suspend;
+        bool high_speed;
+        bool sdma;
+        bool v33, v30, v18;
+        /* v2 */
+        bool adma1, adma2;
+        bool bus64;
+        /* v3 */
+        uint8_t slot_type, sdr, strength;
+        uint8_t uhs_mode;
+    } cap;
 } SDHCIState;
 
 #define TYPE_PCI_SDHCI "sdhci-pci"
@@ -166,5 +128,17 @@ typedef struct SDHCIState {
 #define TYPE_SYSBUS_SDHCI "generic-sdhci"
 #define SYSBUS_SDHCI(obj)                               \
      OBJECT_CHECK(SDHCIState, (obj), TYPE_SYSBUS_SDHCI)
+
+typedef struct {
+    /*< private >*/
+    BusClass parent_class;
+    /*< public >*/
+    DeviceRealize parent_realize;
+} SDHCICommonClass;
+
+#define SYSBUS_SDHCI_COMMON_CLASS(klass) \
+        OBJECT_CLASS_CHECK(SDHCICommonClass, (klass), TYPE_SYSBUS_SDHCI)
+#define SYSBUS_SDHCI_COMMON_GET_CLASS(obj) \
+        OBJECT_GET_CLASS(SDHCICommonClass, (obj), TYPE_SYSBUS_SDHCI)
 
 #endif /* SDHCI_H */

@@ -23,6 +23,12 @@
 #include "hw/qdev-core.h"
 #include "sysemu/block-backend.h"
 #include "hw/sd/sd.h"
+#include "trace.h"
+
+static inline const char *sdbus_name(SDBus *sdbus)
+{
+    return sdbus->qbus.name;
+}
 
 static SDState *get_card(SDBus *sdbus)
 {
@@ -35,41 +41,47 @@ static SDState *get_card(SDBus *sdbus)
     return SD_CARD(kid->child);
 }
 
+void sdbus_set_voltage(SDBus *sdbus, uint16_t millivolts)
+{
+    trace_sdbus_set_voltage(sdbus_name(sdbus), sdbus->millivolts, millivolts);
+    sdbus->millivolts = millivolts;
+}
+
+uint16_t sdbus_get_voltage(SDBus *sdbus)
+{
+    return sdbus->millivolts;
+}
+
 uint8_t sdbus_get_dat_lines(SDBus *sdbus)
 {
-    SDState *card = get_card(sdbus);
+    SDState *slave = get_card(sdbus);
+    uint8_t dat_lines = 0;
 
-    if (card) {
-        SDCardClass *sc = SD_CARD_GET_CLASS(card);
+    if (slave) {
+        SDCardClass *sc = SD_CARD_GET_CLASS(slave);
 
-        return sc->get_dat_lines(card);
+        assert(sc->get_dat_lines);
+        dat_lines = sc->get_dat_lines(slave);
     }
+    trace_sdbus_get_dat_lines(sdbus_name(sdbus), dat_lines);
 
-    return 0;
+    return dat_lines;
 }
 
 bool sdbus_get_cmd_line(SDBus *sdbus)
 {
-    SDState *card = get_card(sdbus);
+    SDState *slave = get_card(sdbus);
+    bool cmd_line = false;
 
-    if (card) {
-        SDCardClass *sc = SD_CARD_GET_CLASS(card);
+    if (slave) {
+        SDCardClass *sc = SD_CARD_GET_CLASS(slave);
 
-        return sc->get_cmd_line(card);
+        assert(sc->get_cmd_line);
+        cmd_line = sc->get_cmd_line(slave);
     }
+    trace_sdbus_get_cmd_line(sdbus_name(sdbus), cmd_line);
 
-    return false;
-}
-
-void sdbus_set_voltage(SDBus *sdbus, int v)
-{
-    SDState *card = get_card(sdbus);
-
-    if (card) {
-        SDCardClass *sc = SD_CARD_GET_CLASS(card);
-
-        sc->set_voltage(card, v);
-    }
+    return cmd_line;
 }
 
 int sdbus_do_command(SDBus *sdbus, SDRequest *req, uint8_t *response)
@@ -195,9 +207,39 @@ void sdbus_reparent_card(SDBus *from, SDBus *to)
     sdbus_set_readonly(to, readonly);
 }
 
+void sdbus_set_clock(SDBus *sdbus, bool state)
+{
+    SDState *slave;
+
+    if (state == sdbus->clock_enabled) {
+        return;
+    }
+    trace_sdbus_set_clock(sdbus_name(sdbus), sdbus->clock_enabled, state);
+    sdbus->clock_enabled = state;
+
+    slave = get_card(sdbus);
+    if (slave) {
+        SDCardClass *sc = SD_CARD_GET_CLASS(slave);
+
+        assert(sc->set_clock_enable);
+        sc->set_clock_enable(slave, state);
+    }
+}
+
+static void sd_bus_instance_init(Object *obj)
+{
+    SDBus *s = SD_BUS(obj);
+
+    /* start clocking, 3.3V */
+    s->clock_enabled = true;
+    s->millivolts = SD_VOLTAGE_3_3V;
+    object_property_add_uint16_ptr(obj, "millivolts", &s->millivolts, NULL);
+}
+
 static const TypeInfo sd_bus_info = {
     .name = TYPE_SD_BUS,
     .parent = TYPE_BUS,
+    .instance_init = sd_bus_instance_init,
     .instance_size = sizeof(SDBus),
     .class_size = sizeof(SDBusClass),
 };
