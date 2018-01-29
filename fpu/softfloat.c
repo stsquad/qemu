@@ -442,7 +442,7 @@ static inline FloatParts round_canonical(FloatParts p, float_status *s,
                         || (exp < 0)
                         || !((frac + inc) & DECOMPOSED_OVERFLOW_BIT);
 
-            shift64RightJamming(frac, 1 - exp, &frac);
+            frac = shrjam64(frac, 1 - exp);
             if (frac & round_mask) {
                 /* Need to recompute round-to-even.  */
                 if (s->float_rounding_mode == float_round_nearest_even) {
@@ -651,10 +651,10 @@ static inline FloatParts addsub_floats(FloatParts a, FloatParts b, bool subtract
 
         if (a.cls == float_class_normal && b.cls == float_class_normal) {
             if (a.exp > b.exp || (a.exp == b.exp && a.frac >= b.frac)) {
-                shift64RightJamming(b.frac, a.exp - b.exp, &b.frac);
+                b.frac = shrjam64(b.frac, a.exp - b.exp);
                 a.frac = a.frac - b.frac;
             } else {
-                shift64RightJamming(a.frac, b.exp - a.exp, &a.frac);
+                a.frac = shrjam64(a.frac, b.exp - a.exp);
                 a.frac = b.frac - a.frac;
                 a.exp = b.exp;
                 a_sign ^= 1;
@@ -696,9 +696,9 @@ static inline FloatParts addsub_floats(FloatParts a, FloatParts b, bool subtract
         /* Addition */
         if (a.cls == float_class_normal && b.cls == float_class_normal) {
             if (a.exp > b.exp) {
-                shift64RightJamming(b.frac, a.exp - b.exp, &b.frac);
+                b.frac = shrjam64(b.frac, a.exp - b.exp);
             } else if (a.exp < b.exp) {
-                shift64RightJamming(a.frac, b.exp - a.exp, &a.frac);
+                a.frac = shrjam64(a.frac, b.exp - a.exp);
                 a.exp = b.exp;
             }
             a.frac += b.frac;
@@ -799,7 +799,7 @@ static inline FloatParts mul_floats(FloatParts a, FloatParts b, float_status *s)
         mul64To128(a.frac, b.frac, &hi, &lo);
         shift128RightJamming(hi, lo, DECOMPOSED_BINARY_POINT, &hi, &lo);
         if (lo & DECOMPOSED_OVERFLOW_BIT) {
-            shift64RightJamming(lo, 1, &lo);
+            lo = shrjam64(lo, 1);
             exp += 1;
         }
 
@@ -992,7 +992,7 @@ static inline FloatParts muladd_floats(FloatParts a, FloatParts b, FloatParts c,
             }
 
             if (lo & DECOMPOSED_OVERFLOW_BIT) {
-                shift64RightJamming(lo, 1, &lo);
+                lo = shrjam64(lo, 1);
                 p_exp += 1;
             }
 
@@ -1597,7 +1597,7 @@ static FloatParts uint_to_float(uint64_t a, float_status *status)
         r.cls = float_class_normal;
         r.exp = DECOMPOSED_BINARY_POINT - spare_bits;
         if (spare_bits < 0) {
-            shift64RightJamming(a, -spare_bits, &a);
+            a = shrjam64(a, -spare_bits);
             r.frac = a;
         } else {
             r.frac = a << spare_bits;
@@ -2430,7 +2430,7 @@ static float64 roundAndPackFloat64(flag zSign, int zExp, uint64_t zSig,
                     == float_tininess_before_rounding)
                 || ( zExp < -1 )
                 || ( zSig + roundIncrement < LIT64( 0x8000000000000000 ) );
-            shift64RightJamming( zSig, - zExp, &zSig );
+            zSig = shrjam64(zSig, - zExp);
             zExp = 0;
             roundBits = zSig & 0x3FF;
             if (isTiny && roundBits) {
@@ -2625,7 +2625,7 @@ static floatx80 roundAndPackFloatx80(int8_t roundingPrecision, flag zSign,
                     == float_tininess_before_rounding)
                 || ( zExp < 0 )
                 || ( zSig0 <= zSig0 + roundIncrement );
-            shift64RightJamming( zSig0, 1 - zExp, &zSig0 );
+            zSig0 = shrjam64(zSig0, 1 - zExp);
             zExp = 0;
             roundBits = zSig0 & roundMask;
             if (isTiny && roundBits) {
@@ -3759,7 +3759,7 @@ float32 float64_to_float32(float64 a, float_status *status)
         }
         return packFloat32( aSign, 0xFF, 0 );
     }
-    shift64RightJamming( aSig, 22, &aSig );
+    aSig = shrjam64(aSig, 22);
     zSig = aSig;
     if ( aExp || zSig ) {
         zSig |= 0x40000000;
@@ -4055,7 +4055,7 @@ float16 float64_to_float16(float64 a, flag ieee, float_status *status)
         }
         return packFloat16(aSign, 0x1f, 0);
     }
-    shift64RightJamming(aSig, 29, &aSig);
+    aSig = shrjam64(aSig, 29);
     zSig = aSig;
     if (aExp == 0 && zSig == 0) {
         return packFloat16(aSign, 0, 0);
@@ -4523,7 +4523,7 @@ int32_t floatx80_to_int32(floatx80 a, float_status *status)
     if ( ( aExp == 0x7FFF ) && (uint64_t) ( aSig<<1 ) ) aSign = 0;
     shiftCount = 0x4037 - aExp;
     if ( shiftCount <= 0 ) shiftCount = 1;
-    shift64RightJamming( aSig, shiftCount, &aSig );
+    aSig = shrjam64(aSig, shiftCount);
     return roundAndPackInt32(aSign, aSig, status);
 
 }
@@ -4699,7 +4699,7 @@ float32 floatx80_to_float32(floatx80 a, float_status *status)
         }
         return packFloat32( aSign, 0xFF, 0 );
     }
-    shift64RightJamming( aSig, 33, &aSig );
+    aSig = shrjam64(aSig, 33);
     if ( aExp || aSig ) aExp -= 0x3F81;
     return roundAndPackFloat32(aSign, aExp, aSig, status);
 
@@ -4731,7 +4731,7 @@ float64 floatx80_to_float64(floatx80 a, float_status *status)
         }
         return packFloat64( aSign, 0x7FF, 0 );
     }
-    shift64RightJamming( aSig, 1, &zSig );
+    zSig = shrjam64(aSig, 1);
     if ( aExp || aSig ) aExp -= 0x3C01;
     return roundAndPackFloat64(aSign, aExp, zSig, status);
 
@@ -5662,7 +5662,9 @@ int32_t float128_to_int32(float128 a, float_status *status)
     if ( aExp ) aSig0 |= LIT64( 0x0001000000000000 );
     aSig0 |= ( aSig1 != 0 );
     shiftCount = 0x4028 - aExp;
-    if ( 0 < shiftCount ) shift64RightJamming( aSig0, shiftCount, &aSig0 );
+    if (0 < shiftCount) {
+        aSig0 = shrjam64(aSig0, shiftCount);
+    }
     return roundAndPackInt32(aSign, aSig0, status);
 
 }
@@ -5935,7 +5937,7 @@ float32 float128_to_float32(float128 a, float_status *status)
         return packFloat32( aSign, 0xFF, 0 );
     }
     aSig0 |= ( aSig1 != 0 );
-    shift64RightJamming( aSig0, 18, &aSig0 );
+    aSig0 = shrjam64(aSig0, 18);
     zSig = aSig0;
     if ( aExp || zSig ) {
         zSig |= 0x40000000;
