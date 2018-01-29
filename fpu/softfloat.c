@@ -2266,7 +2266,7 @@ static float32 roundAndPackFloat32(flag zSign, int zExp, uint32_t zSig,
                  == float_tininess_before_rounding)
                 || ( zExp < -1 )
                 || ( zSig + roundIncrement < 0x80000000 );
-            shift32RightJamming( zSig, - zExp, &zSig );
+            zSig = shrjam32(zSig, - zExp);
             zExp = 0;
             roundBits = zSig & 0x7F;
             if (isTiny && roundBits) {

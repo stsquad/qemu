@@ -96,24 +96,17 @@ this code that are retained.
 | the result by setting the least significant bit to 1.  The value of `count'
 | can be arbitrarily large; in particular, if `count' is greater than 32, the
 | result will be either 0 or 1, depending on whether `a' is zero or nonzero.
-| The result is stored in the location pointed to by `zPtr'.
 *----------------------------------------------------------------------------*/
 
-static inline void shift32RightJamming(uint32_t a, int count, uint32_t *zPtr)
+static inline uint32_t shrjam32(uint32_t a, int count)
 {
-    uint32_t z;
-
-    if ( count == 0 ) {
-        z = a;
+    if (count == 0) {
+        return a;
+    } else if (count < 32) {
+        return (a >> count) | ((a << (-count & 31)) != 0);
+    } else {
+        return a != 0;
     }
-    else if ( count < 32 ) {
-        z = ( a>>count ) | ( ( a<<( ( - count ) & 31 ) ) != 0 );
-    }
-    else {
-        z = ( a != 0 );
-    }
-    *zPtr = z;
-
 }
 
 /*----------------------------------------------------------------------------
