@@ -323,8 +323,8 @@ static inline float64 float64_pack_raw(FloatParts p)
 }
 
 /* Canonicalize EXP and FRAC, setting CLS.  */
-static FloatParts canonicalize(FloatParts part, const FloatFmt *parm,
-                               float_status *status)
+static inline FloatParts canonicalize(FloatParts part, const FloatFmt *parm,
+                                      float_status *status)
 {
     if (part.exp == parm->exp_max) {
         if (part.frac == 0) {
