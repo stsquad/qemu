@@ -63,6 +63,16 @@ static inline Int128 int128_sar(Int128 a, int n)
     return a >> n;
 }
 
+static inline Int128 int128_shr(Int128 a, int n)
+{
+    return (__uint128_t)a >> n;
+}
+
+static inline Int128 int128_shl(Int128 a, int n)
+{
+    return (__uint128_t)a << n;
+}
+
 static inline Int128 int128_add(Int128 a, Int128 b)
 {
     return a + b;
@@ -214,6 +224,34 @@ static inline Int128 int128_sar(Int128 a, int n)
         return int128_make128(h, h >> 63);
     } else {
         return int128_make128((a.lo >> n) | ((uint64_t)a.hi << (64 - n)), h);
+    }
+}
+
+static inline Int128 int128_shr(Int128 a, int n)
+{
+    uint64_t h;
+    if (!n) {
+        return a;
+    }
+    h = (uint64_t)a.hi >> (n & 63);
+    if (n >= 64) {
+        return int128_make128(h, 0);
+    } else {
+        return int128_make128((a.lo >> n) | ((uint64_t)a.hi << (64 - n)), h);
+    }
+}
+
+static inline Int128 int128_shl(Int128 a, int n)
+{
+    uint64_t l;
+    if (!n) {
+        return a;
+    }
+    l = a.lo << (n & 63);
+    if (n >= 64) {
+        return int128_make128(0, l);
+    } else {
+        return int128_make128(l, ((uint64_t)a.hi << n) | (a.lo >> (64 - n)));
     }
 }
 
