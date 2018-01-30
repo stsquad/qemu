@@ -640,8 +640,8 @@ static FloatParts pick_nan_muladd(FloatParts a, FloatParts b, FloatParts c,
  * Arithmetic.
  */
 
-static FloatParts addsub_floats(FloatParts a, FloatParts b, bool subtract,
-                                float_status *s)
+static inline FloatParts addsub_floats(FloatParts a, FloatParts b, bool subtract,
+                                       float_status *s)
 {
     bool a_sign = a.sign;
     bool b_sign = b.sign ^ subtract;
