@@ -58,7 +58,7 @@ static inline Int128 int128_and(Int128 a, Int128 b)
     return a & b;
 }
 
-static inline Int128 int128_rshift(Int128 a, int n)
+static inline Int128 int128_sar(Int128 a, int n)
 {
     return a >> n;
 }
@@ -203,7 +203,7 @@ static inline Int128 int128_and(Int128 a, Int128 b)
     return (Int128) { a.lo & b.lo, a.hi & b.hi };
 }
 
-static inline Int128 int128_rshift(Int128 a, int n)
+static inline Int128 int128_sar(Int128 a, int n)
 {
     int64_t h;
     if (!n) {
