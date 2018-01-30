@@ -788,7 +788,7 @@ float64 float64_sub(float64 a, float64 b, float_status *status)
  * for Binary Floating-Point Arithmetic.
  */
 
-static FloatParts mul_floats(FloatParts a, FloatParts b, float_status *s)
+static inline FloatParts mul_floats(FloatParts a, FloatParts b, float_status *s)
 {
     bool sign = a.sign ^ b.sign;
 
