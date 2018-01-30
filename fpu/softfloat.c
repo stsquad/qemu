@@ -368,8 +368,8 @@ static inline FloatParts canonicalize(FloatParts part, const FloatFmt *parm,
  * by EXP_BIAS and must be bounded by [EXP_MAX-1, 0].
  */
 
-static FloatParts round_canonical(FloatParts p, float_status *s,
-                                  const FloatFmt *parm)
+static inline FloatParts round_canonical(FloatParts p, float_status *s,
+                                         const FloatFmt *parm)
 {
     const uint64_t frac_lsbm1 = parm->frac_lsbm1;
     const uint64_t round_mask = parm->round_mask;
