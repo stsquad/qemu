@@ -599,8 +599,8 @@ static inline FloatParts pick_nan(FloatParts a, FloatParts b, float_status *s)
     return a;
 }
 
-static FloatParts pick_nan_muladd(FloatParts a, FloatParts b, FloatParts c,
-                                  bool inf_zero, float_status *s)
+static inline FloatParts pick_nan_muladd(FloatParts a, FloatParts b, FloatParts c,
+                                         bool inf_zero, float_status *s)
 {
     if (is_snan(a.cls) || is_snan(b.cls) || is_snan(c.cls)) {
         s->float_exception_flags |= float_flag_invalid;
@@ -872,8 +872,8 @@ float64 float64_mul(float64 a, float64 b, float_status *status)
  * NaNs.)
  */
 
-static FloatParts muladd_floats(FloatParts a, FloatParts b, FloatParts c,
-                                int flags, float_status *s)
+static inline FloatParts muladd_floats(FloatParts a, FloatParts b, FloatParts c,
+                                       int flags, float_status *s)
 {
     bool inf_zero = ((1 << a.cls) | (1 << b.cls)) ==
                     ((1 << float_class_inf) | (1 << float_class_zero));
