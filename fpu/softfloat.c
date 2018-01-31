@@ -910,7 +910,7 @@ static inline FloatParts muladd_floats(FloatParts a, FloatParts b, FloatParts c,
     bool p_sign;
     bool sign_flip = flags & float_muladd_negate_result;
     FloatClass p_class;
-    uint64_t hi, lo;
+    Int128 frac;
     int p_exp;
 
     /* It is implementation-defined whether the cases of (0,inf,qnan)
@@ -985,83 +985,72 @@ static inline FloatParts muladd_floats(FloatParts a, FloatParts b, FloatParts c,
     /* Multiply of 2 62-bit numbers produces a (2*62) == 124-bit
      * result.
      */
-    mul64To128(a.frac, b.frac, &hi, &lo);
+    frac = multiply_64_to_128(a.frac, b.frac);
+
     /* binary point now at bit 124 */
 
     /* check for overflow */
-    if (hi & (1ULL << (DECOMPOSED_BINARY_POINT * 2 + 1 - 64))) {
-        shift128RightJamming(hi, lo, 1, &hi, &lo);
+    if (int128_gethi(frac) & (1ULL << (DECOMPOSED_BINARY_POINT * 2 + 1 - 64))) {
+        frac = shrjam128(frac, 1);
         p_exp += 1;
     }
 
     /* + add/sub */
     if (c.cls == float_class_zero) {
         /* move binary point back to 62 */
-        shift128RightJamming(hi, lo, DECOMPOSED_BINARY_POINT, &hi, &lo);
+        frac = shrjam128(frac, DECOMPOSED_BINARY_POINT);
     } else {
         int exp_diff = p_exp - c.exp;
         if (p_sign == c.sign) {
             /* Addition */
             if (exp_diff <= 0) {
-                shift128RightJamming(hi, lo,
-                                     DECOMPOSED_BINARY_POINT - exp_diff,
-                                     &hi, &lo);
-                lo += c.frac;
+                frac = shrjam128(frac, DECOMPOSED_BINARY_POINT - exp_diff);
+                frac = int128_add(frac, c.frac);
                 p_exp = c.exp;
             } else {
-                uint64_t c_hi, c_lo;
                 /* shift c to the same binary point as the product (124) */
-                c_hi = c.frac >> 2;
-                c_lo = 0;
-                shift128RightJamming(c_hi, c_lo,
-                                     exp_diff,
-                                     &c_hi, &c_lo);
-                add128(hi, lo, c_hi, c_lo, &hi, &lo);
+                Int128 frac_c = int128_make128(0, c.frac >> 2);
+                frac_c = shrjam128(frac_c, exp_diff);
+                frac = int128_add(frac, frac_c);
                 /* move binary point back to 62 */
-                shift128RightJamming(hi, lo, DECOMPOSED_BINARY_POINT, &hi, &lo);
+                frac = shrjam128(frac, DECOMPOSED_BINARY_POINT);
             }
 
-            if (lo & DECOMPOSED_OVERFLOW_BIT) {
-                lo = shrjam64(lo, 1);
+            if (int128_getlo(frac) & DECOMPOSED_OVERFLOW_BIT) {
+                frac = shrjam128(frac, 1);
                 p_exp += 1;
             }
 
         } else {
             /* Subtraction */
-            uint64_t c_hi, c_lo;
             /* make C binary point match product at bit 124 */
-            c_hi = c.frac >> 2;
-            c_lo = 0;
+            Int128 frac_c = int128_make128(0, c.frac >> 2);
 
             if (exp_diff <= 0) {
-                shift128RightJamming(hi, lo, -exp_diff, &hi, &lo);
-                if (exp_diff == 0
-                    &&
-                    (hi > c_hi || (hi == c_hi && lo >= c_lo))) {
-                    sub128(hi, lo, c_hi, c_lo, &hi, &lo);
+                frac = shrjam128(frac, -exp_diff);
+                if (exp_diff == 0 && int128_gt(frac, frac_c)) {
+                    frac = int128_sub(frac, frac_c);
                 } else {
-                    sub128(c_hi, c_lo, hi, lo, &hi, &lo);
+                    frac = int128_sub(frac_c, frac);
                     p_sign ^= 1;
                     p_exp = c.exp;
                 }
             } else {
-                shift128RightJamming(c_hi, c_lo,
-                                     exp_diff,
-                                     &c_hi, &c_lo);
-                sub128(hi, lo, c_hi, c_lo, &hi, &lo);
+                frac_c = shrjam128(frac_c, exp_diff);
+                frac = int128_sub(frac, frac_c);
             }
 
-            if (hi == 0 && lo == 0) {
+            if (int128_eq(frac, 0)) {
                 a.cls = float_class_zero;
                 a.sign = s->float_rounding_mode == float_round_down;
                 a.sign ^= sign_flip;
                 return a;
             } else {
                 int shift;
-                if (hi != 0) {
-                    shift = clz64(hi);
+                if (int128_gethi(frac) != 0) {
+                    shift = clz64(int128_gethi(frac));
                 } else {
-                    shift = clz64(lo) + 64;
+                    shift = clz64(int128_getlo(frac)) + 64;
                 }
                 /* Normalizing to a binary point of 124 is the
                    correct adjust for the exponent.  However since we're
@@ -1070,12 +1059,7 @@ static inline FloatParts muladd_floats(FloatParts a, FloatParts b, FloatParts c,
                    if we're leaving 1 bit at the top of the word, but
                    adjust the exponent as if we're leaving 3 bits.  */
                 shift -= 1;
-                if (shift >= 64) {
-                    lo = lo << (shift - 64);
-                } else {
-                    hi = (hi << shift) | (lo >> (64 - shift));
-                    lo = hi | ((lo << shift) != 0);
-                }
+                frac = shrjam128(frac, 64 - shift);
                 p_exp -= shift - 2;
             }
         }
@@ -1089,7 +1073,7 @@ static inline FloatParts muladd_floats(FloatParts a, FloatParts b, FloatParts c,
     a.cls = float_class_normal;
     a.sign = p_sign ^ sign_flip;
     a.exp = p_exp;
-    a.frac = lo;
+    a.frac = int128_getlo(frac);
 
     return a;
 }
