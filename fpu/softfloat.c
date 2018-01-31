@@ -84,6 +84,7 @@ this code that are retained.
  */
 #include "qemu/osdep.h"
 #include "qemu/bitops.h"
+#include "qemu/int128.h"
 #include "fpu/softfloat.h"
 
 /* We only need stdlib for abort() */
@@ -783,6 +784,32 @@ float64 float64_sub(float64 a, float64 b, float_status *status)
 }
 
 /*
+ * int128 helpers for re-factor (eventually this should replace
+ * softfloat-macros.h)
+ */
+
+#ifndef CONFIG_INT128
+#error fallback not implemented
+#endif
+
+static Int128 multiply_64_to_128(uint64_t a, uint64_t b)
+{
+    return a * (Int128) b;
+}
+
+static inline Int128 shrjam128(Int128 a, int count)
+{
+    if (count == 0) {
+        return a;
+    } else if (count < 128) {
+        Int128 shifted = int128_shr(a, count);
+        return shifted | ((a << (-count & 127)) != 0);
+    } else {
+        return a != 0;
+    }
+}
+
+/*
  * Returns the result of multiplying the floating-point values `a' and
  * `b'. The operation is performed according to the IEC/IEEE Standard
  * for Binary Floating-Point Arithmetic.
@@ -793,20 +820,23 @@ static inline FloatParts mul_floats(FloatParts a, FloatParts b, float_status *s)
     bool sign = a.sign ^ b.sign;
 
     if (a.cls == float_class_normal && b.cls == float_class_normal) {
-        uint64_t hi, lo;
         int exp = a.exp + b.exp;
+        Int128 frac;
+        uint64_t frac_lo;
 
-        mul64To128(a.frac, b.frac, &hi, &lo);
-        shift128RightJamming(hi, lo, DECOMPOSED_BINARY_POINT, &hi, &lo);
-        if (lo & DECOMPOSED_OVERFLOW_BIT) {
-            lo = shrjam64(lo, 1);
+        frac = multiply_64_to_128(a.frac, b.frac);
+        frac = shrjam128(frac, DECOMPOSED_BINARY_POINT);
+
+        frac_lo = int128_getlo(frac);
+        if (frac_lo & DECOMPOSED_OVERFLOW_BIT) {
+            frac_lo = shrjam64(frac_lo, 1);
             exp += 1;
         }
 
         /* Re-use a */
         a.exp = exp;
         a.sign = sign;
-        a.frac = lo;
+        a.frac = frac_lo;
         return a;
     }
     /* handle all the NaN cases */
