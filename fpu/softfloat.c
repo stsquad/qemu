@@ -323,11 +323,25 @@ static inline float64 float64_pack_raw(FloatParts p)
     return make_float64(pack_raw(float64_params, p));
 }
 
+/* Simple helpers for checking if what NaN we have */
+static bool is_nan(FloatClass c)
+{
+    return unlikely(c >= float_class_qnan);
+}
+static bool is_snan(FloatClass c)
+{
+    return c == float_class_snan;
+}
+static bool is_qnan(FloatClass c)
+{
+    return c == float_class_qnan;
+}
+
 /* Canonicalize EXP and FRAC, setting CLS.  */
 static inline FloatParts canonicalize(FloatParts part, const FloatFmt *parm,
                                       float_status *status)
 {
-    if (part.exp == parm->exp_max) {
+    if (unlikely(part.exp == parm->exp_max)) {
         if (part.frac == 0) {
             part.cls = float_class_inf;
         } else {
@@ -342,7 +356,7 @@ static inline FloatParts canonicalize(FloatParts part, const FloatFmt *parm,
             }
 #endif
         }
-    } else if (part.exp == 0) {
+    } else if (unlikely(part.exp == 0)) {
         if (likely(part.frac == 0)) {
             part.cls = float_class_zero;
         } else if (status->flush_inputs_to_zero) {
@@ -384,8 +398,7 @@ static inline FloatParts round_canonical(FloatParts p, float_status *s,
     frac = p.frac;
     exp = p.exp;
 
-    switch (p.cls) {
-    case float_class_normal:
+    if (likely(p.cls == float_class_normal)) {
         switch (s->float_rounding_mode) {
         case float_round_nearest_even:
             overflow_norm = false;
@@ -440,8 +453,8 @@ static inline FloatParts round_canonical(FloatParts p, float_status *s,
         } else {
             bool is_tiny = (s->float_detect_tininess
                             == float_tininess_before_rounding)
-                        || (exp < 0)
-                        || !((frac + inc) & DECOMPOSED_OVERFLOW_BIT);
+                || (exp < 0)
+                || !((frac + inc) & DECOMPOSED_OVERFLOW_BIT);
 
             frac = shrjam64(frac, 1 - exp);
             if (frac & round_mask) {
@@ -464,27 +477,30 @@ static inline FloatParts round_canonical(FloatParts p, float_status *s,
                 p.cls = float_class_zero;
             }
         }
-        break;
+    } else {
 
-    case float_class_zero:
-    do_zero:
-        exp = 0;
-        frac = 0;
-        break;
+        switch (p.cls) {
 
-    case float_class_inf:
-    do_inf:
-        exp = exp_max;
-        frac = 0;
-        break;
+        case float_class_zero:
+        do_zero:
+            exp = 0;
+            frac = 0;
+            break;
 
-    case float_class_qnan:
-    case float_class_snan:
-        exp = exp_max;
-        break;
+        case float_class_inf:
+        do_inf:
+            exp = exp_max;
+            frac = 0;
+            break;
 
-    default:
-        g_assert_not_reached();
+        case float_class_qnan:
+        case float_class_snan:
+            exp = exp_max;
+            break;
+
+        default:
+            g_assert_not_reached();
+        }
     }
 
     float_raise(flags, s);
@@ -529,36 +545,23 @@ static float32 float32_round_pack_canonical(FloatParts p, float_status *s)
     }
 }
 
-static FloatParts float64_unpack_canonical(float64 f, float_status *s)
+static inline FloatParts float64_unpack_canonical(float64 f, float_status *s)
 {
     return canonicalize(float64_unpack_raw(f), &float64_params, s);
 }
 
-static float64 float64_round_pack_canonical(FloatParts p, float_status *s)
+static inline float64 float64_round_pack_canonical(FloatParts p, float_status *s)
 {
-    switch (p.cls) {
-    case float_class_dnan:
-        return float64_default_nan(s);
-    case float_class_msnan:
-        return float64_maybe_silence_nan(float64_pack_raw(p), s);
-    default:
-        p = round_canonical(p, s, &float64_params);
-        return float64_pack_raw(p);
+    if (is_nan(p.cls)) {
+        if (p.cls == float_class_dnan) {
+            return float64_default_nan(s);
+        } else if (p.cls == float_class_msnan) {
+            return float64_maybe_silence_nan(float64_pack_raw(p), s);
+        }
     }
-}
 
-/* Simple helpers for checking if what NaN we have */
-static bool is_nan(FloatClass c)
-{
-    return unlikely(c >= float_class_qnan);
-}
-static bool is_snan(FloatClass c)
-{
-    return c == float_class_snan;
-}
-static bool is_qnan(FloatClass c)
-{
-    return c == float_class_qnan;
+    p = round_canonical(p, s, &float64_params);
+    return float64_pack_raw(p);
 }
 
 static inline FloatParts return_nan(FloatParts a, float_status *s)
