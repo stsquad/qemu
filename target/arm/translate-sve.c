@@ -3552,28 +3552,27 @@ static const uint8_t dtype_esz[16] = {
     3, 2, 1, 3
 };
 
-static void do_mem_zpa(DisasContext *s, int zt, int pg, TCGv_i64 addr,
+static bool do_mem_zpa(DisasContext *s, int zt, int pg, TCGv_i64 addr,
                        gen_helper_gvec_mem *fn)
 {
-    unsigned vsz = vec_full_reg_size(s);
-    TCGv_ptr t_pg;
-    TCGv_i32 desc;
+    if (sve_access_check(s)) {
+        /* For e.g. LD4, there are not enough arguments to pass all 4
+           registers as pointers, so encode the regno into the data field.
+           For consistency, do this even for LD1.  */
+        unsigned vsz = vec_full_reg_size(s);
+        TCGv_i32 desc = tcg_const_i32(simd_desc(vsz, vsz, zt));
+        TCGv_ptr t_pg = tcg_temp_new_ptr();
 
-    /* For e.g. LD4, there are not enough arguments to pass all 4
-       registers as pointers, so encode the regno into the data field.
-       For consistency, do this even for LD1.  */
-    desc = tcg_const_i32(simd_desc(vsz, vsz, zt));
-    t_pg = tcg_temp_new_ptr();
+        tcg_gen_addi_ptr(t_pg, cpu_env, pred_full_reg_offset(s, pg));
+        fn(cpu_env, t_pg, addr, desc);
 
-    tcg_gen_addi_ptr(t_pg, cpu_env, pred_full_reg_offset(s, pg));
-    fn(cpu_env, t_pg, addr, desc);
-
-    tcg_temp_free_ptr(t_pg);
-    tcg_temp_free_i32(desc);
-    tcg_temp_free_i64(addr);
+        tcg_temp_free_ptr(t_pg);
+        tcg_temp_free_i32(desc);
+    }
+    return true;
 }
 
-static void do_ld_zpa(DisasContext *s, int zt, int pg,
+static bool do_ld_zpa(DisasContext *s, int zt, int pg,
                       TCGv_i64 addr, int dtype, int nreg)
 {
     static gen_helper_gvec_mem * const fns[16][4] = {
@@ -3606,37 +3605,34 @@ static void do_ld_zpa(DisasContext *s, int zt, int pg,
     /* While there are holes in the table, they are not
        accessible via the instruction encoding.  */
     assert(fn != NULL);
-    do_mem_zpa(s, zt, pg, addr, fn);
+    return do_mem_zpa(s, zt, pg, addr, fn);
 }
 
 static bool trans_LD_zprr(DisasContext *s, arg_rprr_load *a, uint32_t insn)
 {
+    TCGv_i64 addr;
+
     if (a->rm == 31) {
         return false;
     }
-    if (sve_access_check(s)) {
-        TCGv_i64 addr = tcg_temp_new_i64();
-        tcg_gen_muli_i64(addr, cpu_reg(s, a->rm),
-                         (a->nreg + 1) << dtype_msz(a->dtype));
-        tcg_gen_add_i64(addr, addr, cpu_reg_sp(s, a->rn));
-        do_ld_zpa(s, a->rd, a->pg, addr, a->dtype, a->nreg);
-    }
-    return true;
+
+    addr = new_tmp_a64(s);
+    tcg_gen_muli_i64(addr, cpu_reg(s, a->rm),
+                     (a->nreg + 1) << dtype_msz(a->dtype));
+    tcg_gen_add_i64(addr, addr, cpu_reg_sp(s, a->rn));
+    return do_ld_zpa(s, a->rd, a->pg, addr, a->dtype, a->nreg);
 }
 
 static bool trans_LD_zpri(DisasContext *s, arg_rpri_load *a, uint32_t insn)
 {
-    if (sve_access_check(s)) {
-        int vsz = vec_full_reg_size(s);
-        int elements = vsz >> dtype_esz[a->dtype];
-        TCGv_i64 addr = tcg_temp_new_i64();
+    int vsz = vec_full_reg_size(s);
+    int elements = vsz >> dtype_esz[a->dtype];
+    TCGv_i64 addr = new_tmp_a64(s);
 
-        tcg_gen_addi_i64(addr, cpu_reg_sp(s, a->rn),
-                         (a->imm * elements * (a->nreg + 1))
-                         << dtype_msz(a->dtype));
-        do_ld_zpa(s, a->rd, a->pg, addr, a->dtype, a->nreg);
-    }
-    return true;
+    tcg_gen_addi_i64(addr, cpu_reg_sp(s, a->rn),
+                     (a->imm * elements * (a->nreg + 1))
+                     << dtype_msz(a->dtype));
+    return do_ld_zpa(s, a->rd, a->pg, addr, a->dtype, a->nreg);
 }
 
 static bool trans_LDFF1_zprr(DisasContext *s, arg_rprr_load *a, uint32_t insn)
@@ -3649,4 +3645,65 @@ static bool trans_LDNF1_zpri(DisasContext *s, arg_rpri_load *a, uint32_t insn)
 {
     /* FIXME */
     return trans_LD_zpri(s, a, insn);
+}
+
+static bool do_st_zpa(DisasContext *s, int zt, int pg, TCGv_i64 addr,
+                      int msz, int esz, int nreg)
+{
+    static gen_helper_gvec_mem * const fn_single[4][4] = {
+        { gen_helper_sve_st1bb_r, gen_helper_sve_st1bh_r,
+          gen_helper_sve_st1bs_r, gen_helper_sve_st1bd_r },
+        { NULL,                   gen_helper_sve_st1hh_r,
+          gen_helper_sve_st1hs_r, gen_helper_sve_st1hd_r },
+        { NULL, NULL,
+          gen_helper_sve_st1ss_r, gen_helper_sve_st1sd_r },
+        { NULL, NULL, NULL, gen_helper_sve_st1dd_r },
+    };
+    static gen_helper_gvec_mem * const fn_multiple[3][4] = {
+        { gen_helper_sve_st2bb_r, gen_helper_sve_st2hh_r,
+          gen_helper_sve_st2ss_r, gen_helper_sve_st2dd_r },
+        { gen_helper_sve_st3bb_r, gen_helper_sve_st3hh_r,
+          gen_helper_sve_st3ss_r, gen_helper_sve_st3dd_r },
+        { gen_helper_sve_st4bb_r, gen_helper_sve_st4hh_r,
+          gen_helper_sve_st4ss_r, gen_helper_sve_st4dd_r },
+    };
+    gen_helper_gvec_mem *fn;
+
+    if (nreg == 0) {
+        /* ST1 */
+        fn = fn_single[msz][esz];
+        if (fn == NULL) {
+            return false;
+        }
+    } else {
+        /* ST2, ST3, ST4 -- msz == esz, enforced by encoding */
+        assert(msz == esz);
+        fn = fn_multiple[nreg - 1][msz];
+    }
+    return do_mem_zpa(s, zt, pg, addr, fn);
+}
+
+static bool trans_ST_zprr(DisasContext *s, arg_rprr_store *a, uint32_t insn)
+{
+    TCGv_i64 addr;
+
+    if (a->rm == 31) {
+        return false;
+    }
+
+    addr = new_tmp_a64(s);
+    tcg_gen_muli_i64(addr, cpu_reg(s, a->rm), (a->nreg + 1) << a->msz);
+    tcg_gen_add_i64(addr, addr, cpu_reg_sp(s, a->rn));
+    return do_st_zpa(s, a->rd, a->pg, addr, a->msz, a->esz, a->nreg);
+}
+
+static bool trans_ST_zpri(DisasContext *s, arg_rpri_store *a, uint32_t insn)
+{
+    int vsz = vec_full_reg_size(s);
+    int elements = vsz >> a->esz;
+    TCGv_i64 addr = new_tmp_a64(s);
+
+    tcg_gen_addi_i64(addr, cpu_reg_sp(s, a->rn),
+                     (a->imm * elements * (a->nreg + 1)) << a->msz);
+    return do_st_zpa(s, a->rd, a->pg, addr, a->msz, a->esz, a->nreg);
 }
