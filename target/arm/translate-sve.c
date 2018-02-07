@@ -4227,3 +4227,14 @@ static bool trans_ST1_zprz(DisasContext *s, arg_ST1_zprz *a, uint32_t insn)
                cpu_reg_sp(s, a->rn), fn);
     return true;
 }
+
+/*
+ * Prefetches
+ */
+
+static bool trans_PRF(DisasContext *s, arg_PRF *a, uint32_t insn)
+{
+    /* Prefetch is a nop within QEMU.  */
+    sve_access_check(s);
+    return true;
+}
