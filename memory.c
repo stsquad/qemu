@@ -2069,10 +2069,13 @@ DirtyBitmapSnapshot *memory_region_snapshot_and_clear_dirty(MemoryRegion *mr,
                                                             hwaddr size,
                                                             unsigned client)
 {
+    DirtyBitmapSnapshot *snapshot;
     assert(mr->ram_block);
     memory_region_sync_dirty_bitmap(mr);
-    return cpu_physical_memory_snapshot_and_clear_dirty(
+    snapshot = cpu_physical_memory_snapshot_and_clear_dirty(
                 memory_region_get_ram_addr(mr) + addr, size, client);
+    memory_global_after_dirty_log_sync();
+    return snapshot;
 }
 
 bool memory_region_snapshot_get_dirty(MemoryRegion *mr, DirtyBitmapSnapshot *snap,
@@ -2561,6 +2564,11 @@ bool memory_region_present(MemoryRegion *container, hwaddr addr)
 void memory_global_dirty_log_sync(void)
 {
     memory_region_sync_dirty_bitmap(NULL);
+}
+
+void memory_global_after_dirty_log_sync(void)
+{
+    MEMORY_LISTENER_CALL_GLOBAL(log_global_after_sync, Forward);
 }
 
 static VMChangeStateEntry *vmstate_change;
