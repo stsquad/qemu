@@ -11352,7 +11352,7 @@ DO_VFP_cmp(d, float64)
 }
 
 #define CONV_FTOI(name, fsz, sign, round) \
-uint32_t HELPER(name)(float##fsz x, void *fpstp) \
+sign##int32_t HELPER(name)(float##fsz x, void *fpstp) \
 { \
     float_status *fpst = fpstp; \
     if (float##fsz##_is_any_nan(x)) { \
