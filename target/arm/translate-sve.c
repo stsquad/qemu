@@ -34,6 +34,8 @@
 #include "translate-a64.h"
 
 typedef void GVecGen2Fn(unsigned, uint32_t, uint32_t, uint32_t, uint32_t);
+typedef void GVecGen2iFn(unsigned, uint32_t, uint32_t,
+                         int64_t, uint32_t, uint32_t);
 typedef void GVecGen3Fn(unsigned, uint32_t, uint32_t,
                         uint32_t, uint32_t, uint32_t);
 
@@ -1646,6 +1648,54 @@ static void trans_SINCDEC_v(DisasContext *s, arg_incdec2_cnt *a,
     } else {
         do_mov_z(s, a->rd, a->rn);
     }
+}
+
+/*
+ *** SVE Bitwise Immediate Group
+ */
+
+static void do_zz_dbm(DisasContext *s, arg_rr_dbm *a, GVecGen2iFn *gvec_fn)
+{
+    unsigned vsz;
+    uint64_t imm;
+
+    if (!logic_imm_decode_wmask(&imm, extract32(a->dbm, 12, 1),
+                                extract32(a->dbm, 0, 6),
+                                extract32(a->dbm, 6, 6))) {
+        unallocated_encoding(s);
+        return;
+    }
+
+    vsz = vec_full_reg_size(s);
+    gvec_fn(MO_64, vec_full_reg_offset(s, a->rd),
+            vec_full_reg_offset(s, a->rn), imm, vsz, vsz);
+}
+
+static void trans_AND_zzi(DisasContext *s, arg_rr_dbm *a, uint32_t insn)
+{
+    do_zz_dbm(s, a, tcg_gen_gvec_andi);
+}
+
+static void trans_ORR_zzi(DisasContext *s, arg_rr_dbm *a, uint32_t insn)
+{
+    do_zz_dbm(s, a, tcg_gen_gvec_ori);
+}
+
+static void trans_EOR_zzi(DisasContext *s, arg_rr_dbm *a, uint32_t insn)
+{
+    do_zz_dbm(s, a, tcg_gen_gvec_xori);
+}
+
+static void trans_DUPM(DisasContext *s, arg_DUPM *a, uint32_t insn)
+{
+    uint64_t imm;
+    if (!logic_imm_decode_wmask(&imm, extract32(a->dbm, 12, 1),
+                                extract32(a->dbm, 0, 6),
+                                extract32(a->dbm, 6, 6))) {
+        unallocated_encoding(s);
+        return;
+    }
+    do_dupi_z(s, a->rd, imm);
 }
 
 /*
