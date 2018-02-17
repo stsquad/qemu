@@ -2940,6 +2940,41 @@ static void trans_WHILE(DisasContext *s, arg_WHILE *a, uint32_t insn)
 }
 
 /*
+ *** SVE Integer Wide Immediate - Unpredicated Group
+ */
+
+static void trans_FDUP(DisasContext *s, arg_FDUP *a, uint32_t insn)
+{
+    unsigned vsz = vec_full_reg_size(s);
+    int dofs = vec_full_reg_offset(s, a->rd);
+    uint64_t imm;
+
+    if (a->esz == 0) {
+        unallocated_encoding(s);
+        return;
+    }
+
+    /* Decode the VFP immediate.  */
+    imm = vfp_expand_imm(a->esz, a->imm);
+    imm = dup_const(a->esz, imm);
+
+    tcg_gen_gvec_dup64i(dofs, vsz, vsz, imm);
+}
+
+static void trans_DUP_i(DisasContext *s, arg_DUP_i *a, uint32_t insn)
+{
+    unsigned vsz = vec_full_reg_size(s);
+    int dofs = vec_full_reg_offset(s, a->rd);
+
+    if (a->esz == 0 && extract32(insn, 13, 1)) {
+        unallocated_encoding(s);
+        return;
+    }
+
+    tcg_gen_gvec_dup64i(dofs, vsz, vsz, dup_const(a->esz, a->imm));
+}
+
+/*
  *** SVE Memory - 32-bit Gather and Unsized Contiguous Group
  */
 
