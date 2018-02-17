@@ -61,6 +61,11 @@ static int tszimm_shl(int x)
     return x - (8 << tszimm_esz(x));
 }
 
+static inline int plus1(int x)
+{
+    return x + 1;
+}
+
 /*
  * Include the generated decoder.
  */
@@ -127,7 +132,9 @@ static void do_vector3_z(DisasContext *s, GVecGen3Fn *gvec_fn,
 /* Invoke a vector move on two Zregs.  */
 static void do_mov_z(DisasContext *s, int rd, int rn)
 {
-    do_vector2_z(s, tcg_gen_gvec_mov, 0, rd, rn);
+    if (rd != rn) {
+        do_vector2_z(s, tcg_gen_gvec_mov, 0, rd, rn);
+    }
 }
 
 /* Initialize a Zreg with replications of a 64-bit immediate.  */
@@ -168,7 +175,9 @@ static void do_vecop4_p(DisasContext *s, const GVecGen4 *gvec_op,
 /* Invoke a vector move on two Pregs.  */
 static void do_mov_p(DisasContext *s, int rd, int rn)
 {
-    do_vector2_p(s, tcg_gen_gvec_mov, 0, rd, rn);
+    if (rd != rn) {
+        do_vector2_p(s, tcg_gen_gvec_mov, 0, rd, rn);
+    }
 }
 
 /* Set the cpu flags as per a return from an SVE helper.  */
@@ -1376,6 +1385,267 @@ static void trans_PFIRST(DisasContext *s, arg_rr_esz *a, uint32_t insn)
 static void trans_PNEXT(DisasContext *s, arg_rr_esz *a, uint32_t insn)
 {
     do_pfirst_pnext(s, a, gen_helper_sve_pnext);
+}
+
+/*
+ *** SVE Element Count Group
+ */
+
+/* Perform an inline saturating addition of a 32-bit value within
+ * a 64-bit register.  The second operand is known to be positive,
+ * which halves the comparisions we must perform to bound the result.
+ */
+static void do_sat_addsub_32(TCGv_i64 reg, TCGv_i64 val, bool u, bool d)
+{
+    int64_t ibound;
+    TCGv_i64 bound;
+    TCGCond cond;
+
+    /* Use normal 64-bit arithmetic to detect 32-bit overflow.  */
+    if (u) {
+        tcg_gen_ext32u_i64(reg, reg);
+    } else {
+        tcg_gen_ext32s_i64(reg, reg);
+    }
+    if (d) {
+        tcg_gen_sub_i64(reg, reg, val);
+        ibound = (u ? 0 : INT32_MIN);
+        cond = TCG_COND_LT;
+    } else {
+        tcg_gen_add_i64(reg, reg, val);
+        ibound = (u ? UINT32_MAX : INT32_MAX);
+        cond = TCG_COND_GT;
+    }
+    bound = tcg_const_i64(ibound);
+    tcg_gen_movcond_i64(cond, reg, reg, bound, bound, reg);
+    tcg_temp_free_i64(bound);
+}
+
+/* Similarly with 64-bit values.  */
+static void do_sat_addsub_64(TCGv_i64 reg, TCGv_i64 val, bool u, bool d)
+{
+    TCGv_i64 t0 = tcg_temp_new_i64();
+    TCGv_i64 t1 = tcg_temp_new_i64();
+    TCGv_i64 t2;
+
+    if (u) {
+        if (d) {
+            tcg_gen_sub_i64(t0, reg, val);
+            tcg_gen_movi_i64(t1, 0);
+            tcg_gen_movcond_i64(TCG_COND_LTU, reg, reg, val, t1, t0);
+        } else {
+            tcg_gen_add_i64(t0, reg, val);
+            tcg_gen_movi_i64(t1, -1);
+            tcg_gen_movcond_i64(TCG_COND_LTU, reg, t0, reg, t1, t0);
+        }
+    } else {
+        if (d) {
+            /* Detect signed overflow for subtraction.  */
+            tcg_gen_xor_i64(t0, reg, val);
+            tcg_gen_sub_i64(t1, reg, val);
+            tcg_gen_xor_i64(reg, reg, t0);
+            tcg_gen_and_i64(t0, t0, reg);
+
+            /* Bound the result.  */
+            tcg_gen_movi_i64(reg, INT64_MIN);
+            t2 = tcg_const_i64(0);
+            tcg_gen_movcond_i64(TCG_COND_LT, reg, t0, t2, reg, t1);
+        } else {
+            /* Detect signed overflow for addition.  */
+            tcg_gen_xor_i64(t0, reg, val);
+            tcg_gen_add_i64(reg, reg, val);
+            tcg_gen_xor_i64(t1, reg, val);
+            tcg_gen_andc_i64(t0, t1, t0);
+
+            /* Bound the result.  */
+            tcg_gen_movi_i64(t1, INT64_MAX);
+            t2 = tcg_const_i64(0);
+            tcg_gen_movcond_i64(TCG_COND_LT, reg, t0, t2, t1, reg);
+        }
+        tcg_temp_free_i64(t2);
+    }
+    tcg_temp_free_i64(t0);
+    tcg_temp_free_i64(t1);
+}
+
+/* Similarly with a vector and a scalar operand.  */
+static void do_sat_addsub_vec(DisasContext *s, int esz, int rd, int rn,
+                              TCGv_i64 val, bool u, bool d)
+{
+    unsigned vsz = vec_full_reg_size(s);
+    TCGv_ptr dptr, nptr;
+    TCGv_i32 t32, desc;
+    TCGv_i64 t64;
+
+    dptr = tcg_temp_new_ptr();
+    nptr = tcg_temp_new_ptr();
+    tcg_gen_addi_ptr(dptr, cpu_env, vec_full_reg_offset(s, rd));
+    tcg_gen_addi_ptr(nptr, cpu_env, vec_full_reg_offset(s, rn));
+    desc = tcg_const_i32(simd_desc(vsz, vsz, 0));
+
+    switch (esz) {
+    case MO_8:
+        t32 = tcg_temp_new_i32();
+        tcg_gen_extrl_i64_i32(t32, val);
+        if (d) {
+            tcg_gen_neg_i32(t32, t32);
+        }
+        if (u) {
+            gen_helper_sve_uqaddi_b(dptr, nptr, t32, desc);
+        } else {
+            gen_helper_sve_sqaddi_b(dptr, nptr, t32, desc);
+        }
+        tcg_temp_free_i32(t32);
+        break;
+
+    case MO_16:
+        t32 = tcg_temp_new_i32();
+        tcg_gen_extrl_i64_i32(t32, val);
+        if (d) {
+            tcg_gen_neg_i32(t32, t32);
+        }
+        if (u) {
+            gen_helper_sve_uqaddi_h(dptr, nptr, t32, desc);
+        } else {
+            gen_helper_sve_sqaddi_h(dptr, nptr, t32, desc);
+        }
+        tcg_temp_free_i32(t32);
+        break;
+
+    case MO_32:
+        t64 = tcg_temp_new_i64();
+        if (d) {
+            tcg_gen_neg_i64(t64, val);
+        } else {
+            tcg_gen_mov_i64(t64, val);
+        }
+        if (u) {
+            gen_helper_sve_uqaddi_s(dptr, nptr, t64, desc);
+        } else {
+            gen_helper_sve_sqaddi_s(dptr, nptr, t64, desc);
+        }
+        tcg_temp_free_i64(t64);
+        break;
+
+    case MO_64:
+        if (u) {
+            if (d) {
+                gen_helper_sve_uqsubi_d(dptr, nptr, val, desc);
+            } else {
+                gen_helper_sve_uqaddi_d(dptr, nptr, val, desc);
+            }
+        } else if (d) {
+            t64 = tcg_temp_new_i64();
+            tcg_gen_neg_i64(t64, val);
+            gen_helper_sve_sqaddi_d(dptr, nptr, t64, desc);
+            tcg_temp_free_i64(t64);
+        } else {
+            gen_helper_sve_sqaddi_d(dptr, nptr, val, desc);
+        }
+        break;
+
+    default:
+        g_assert_not_reached();
+    }
+
+    tcg_temp_free_ptr(dptr);
+    tcg_temp_free_ptr(nptr);
+    tcg_temp_free_i32(desc);
+}
+
+static void trans_CNT_r(DisasContext *s, arg_CNT_r *a, uint32_t insn)
+{
+    unsigned fullsz = vec_full_reg_size(s);
+    unsigned numelem = decode_pred_count(fullsz, a->pat, a->esz);
+
+    tcg_gen_movi_i64(cpu_reg(s, a->rd), numelem * a->imm);
+}
+
+static void trans_INCDEC_r(DisasContext *s, arg_incdec_cnt *a, uint32_t insn)
+{
+    unsigned fullsz = vec_full_reg_size(s);
+    unsigned numelem = decode_pred_count(fullsz, a->pat, a->esz);
+    int inc = numelem * a->imm * (a->d ? -1 : 1);
+    TCGv_i64 reg = cpu_reg(s, a->rd);
+
+    tcg_gen_addi_i64(reg, reg, inc);
+}
+
+static void trans_SINCDEC_r_32(DisasContext *s, arg_incdec_cnt *a,
+                               uint32_t insn)
+{
+    unsigned fullsz = vec_full_reg_size(s);
+    unsigned numelem = decode_pred_count(fullsz, a->pat, a->esz);
+    int inc = numelem * a->imm;
+    TCGv_i64 reg = cpu_reg(s, a->rd);
+
+    /* Use normal 64-bit arithmetic to detect 32-bit overflow.  */
+    if (inc == 0) {
+        if (a->u) {
+            tcg_gen_ext32u_i64(reg, reg);
+        } else {
+            tcg_gen_ext32s_i64(reg, reg);
+        }
+    } else {
+        TCGv_i64 t = tcg_const_i64(inc);
+        do_sat_addsub_32(reg, t, a->u, a->d);
+        tcg_temp_free_i64(t);
+    }
+}
+
+static void trans_SINCDEC_r_64(DisasContext *s, arg_incdec_cnt *a,
+                               uint32_t insn)
+{
+    unsigned fullsz = vec_full_reg_size(s);
+    unsigned numelem = decode_pred_count(fullsz, a->pat, a->esz);
+    int inc = numelem * a->imm;
+    TCGv_i64 reg = cpu_reg(s, a->rd);
+
+    if (inc != 0) {
+        TCGv_i64 t = tcg_const_i64(inc);
+        do_sat_addsub_64(reg, t, a->u, a->d);
+        tcg_temp_free_i64(t);
+    }
+}
+
+static void trans_INCDEC_v(DisasContext *s, arg_incdec2_cnt *a, uint32_t insn)
+{
+    unsigned fullsz = vec_full_reg_size(s);
+    unsigned numelem = decode_pred_count(fullsz, a->pat, a->esz);
+    int inc = numelem * a->imm;
+
+    if (a->esz == 0) {
+        unallocated_encoding(s);
+        return;
+    }
+    if (inc != 0) {
+        TCGv_i64 t = tcg_const_i64(a->d ? -inc : inc);
+        tcg_gen_gvec_adds(a->esz, vec_full_reg_offset(s, a->rd),
+                          vec_full_reg_offset(s, a->rn), t, fullsz, fullsz);
+        tcg_temp_free_i64(t);
+    } else {
+        do_mov_z(s, a->rd, a->rn);
+    }
+}
+
+static void trans_SINCDEC_v(DisasContext *s, arg_incdec2_cnt *a,
+                            uint32_t insn)
+{
+    unsigned fullsz = vec_full_reg_size(s);
+    unsigned numelem = decode_pred_count(fullsz, a->pat, a->esz);
+    int inc = numelem * a->imm;
+
+    if (a->esz == 0) {
+        unallocated_encoding(s);
+        return;
+    }
+    if (inc != 0) {
+        TCGv_i64 t = tcg_const_i64(inc);
+        do_sat_addsub_vec(s, a->esz, a->rd, a->rn, t, a->u, a->d);
+        tcg_temp_free_i64(t);
+    } else {
+        do_mov_z(s, a->rd, a->rn);
+    }
 }
 
 /*
