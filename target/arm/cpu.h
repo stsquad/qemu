@@ -2923,4 +2923,7 @@ static inline uint64_t *aa64_vfp_qreg(CPUARMState *env, unsigned regno)
     return &env->vfp.zregs[regno].d[0];
 }
 
+/* Shared between translate-sve.c and sve_helper.c.  */
+extern const uint64_t pred_esz_masks[4];
+
 #endif

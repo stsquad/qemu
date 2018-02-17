@@ -23,19 +23,29 @@
 # Named fields.  These are primarily for disjoint fields.
 
 %imm9_16_10	16:s6 10:3
+%preg4_5	5:4
 
 ###########################################################################
 # Named attribute sets.  These are used to make nice(er) names
 # when creating helpers common to those for the individual
 # instruction patterns.
 
+&rr_esz		rd rn esz
 &rri		rd rn imm
 &rrr_esz	rd rn rm esz
 &rprr_s		rd pg rn rm s
 
+&ptrue		rd esz pat s
+
 ###########################################################################
 # Named instruction formats.  These are generally used to
 # reduce the amount of duplication between instruction patterns.
+
+# Two operand with unused vector element size
+@pd_pn_e0	........ ........ ....... rn:4 . rd:4		&rr_esz esz=0
+
+# Two operand
+@pd_pn		........ esz:2 .. .... ....... rn:4 . rd:4	&rr_esz
 
 # Three operand with unused vector element size
 @rd_rn_rm_e0	........ ... rm:5 ... ... rn:5 rd:5		&rrr_esz esz=0
@@ -76,6 +86,37 @@ NAND_pppp	00100101 1. 00 .... 01 .... 1 .... 1 ....	@pd_pg_pn_pm_s
 
 # SVE predicate test
 PTEST		00100101 01010000 11 pg:4 0 rn:4 00000
+
+# SVE predicate initialize
+PTRUE		00100101 esz:2 01100 s:1 111000 pat:5 0 rd:4	&ptrue
+
+# SVE initialize FFR (SETFFR)
+PTRUE		00100101 0010 1100 1001 0000 0000 0000 \
+		&ptrue rd=16 esz=0 pat=31 s=0
+
+# SVE zero predicate register (PFALSE)
+# Note that pat=32 is outside of the natural 0..31, and will
+# always hit the default #uimm5 case of decode_pred_count.
+PTRUE		00100101 0001 1000 1110 0100 0000 rd:4 \
+		&ptrue esz=0 pat=32 s=0
+
+# SVE predicate read from FFR (predicated) (RDFFR)
+ORR_pppp	00100101 0 s:1 0110001111000 pg:4 0 rd:4 \
+		&rprr_s rn=16 rm=16
+
+# SVE predicate read from FFR (unpredicated) (RDFFR)
+ORR_pppp	00100101 0001 1001 1111 0000 0000 rd:4 \
+		&rprr_s rn=16 rm=16 pg=16 s=0
+
+# SVE FFR write from predicate (WRFFR)
+ORR_pppp	00100101 0010 1000 1001 000 rn:4 00000 \
+		&rprr_s rd=16 rm=%preg4_5 pg=%preg4_5 s=0
+
+# SVE predicate first active
+PFIRST		00100101 01 011 000 11000 00 .... 0 ....	@pd_pn_e0
+
+# SVE predicate next active
+PNEXT		00100101 .. 011 001 11000 10 .... 0 ....	@pd_pn
 
 ### SVE Memory - 32-bit Gather and Unsized Contiguous Group
 

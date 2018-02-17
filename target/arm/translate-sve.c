@@ -22,6 +22,7 @@
 #include "exec/exec-all.h"
 #include "tcg-op.h"
 #include "tcg-op-gvec.h"
+#include "tcg-gvec-desc.h"
 #include "qemu/log.h"
 #include "arm_ldst.h"
 #include "translate.h"
@@ -67,14 +68,18 @@ static inline int pred_full_reg_size(DisasContext *s)
  * Note that this is not needed for the vector registers as they
  * are always properly sized for tcg vectors.
  */
-static int pred_gvec_reg_size(DisasContext *s)
+static int size_for_gvec(int size)
 {
-    int size = pred_full_reg_size(s);
     if (size <= 8) {
         return 8;
     } else {
         return QEMU_ALIGN_UP(size, 16);
     }
+}
+
+static int pred_gvec_reg_size(DisasContext *s)
+{
+    return size_for_gvec(pred_full_reg_size(s));
 }
 
 /* Invoke a vector expander on two Zregs.  */
@@ -171,6 +176,12 @@ static void do_predtest(DisasContext *s, int dofs, int gofs, int words)
     do_pred_flags(t);
     tcg_temp_free_i32(t);
 }
+
+/* For each element size, the bits within a predicate word that are active.  */
+const uint64_t pred_esz_masks[4] = {
+    0xffffffffffffffffull, 0x5555555555555555ull,
+    0x1111111111111111ull, 0x0101010101010101ull
+};
 
 /*
  *** SVE Logical - Unpredicated Group
@@ -507,6 +518,154 @@ static void trans_PTEST(DisasContext *s, arg_PTEST *a, uint32_t insn)
     } else {
         do_predtest(s, nofs, gofs, words);
     }
+}
+
+/* See the ARM pseudocode DecodePredCount.  */
+static unsigned decode_pred_count(unsigned fullsz, int pattern, int esz)
+{
+    unsigned elements = fullsz >> esz;
+    unsigned bound;
+
+    switch (pattern) {
+    case 0x0: /* POW2 */
+        return pow2floor(elements);
+    case 0x1: /* VL1 */
+    case 0x2: /* VL2 */
+    case 0x3: /* VL3 */
+    case 0x4: /* VL4 */
+    case 0x5: /* VL5 */
+    case 0x6: /* VL6 */
+    case 0x7: /* VL7 */
+    case 0x8: /* VL8 */
+        bound = pattern;
+        break;
+    case 0x9: /* VL16 */
+    case 0xa: /* VL32 */
+    case 0xb: /* VL64 */
+    case 0xc: /* VL128 */
+    case 0xd: /* VL256 */
+        bound = 16 << (pattern - 9);
+        break;
+    case 0x1d: /* MUL4 */
+        return elements - elements % 4;
+    case 0x1e: /* MUL3 */
+        return elements - elements % 3;
+    case 0x1f: /* ALL */
+        return elements;
+    default:   /* #uimm5 */
+        return 0;
+    }
+    return elements >= bound ? bound : 0;
+}
+
+static void trans_PTRUE(DisasContext *s, arg_PTRUE *a, uint32_t insn)
+{
+    unsigned fullsz = vec_full_reg_size(s);
+    unsigned ofs = pred_full_reg_offset(s, a->rd);
+    unsigned numelem, setsz, i;
+    uint64_t word, lastword;
+    TCGv_i64 t;
+
+    numelem = decode_pred_count(fullsz, a->pat, a->esz);
+
+    /* Determine what we must store into each bit, and how many.  */
+    if (numelem == 0) {
+        lastword = word = 0;
+        setsz = fullsz;
+    } else {
+        setsz = numelem << a->esz;
+        lastword = word = pred_esz_masks[a->esz];
+        if (setsz % 64) {
+            lastword &= ~(-1ull << (setsz % 64));
+        }
+    }
+
+    t = tcg_temp_new_i64();
+    if (fullsz <= 64) {
+        tcg_gen_movi_i64(t, lastword);
+        tcg_gen_st_i64(t, cpu_env, ofs);
+        goto done;
+    }
+
+    if (word == lastword) {
+        unsigned maxsz = size_for_gvec(fullsz / 8);
+        unsigned oprsz = size_for_gvec(setsz / 8);
+
+        if (oprsz * 8 == setsz) {
+            tcg_gen_gvec_dup64i(ofs, oprsz, maxsz, word);
+            goto done;
+        }
+        if (oprsz * 8 == setsz + 8) {
+            tcg_gen_gvec_dup64i(ofs, oprsz, maxsz, word);
+            tcg_gen_movi_i64(t, 0);
+            tcg_gen_st_i64(t, cpu_env, ofs + oprsz - 8);
+            goto done;
+        }
+    }
+
+    setsz /= 8;
+    fullsz /= 8;
+
+    tcg_gen_movi_i64(t, word);
+    for (i = 0; i < setsz; i += 8) {
+        tcg_gen_st_i64(t, cpu_env, ofs + i);
+    }
+    if (lastword != word) {
+        tcg_gen_movi_i64(t, lastword);
+        tcg_gen_st_i64(t, cpu_env, ofs + i);
+        i += 8;
+    }
+    if (i < fullsz) {
+        tcg_gen_movi_i64(t, 0);
+        for (; i < fullsz; i += 8) {
+            tcg_gen_st_i64(t, cpu_env, ofs + i);
+        }
+    }
+
+ done:
+    tcg_temp_free_i64(t);
+
+    /* PTRUES */
+    if (a->s) {
+        tcg_gen_movi_i32(cpu_NF, -(word != 0));
+        tcg_gen_movi_i32(cpu_CF, word == 0);
+        tcg_gen_movi_i32(cpu_VF, 0);
+        tcg_gen_mov_i32(cpu_ZF, cpu_NF);
+    }
+}
+
+static void do_pfirst_pnext(DisasContext *s, arg_rr_esz *a,
+                            void (*gen_fn)(TCGv_i32, TCGv_ptr,
+                                           TCGv_ptr, TCGv_i32))
+{
+    TCGv_ptr t_pd = tcg_temp_new_ptr();
+    TCGv_ptr t_pg = tcg_temp_new_ptr();
+    TCGv_i32 t;
+    unsigned desc;
+
+    desc = DIV_ROUND_UP(pred_full_reg_size(s), 8);
+    desc = deposit32(desc, SIMD_DATA_SHIFT, 2, a->esz);
+
+    tcg_gen_addi_ptr(t_pd, cpu_env, pred_full_reg_offset(s, a->rd));
+    tcg_gen_addi_ptr(t_pg, cpu_env, pred_full_reg_offset(s, a->rn));
+    t = tcg_const_i32(desc);
+
+    gen_fn(t, t_pd, t_pg, t);
+    tcg_temp_free_ptr(t_pd);
+    tcg_temp_free_ptr(t_pg);
+
+    do_pred_flags(t);
+    tcg_temp_free_i32(t);
+}
+
+static void trans_PFIRST(DisasContext *s, arg_rr_esz *a, uint32_t insn)
+{
+    do_pfirst_pnext(s, a, gen_helper_sve_pfirst);
+}
+
+static void trans_PNEXT(DisasContext *s, arg_rr_esz *a, uint32_t insn)
+{
+    do_pfirst_pnext(s, a, gen_helper_sve_pnext);
 }
 
 /*
