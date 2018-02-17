@@ -584,6 +584,19 @@ static void do_clr_zp(DisasContext *s, int rd, int pg, int esz)
                        vsz, vsz, 0, fns[esz]);
 }
 
+/* Store zero into every inactive element of Zd.  */
+static void do_clr_inactive_zp(DisasContext *s, int rd, int pg, int esz)
+{
+    static gen_helper_gvec_2 * const fns[4] = {
+        gen_helper_sve_clri_b, gen_helper_sve_clri_h,
+        gen_helper_sve_clri_s, gen_helper_sve_clri_d,
+    };
+    unsigned vsz = vec_full_reg_size(s);
+    tcg_gen_gvec_2_ool(vec_full_reg_offset(s, rd),
+                       pred_full_reg_offset(s, pg),
+                       vsz, vsz, 0, fns[esz]);
+}
+
 static void do_zpzi_ool(DisasContext *s, arg_rpri_esz *a,
                         gen_helper_gvec_3 *fn)
 {
@@ -3506,7 +3519,7 @@ static void trans_LDR_pri(DisasContext *s, arg_rri *a, uint32_t insn)
  *** SVE Memory - Contiguous Load Group
  */
 
-/* The memory element size of dtype.  */
+/* The memory mode of the dtype.  */
 static const TCGMemOp dtype_mop[16] = {
     MO_UB, MO_UB, MO_UB, MO_UB,
     MO_SL, MO_UW, MO_UW, MO_UW,
@@ -3669,6 +3682,46 @@ static void trans_LD1RQ_zpri(DisasContext *s, arg_rpri_load *a, uint32_t insn)
 
     tcg_gen_addi_i64(addr, cpu_reg_sp(s, a->rn), a->imm * 16);
     do_ldrq(s, a->rd, a->pg, addr, dtype_msz(a->dtype));
+}
+
+/* Load and broadcast element.  */
+static void trans_LD1R_zpri(DisasContext *s, arg_rpri_load *a, uint32_t insn)
+{
+    unsigned vsz = vec_full_reg_size(s);
+    unsigned psz = pred_full_reg_size(s);
+    unsigned esz = dtype_esz[a->dtype];
+    TCGLabel *over = gen_new_label();
+    TCGv_i64 temp;
+
+    /* If the guarding predicate has no bits set, no load occurs.  */
+    if (psz <= 8) {
+        temp = tcg_temp_new_i64();
+        tcg_gen_ld_i64(temp, cpu_env, pred_full_reg_offset(s, a->pg));
+        tcg_gen_andi_i64(temp, temp,
+                         deposit64(0, 0, psz * 8, pred_esz_masks[esz]));
+        tcg_gen_brcondi_i64(TCG_COND_EQ, temp, 0, over);
+        tcg_temp_free_i64(temp);
+    } else {
+        TCGv_i32 t32 = tcg_temp_new_i32();
+        find_last_active(s, t32, esz, a->pg);
+        tcg_gen_brcondi_i32(TCG_COND_LT, t32, 0, over);
+        tcg_temp_free_i32(t32);
+    }
+
+    /* Load the data.  */
+    temp = tcg_temp_new_i64();
+    tcg_gen_addi_i64(temp, cpu_reg_sp(s, a->rn), a->imm);
+    tcg_gen_qemu_ld_i64(temp, temp, get_mem_index(s),
+                        s->be_data | dtype_mop[a->dtype]);
+
+    /* Broadcast to *all* elements.  */
+    tcg_gen_gvec_dup_i64(esz, vec_full_reg_offset(s, a->rd),
+                         vsz, vsz, temp);
+    tcg_temp_free_i64(temp);
+
+    /* Zero the inactive elements.  */
+    gen_set_label(over);
+    do_clr_inactive_zp(s, a->rd, a->pg, esz);
 }
 
 static void do_st_zpa(DisasContext *s, int zt, int pg, TCGv_i64 addr,
