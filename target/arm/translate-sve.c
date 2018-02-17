@@ -305,6 +305,117 @@ void trans_UDIV_zpzz(DisasContext *s, arg_rprr_esz *a, uint32_t insn)
 #undef DO_ZPZZ
 
 /*
+ *** SVE Integer Arithmetic - Unary Predicated Group
+ */
+
+static void do_zpz_ool(DisasContext *s, arg_rpr_esz *a, gen_helper_gvec_3 *fn)
+{
+    unsigned vsz = vec_full_reg_size(s);
+    if (fn == NULL) {
+        unallocated_encoding(s);
+        return;
+    }
+    tcg_gen_gvec_3_ool(vec_full_reg_offset(s, a->rd),
+                       vec_full_reg_offset(s, a->rn),
+                       pred_full_reg_offset(s, a->pg),
+                       vsz, vsz, 0, fn);
+}
+
+#define DO_ZPZ(NAME, name) \
+static void trans_##NAME(DisasContext *s, arg_rpr_esz *a, uint32_t insn) \
+{                                                                   \
+    static gen_helper_gvec_3 * const fns[4] = {                     \
+        gen_helper_sve_##name##_b, gen_helper_sve_##name##_h,       \
+        gen_helper_sve_##name##_s, gen_helper_sve_##name##_d,       \
+    };                                                              \
+    do_zpz_ool(s, a, fns[a->esz]);                                  \
+}
+
+DO_ZPZ(CLS, cls)
+DO_ZPZ(CLZ, clz)
+DO_ZPZ(CNT_zpz, cnt_zpz)
+DO_ZPZ(CNOT, cnot)
+DO_ZPZ(NOT_zpz, not_zpz)
+DO_ZPZ(ABS, abs)
+DO_ZPZ(NEG, neg)
+
+static void trans_FABS(DisasContext *s, arg_rpr_esz *a, uint32_t insn)
+{
+    static gen_helper_gvec_3 * const fns[4] = {
+        NULL,
+        gen_helper_sve_fabs_h,
+        gen_helper_sve_fabs_s,
+        gen_helper_sve_fabs_d
+    };
+    do_zpz_ool(s, a, fns[a->esz]);
+}
+
+static void trans_FNEG(DisasContext *s, arg_rpr_esz *a, uint32_t insn)
+{
+    static gen_helper_gvec_3 * const fns[4] = {
+        NULL,
+        gen_helper_sve_fneg_h,
+        gen_helper_sve_fneg_s,
+        gen_helper_sve_fneg_d
+    };
+    do_zpz_ool(s, a, fns[a->esz]);
+}
+
+static void trans_SXTB(DisasContext *s, arg_rpr_esz *a, uint32_t insn)
+{
+    static gen_helper_gvec_3 * const fns[4] = {
+        NULL,
+        gen_helper_sve_sxtb_h,
+        gen_helper_sve_sxtb_s,
+        gen_helper_sve_sxtb_d
+    };
+    do_zpz_ool(s, a, fns[a->esz]);
+}
+
+static void trans_UXTB(DisasContext *s, arg_rpr_esz *a, uint32_t insn)
+{
+    static gen_helper_gvec_3 * const fns[4] = {
+        NULL,
+        gen_helper_sve_uxtb_h,
+        gen_helper_sve_uxtb_s,
+        gen_helper_sve_uxtb_d
+    };
+    do_zpz_ool(s, a, fns[a->esz]);
+}
+
+static void trans_SXTH(DisasContext *s, arg_rpr_esz *a, uint32_t insn)
+{
+    static gen_helper_gvec_3 * const fns[4] = {
+        NULL, NULL,
+        gen_helper_sve_sxth_s,
+        gen_helper_sve_sxth_d
+    };
+    do_zpz_ool(s, a, fns[a->esz]);
+}
+
+static void trans_UXTH(DisasContext *s, arg_rpr_esz *a, uint32_t insn)
+{
+    static gen_helper_gvec_3 * const fns[4] = {
+        NULL, NULL,
+        gen_helper_sve_uxth_s,
+        gen_helper_sve_uxth_d
+    };
+    do_zpz_ool(s, a, fns[a->esz]);
+}
+
+static void trans_SXTW(DisasContext *s, arg_rpr_esz *a, uint32_t insn)
+{
+    do_zpz_ool(s, a, a->esz == 3 ? gen_helper_sve_sxtw_d : NULL);
+}
+
+static void trans_UXTW(DisasContext *s, arg_rpr_esz *a, uint32_t insn)
+{
+    do_zpz_ool(s, a, a->esz == 3 ? gen_helper_sve_uxtw_d : NULL);
+}
+
+#undef DO_ZPZ
+
+/*
  *** SVE Integer Reduction Group
  */
 
