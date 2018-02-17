@@ -3751,6 +3751,86 @@ static void trans_FCVTZU_dd(DisasContext *s, arg_rpr_esz *a, uint32_t insn)
     do_zpz_ptr(s, a->rd, a->rn, a->pg, false, gen_helper_sve_fcvtzu_dd);
 }
 
+static gen_helper_gvec_3_ptr * const frint_fns[3] = {
+    gen_helper_sve_frint_h,
+    gen_helper_sve_frint_s,
+    gen_helper_sve_frint_d
+};
+
+static void trans_FRINTI(DisasContext *s, arg_rpr_esz *a, uint32_t insn)
+{
+    if (a->esz == 0) {
+        unallocated_encoding(s);
+    } else {
+        do_zpz_ptr(s, a->rd, a->rn, a->pg, a->esz == MO_16,
+                   frint_fns[a->esz - 1]);
+    }
+}
+
+static void trans_FRINTX(DisasContext *s, arg_rpr_esz *a, uint32_t insn)
+{
+    static gen_helper_gvec_3_ptr * const fns[3] = {
+        gen_helper_sve_frintx_h,
+        gen_helper_sve_frintx_s,
+        gen_helper_sve_frintx_d
+    };
+    if (a->esz == 0) {
+        unallocated_encoding(s);
+    } else {
+        do_zpz_ptr(s, a->rd, a->rn, a->pg, a->esz == MO_16, fns[a->esz - 1]);
+    }
+}
+
+static void do_frint_mode(DisasContext *s, arg_rpr_esz *a, int mode)
+{
+    unsigned vsz = vec_full_reg_size(s);
+    TCGv_i32 tmode;
+    TCGv_ptr status;
+
+    if (a->esz == 0) {
+        unallocated_encoding(s);
+        return;
+    }
+
+    tmode = tcg_const_i32(mode);
+    status = get_fpstatus_ptr(a->esz == MO_16);
+    gen_helper_set_rmode(tmode, tmode, status);
+
+    tcg_gen_gvec_3_ptr(vec_full_reg_offset(s, a->rd),
+                       vec_full_reg_offset(s, a->rn),
+                       pred_full_reg_offset(s, a->pg),
+                       status, vsz, vsz, 0, frint_fns[a->esz - 1]);
+
+    gen_helper_set_rmode(tmode, tmode, status);
+    tcg_temp_free_i32(tmode);
+    tcg_temp_free_ptr(status);
+}
+
+static void trans_FRINTN(DisasContext *s, arg_rpr_esz *a, uint32_t insn)
+{
+    do_frint_mode(s, a, float_round_nearest_even);
+}
+
+static void trans_FRINTP(DisasContext *s, arg_rpr_esz *a, uint32_t insn)
+{
+    do_frint_mode(s, a, float_round_up);
+}
+
+static void trans_FRINTM(DisasContext *s, arg_rpr_esz *a, uint32_t insn)
+{
+    do_frint_mode(s, a, float_round_down);
+}
+
+static void trans_FRINTZ(DisasContext *s, arg_rpr_esz *a, uint32_t insn)
+{
+    do_frint_mode(s, a, float_round_to_zero);
+}
+
+static void trans_FRINTA(DisasContext *s, arg_rpr_esz *a, uint32_t insn)
+{
+    do_frint_mode(s, a, float_round_ties_away);
+}
+
 static void trans_SCVTF_hh(DisasContext *s, arg_rpr_esz *a, uint32_t insn)
 {
     do_zpz_ptr(s, a->rd, a->rn, a->pg, true, gen_helper_sve_scvt_hh);
