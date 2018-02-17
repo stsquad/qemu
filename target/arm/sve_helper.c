@@ -3157,6 +3157,33 @@ void HELPER(NAME)(void *vd, void *vn, void *vg, void *status, uint32_t desc) \
     }                                                           \
 }
 
+static inline float32 float16_to_float32_ieee(float16 f, float_status *s)
+{
+    return float16_to_float32(f, true, s);
+}
+
+static inline float64 float16_to_float64_ieee(float16 f, float_status *s)
+{
+    return float16_to_float64(f, true, s);
+}
+
+static inline float16 float32_to_float16_ieee(float32 f, float_status *s)
+{
+    return float32_to_float16(f, true, s);
+}
+
+static inline float16 float64_to_float16_ieee(float64 f, float_status *s)
+{
+    return float64_to_float16(f, true, s);
+}
+
+DO_ZPZ_FP(sve_fcvt_sh, uint32_t, H1_4, float32_to_float16_ieee)
+DO_ZPZ_FP(sve_fcvt_hs, uint32_t, H1_4, float16_to_float32_ieee)
+DO_ZPZ_FP_D(sve_fcvt_dh, uint64_t, float64_to_float16_ieee)
+DO_ZPZ_FP_D(sve_fcvt_hd, uint64_t, float16_to_float64_ieee)
+DO_ZPZ_FP_D(sve_fcvt_ds, uint64_t, float64_to_float32)
+DO_ZPZ_FP_D(sve_fcvt_sd, uint64_t, float32_to_float64)
+
 DO_ZPZ_FP(sve_scvt_hh, uint16_t, H1_2, int16_to_float16)
 DO_ZPZ_FP(sve_scvt_sh, uint32_t, H1_4, int32_to_float16)
 DO_ZPZ_FP(sve_scvt_ss, uint32_t, H1_4, int32_to_float32)
