@@ -1791,6 +1791,35 @@ static void trans_CPY_z_i(DisasContext *s, arg_CPY_z_i *a, uint32_t insn)
 }
 
 /*
+ *** SVE Permute Extract Group
+ */
+
+static void trans_EXT(DisasContext *s, arg_EXT *a, uint32_t insn)
+{
+    unsigned vsz = vec_full_reg_size(s);
+    unsigned n_ofs = a->imm >= vsz ? 0 : a->imm;
+    unsigned n_siz = vsz - n_ofs;
+    unsigned d = vec_full_reg_offset(s, a->rd);
+    unsigned n = vec_full_reg_offset(s, a->rn);
+    unsigned m = vec_full_reg_offset(s, a->rm);
+
+    /* Use host vector move insns if we have appropriate sizes
+       and no unfortunate overlap.  */
+    if (m != d
+        && n_ofs == size_for_gvec(n_ofs)
+        && n_siz == size_for_gvec(n_siz)
+        && (d != n || n_siz <= n_ofs)) {
+        tcg_gen_gvec_mov(0, d, n + n_ofs, n_siz, n_siz);
+        if (n_ofs != 0) {
+            tcg_gen_gvec_mov(0, d + n_siz, m, n_ofs, n_ofs);
+        }
+        return;
+    }
+
+    tcg_gen_gvec_3_ool(d, n, m, vsz, vsz, n_ofs, gen_helper_sve_ext);
+}
+
+/*
  *** SVE Memory - 32-bit Gather and Unsized Contiguous Group
  */
 
