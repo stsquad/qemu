@@ -3831,6 +3831,34 @@ static void trans_FRINTA(DisasContext *s, arg_rpr_esz *a, uint32_t insn)
     do_frint_mode(s, a, float_round_ties_away);
 }
 
+static void trans_FRECPX(DisasContext *s, arg_rpr_esz *a, uint32_t insn)
+{
+    static gen_helper_gvec_3_ptr * const fns[3] = {
+        gen_helper_sve_frecpx_h,
+        gen_helper_sve_frecpx_s,
+        gen_helper_sve_frecpx_d
+    };
+    if (a->esz == 0) {
+        unallocated_encoding(s);
+    } else {
+        do_zpz_ptr(s, a->rd, a->rn, a->pg, a->esz == MO_16, fns[a->esz - 1]);
+    }
+}
+
+static void trans_FSQRT(DisasContext *s, arg_rpr_esz *a, uint32_t insn)
+{
+    static gen_helper_gvec_3_ptr * const fns[3] = {
+        gen_helper_sve_fsqrt_h,
+        gen_helper_sve_fsqrt_s,
+        gen_helper_sve_fsqrt_d
+    };
+    if (a->esz == 0) {
+        unallocated_encoding(s);
+    } else {
+        do_zpz_ptr(s, a->rd, a->rn, a->pg, a->esz == MO_16, fns[a->esz - 1]);
+    }
+}
+
 static void trans_SCVTF_hh(DisasContext *s, arg_rpr_esz *a, uint32_t insn)
 {
     do_zpz_ptr(s, a->rd, a->rn, a->pg, true, gen_helper_sve_scvt_hh);
