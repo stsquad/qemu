@@ -2043,6 +2043,75 @@ static void trans_PUNPKHI(DisasContext *s, arg_PUNPKHI *a, uint32_t insn)
 }
 
 /*
+ *** SVE Permute - Interleaving Group
+ */
+
+static void do_zip(DisasContext *s, arg_rrr_esz *a, bool high)
+{
+    static gen_helper_gvec_3 * const fns[4] = {
+        gen_helper_sve_zip_b, gen_helper_sve_zip_h,
+        gen_helper_sve_zip_s, gen_helper_sve_zip_d,
+    };
+    unsigned vsz = vec_full_reg_size(s);
+    unsigned high_ofs = high ? vsz / 2 : 0;
+
+    tcg_gen_gvec_3_ool(vec_full_reg_offset(s, a->rd),
+                       vec_full_reg_offset(s, a->rn) + high_ofs,
+                       vec_full_reg_offset(s, a->rm) + high_ofs,
+                       vsz, vsz, 0, fns[a->esz]);
+}
+
+static void do_zzz_data_ool(DisasContext *s, arg_rrr_esz *a, int data,
+                            gen_helper_gvec_3 *fn)
+{
+    unsigned vsz = vec_full_reg_size(s);
+    tcg_gen_gvec_3_ool(vec_full_reg_offset(s, a->rd),
+                       vec_full_reg_offset(s, a->rn),
+                       vec_full_reg_offset(s, a->rm),
+                       vsz, vsz, data, fn);
+}
+
+static void trans_ZIP1_z(DisasContext *s, arg_rrr_esz *a, uint32_t insn)
+{
+    do_zip(s, a, false);
+}
+
+static void trans_ZIP2_z(DisasContext *s, arg_rrr_esz *a, uint32_t insn)
+{
+    do_zip(s, a, true);
+}
+
+static gen_helper_gvec_3 * const uzp_fns[4] = {
+    gen_helper_sve_uzp_b, gen_helper_sve_uzp_h,
+    gen_helper_sve_uzp_s, gen_helper_sve_uzp_d,
+};
+
+static void trans_UZP1_z(DisasContext *s, arg_rrr_esz *a, uint32_t insn)
+{
+    do_zzz_data_ool(s, a, 0, uzp_fns[a->esz]);
+}
+
+static void trans_UZP2_z(DisasContext *s, arg_rrr_esz *a, uint32_t insn)
+{
+    do_zzz_data_ool(s, a, 1 << a->esz, uzp_fns[a->esz]);
+}
+
+static gen_helper_gvec_3 * const trn_fns[4] = {
+    gen_helper_sve_trn_b, gen_helper_sve_trn_h,
+    gen_helper_sve_trn_s, gen_helper_sve_trn_d,
+};
+
+static void trans_TRN1_z(DisasContext *s, arg_rrr_esz *a, uint32_t insn)
+{
+    do_zzz_data_ool(s, a, 0, trn_fns[a->esz]);
+}
+
+static void trans_TRN2_z(DisasContext *s, arg_rrr_esz *a, uint32_t insn)
+{
+    do_zzz_data_ool(s, a, 1 << a->esz, trn_fns[a->esz]);
+}
+
+/*
  *** SVE Memory - 32-bit Gather and Unsized Contiguous Group
  */
 
