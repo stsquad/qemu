@@ -902,6 +902,25 @@ static void trans_FEXPA(DisasContext *s, arg_rr_esz *a, uint32_t insn)
                        vsz, vsz, 0, fns[a->esz]);
 }
 
+static void trans_FTSSEL(DisasContext *s, arg_rrr_esz *a, uint32_t insn)
+{
+    static gen_helper_gvec_3 * const fns[4] = {
+        NULL,
+        gen_helper_sve_ftssel_h,
+        gen_helper_sve_ftssel_s,
+        gen_helper_sve_ftssel_d,
+    };
+    unsigned vsz = vec_full_reg_size(s);
+    if (a->esz == 0) {
+        unallocated_encoding(s);
+        return;
+    }
+    tcg_gen_gvec_3_ool(vec_full_reg_offset(s, a->rd),
+                       vec_full_reg_offset(s, a->rn),
+                       vec_full_reg_offset(s, a->rm),
+                       vsz, vsz, 0, fns[a->esz]);
+}
+
 /*
  *** SVE Predicate Logical Operations Group
  */
