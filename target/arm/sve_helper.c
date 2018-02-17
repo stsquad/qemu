@@ -2788,3 +2788,238 @@ uint32_t HELPER(sve_while)(void *vd, uint32_t count, uint32_t pred_desc)
 
     return predtest_ones(d, oprsz, esz_mask);
 }
+
+/*
+ * Load contiguous data, protected by a governing predicate.
+ */
+#define DO_LD1(NAME, FN, TYPEE, TYPEM, H)                  \
+void HELPER(NAME)(CPUARMState *env, void *vg,              \
+                  target_ulong addr, uint32_t desc)        \
+{                                                          \
+    intptr_t i, oprsz = simd_oprsz(desc);                  \
+    intptr_t ra = GETPC();                                 \
+    unsigned rd = simd_data(desc);                         \
+    void *vd = &env->vfp.zregs[rd];                        \
+    for (i = 0; i < oprsz; ) {                             \
+        uint16_t pg = *(uint16_t *)(vg + H1_2(i >> 3));    \
+        do {                                               \
+            TYPEM m = 0;                                   \
+            if (pg & 1) {                                  \
+                m = FN(env, addr, ra);                     \
+            }                                              \
+            *(TYPEE *)(vd + H(i)) = m;                     \
+            i += sizeof(TYPEE), pg >>= sizeof(TYPEE);      \
+            addr += sizeof(TYPEM);                         \
+        } while (i & 15);                                  \
+    }                                                      \
+}
+
+#define DO_LD1_D(NAME, FN, TYPEM)                          \
+void HELPER(NAME)(CPUARMState *env, void *vg,              \
+                  target_ulong addr, uint32_t desc)        \
+{                                                          \
+    intptr_t i, oprsz = simd_oprsz(desc) / 8;              \
+    intptr_t ra = GETPC();                                 \
+    unsigned rd = simd_data(desc);                         \
+    uint64_t *d = &env->vfp.zregs[rd].d[0];                \
+    uint8_t *pg = vg;                                      \
+    for (i = 0; i < oprsz; i += 1) {                       \
+        TYPEM m = 0;                                       \
+        if (pg[H1(i)] & 1) {                               \
+            m = FN(env, addr, ra);                         \
+        }                                                  \
+        d[i] = m;                                          \
+        addr += sizeof(TYPEM);                             \
+    }                                                      \
+}
+
+#define DO_LD2(NAME, FN, TYPEE, TYPEM, H)                  \
+void HELPER(NAME)(CPUARMState *env, void *vg,              \
+                  target_ulong addr, uint32_t desc)        \
+{                                                          \
+    intptr_t i, oprsz = simd_oprsz(desc);                  \
+    intptr_t ra = GETPC();                                 \
+    unsigned rd = simd_data(desc);                         \
+    void *d1 = &env->vfp.zregs[rd];                        \
+    void *d2 = &env->vfp.zregs[(rd + 1) & 31];             \
+    for (i = 0; i < oprsz; ) {                             \
+        uint16_t pg = *(uint16_t *)(vg + H1_2(i >> 3));    \
+        do {                                               \
+            TYPEM m1 = 0, m2 = 0;                          \
+            if (pg & 1) {                                  \
+                m1 = FN(env, addr, ra);                    \
+                m2 = FN(env, addr + sizeof(TYPEM), ra);    \
+            }                                              \
+            *(TYPEE *)(d1 + H(i)) = m1;                    \
+            *(TYPEE *)(d2 + H(i)) = m2;                    \
+            i += sizeof(TYPEE), pg >>= sizeof(TYPEE);      \
+            addr += 2 * sizeof(TYPEM);                     \
+        } while (i & 15);                                  \
+    }                                                      \
+}
+
+#define DO_LD3(NAME, FN, TYPEE, TYPEM, H)                  \
+void HELPER(NAME)(CPUARMState *env, void *vg,              \
+                  target_ulong addr, uint32_t desc)        \
+{                                                          \
+    intptr_t i, oprsz = simd_oprsz(desc);                  \
+    intptr_t ra = GETPC();                                 \
+    unsigned rd = simd_data(desc);                         \
+    void *d1 = &env->vfp.zregs[rd];                        \
+    void *d2 = &env->vfp.zregs[(rd + 1) & 31];             \
+    void *d3 = &env->vfp.zregs[(rd + 2) & 31];             \
+    for (i = 0; i < oprsz; ) {                             \
+        uint16_t pg = *(uint16_t *)(vg + H1_2(i >> 3));    \
+        do {                                               \
+            TYPEM m1 = 0, m2 = 0, m3 = 0;                  \
+            if (pg & 1) {                                  \
+                m1 = FN(env, addr, ra);                    \
+                m2 = FN(env, addr + sizeof(TYPEM), ra);    \
+                m3 = FN(env, addr + 2 * sizeof(TYPEM), ra); \
+            }                                              \
+            *(TYPEE *)(d1 + H(i)) = m1;                    \
+            *(TYPEE *)(d2 + H(i)) = m2;                    \
+            *(TYPEE *)(d3 + H(i)) = m3;                    \
+            i += sizeof(TYPEE), pg >>= sizeof(TYPEE);      \
+            addr += 3 * sizeof(TYPEM);                     \
+        } while (i & 15);                                  \
+    }                                                      \
+}
+
+#define DO_LD4(NAME, FN, TYPEE, TYPEM, H)                  \
+void HELPER(NAME)(CPUARMState *env, void *vg,              \
+                  target_ulong addr, uint32_t desc)        \
+{                                                          \
+    intptr_t i, oprsz = simd_oprsz(desc);                  \
+    intptr_t ra = GETPC();                                 \
+    unsigned rd = simd_data(desc);                         \
+    void *d1 = &env->vfp.zregs[rd];                        \
+    void *d2 = &env->vfp.zregs[(rd + 1) & 31];             \
+    void *d3 = &env->vfp.zregs[(rd + 2) & 31];             \
+    void *d4 = &env->vfp.zregs[(rd + 3) & 31];             \
+    for (i = 0; i < oprsz; ) {                             \
+        uint16_t pg = *(uint16_t *)(vg + H1_2(i >> 3));    \
+        do {                                               \
+            TYPEM m1 = 0, m2 = 0, m3 = 0, m4 = 0;          \
+            if (pg & 1) {                                  \
+                m1 = FN(env, addr, ra);                    \
+                m2 = FN(env, addr + sizeof(TYPEM), ra);    \
+                m3 = FN(env, addr + 2 * sizeof(TYPEM), ra); \
+                m4 = FN(env, addr + 3 * sizeof(TYPEM), ra); \
+            }                                              \
+            *(TYPEE *)(d1 + H(i)) = m1;                    \
+            *(TYPEE *)(d2 + H(i)) = m2;                    \
+            *(TYPEE *)(d3 + H(i)) = m3;                    \
+            *(TYPEE *)(d4 + H(i)) = m4;                    \
+            i += sizeof(TYPEE), pg >>= sizeof(TYPEE);      \
+            addr += 4 * sizeof(TYPEM);                     \
+        } while (i & 15);                                  \
+    }                                                      \
+}
+
+DO_LD1(sve_ld1bhu_r, cpu_ldub_data_ra, uint16_t, uint8_t, H1_2)
+DO_LD1(sve_ld1bhs_r, cpu_ldsb_data_ra, uint16_t, int8_t, H1_2)
+DO_LD1(sve_ld1bsu_r, cpu_ldub_data_ra, uint32_t, uint8_t, H1_4)
+DO_LD1(sve_ld1bss_r, cpu_ldsb_data_ra, uint32_t, int8_t, H1_4)
+DO_LD1_D(sve_ld1bdu_r, cpu_ldub_data_ra, uint8_t)
+DO_LD1_D(sve_ld1bds_r, cpu_ldsb_data_ra, int8_t)
+
+DO_LD1(sve_ld1hsu_r, cpu_lduw_data_ra, uint32_t, uint16_t, H1_4)
+DO_LD1(sve_ld1hss_r, cpu_ldsw_data_ra, uint32_t, int8_t, H1_4)
+DO_LD1_D(sve_ld1hdu_r, cpu_lduw_data_ra, uint16_t)
+DO_LD1_D(sve_ld1hds_r, cpu_ldsw_data_ra, int16_t)
+
+DO_LD1_D(sve_ld1sdu_r, cpu_ldl_data_ra, uint32_t)
+DO_LD1_D(sve_ld1sds_r, cpu_ldl_data_ra, int32_t)
+
+DO_LD1(sve_ld1bb_r, cpu_ldub_data_ra, uint8_t, uint8_t, H1)
+DO_LD2(sve_ld2bb_r, cpu_ldub_data_ra, uint8_t, uint8_t, H1)
+DO_LD3(sve_ld3bb_r, cpu_ldub_data_ra, uint8_t, uint8_t, H1)
+DO_LD4(sve_ld4bb_r, cpu_ldub_data_ra, uint8_t, uint8_t, H1)
+
+DO_LD1(sve_ld1hh_r, cpu_lduw_data_ra, uint16_t, uint16_t, H1_2)
+DO_LD2(sve_ld2hh_r, cpu_lduw_data_ra, uint16_t, uint16_t, H1_2)
+DO_LD3(sve_ld3hh_r, cpu_lduw_data_ra, uint16_t, uint16_t, H1_2)
+DO_LD4(sve_ld4hh_r, cpu_lduw_data_ra, uint16_t, uint16_t, H1_2)
+
+DO_LD1(sve_ld1ss_r, cpu_ldl_data_ra, uint32_t, uint32_t, H1_4)
+DO_LD2(sve_ld2ss_r, cpu_ldl_data_ra, uint32_t, uint32_t, H1_4)
+DO_LD3(sve_ld3ss_r, cpu_ldl_data_ra, uint32_t, uint32_t, H1_4)
+DO_LD4(sve_ld4ss_r, cpu_ldl_data_ra, uint32_t, uint32_t, H1_4)
+
+DO_LD1_D(sve_ld1dd_r, cpu_ldq_data_ra, uint64_t)
+
+void HELPER(sve_ld2dd_r)(CPUARMState *env, void *vg,
+                         target_ulong addr, uint32_t desc)
+{
+    intptr_t i, oprsz = simd_oprsz(desc) / 8;
+    intptr_t ra = GETPC();
+    unsigned rd = simd_data(desc);
+    uint64_t *d1 = &env->vfp.zregs[rd].d[0];
+    uint64_t *d2 = &env->vfp.zregs[(rd + 1) & 31].d[0];
+    uint8_t *pg = vg;
+
+    for (i = 0; i < oprsz; i += 1) {
+        uint64_t m1 = 0, m2 = 0;
+        if (pg[H1(i)] & 1) {
+            m1 = cpu_ldq_data_ra(env, addr, ra);
+            m2 = cpu_ldq_data_ra(env, addr + 8, ra);
+        }
+        d1[i] = m1;
+        d2[i] = m2;
+        addr += 2 * 8;
+    }
+}
+
+void HELPER(sve_ld3dd_r)(CPUARMState *env, void *vg,
+                         target_ulong addr, uint32_t desc)
+{
+    intptr_t i, oprsz = simd_oprsz(desc) / 8;
+    intptr_t ra = GETPC();
+    unsigned rd = simd_data(desc);
+    uint64_t *d1 = &env->vfp.zregs[rd].d[0];
+    uint64_t *d2 = &env->vfp.zregs[(rd + 1) & 31].d[0];
+    uint64_t *d3 = &env->vfp.zregs[(rd + 2) & 31].d[0];
+    uint8_t *pg = vg;
+
+    for (i = 0; i < oprsz; i += 1) {
+        uint64_t m1 = 0, m2 = 0, m3 = 0;
+        if (pg[H1(i)] & 1) {
+            m1 = cpu_ldq_data_ra(env, addr, ra);
+            m2 = cpu_ldq_data_ra(env, addr + 8, ra);
+            m3 = cpu_ldq_data_ra(env, addr + 16, ra);
+        }
+        d1[i] = m1;
+        d2[i] = m2;
+        d3[i] = m3;
+        addr += 3 * 8;
+    }
+}
+
+void HELPER(sve_ld4dd_r)(CPUARMState *env, void *vg,
+                         target_ulong addr, uint32_t desc)
+{
+    intptr_t i, oprsz = simd_oprsz(desc) / 8;
+    intptr_t ra = GETPC();
+    unsigned rd = simd_data(desc);
+    uint64_t *d1 = &env->vfp.zregs[rd].d[0];
+    uint64_t *d2 = &env->vfp.zregs[(rd + 1) & 31].d[0];
+    uint64_t *d3 = &env->vfp.zregs[(rd + 2) & 31].d[0];
+    uint64_t *d4 = &env->vfp.zregs[(rd + 3) & 31].d[0];
+    uint8_t *pg = vg;
+
+    for (i = 0; i < oprsz; i += 1) {
+        uint64_t m1 = 0, m2 = 0, m3 = 0, m4 = 0;
+        if (pg[H1(i)] & 1) {
+            m1 = cpu_ldq_data_ra(env, addr, ra);
+            m2 = cpu_ldq_data_ra(env, addr + 8, ra);
+            m3 = cpu_ldq_data_ra(env, addr + 16, ra);
+            m4 = cpu_ldq_data_ra(env, addr + 24, ra);
+        }
+        d1[i] = m1;
+        d2[i] = m2;
+        d3[i] = m3;
+        d4[i] = m4;
+        addr += 4 * 8;
+    }
+}
