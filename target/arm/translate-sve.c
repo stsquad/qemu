@@ -2422,6 +2422,19 @@ static void trans_LASTB_r(DisasContext *s, arg_rpr_esz *a, uint32_t insn)
     do_last_general(s, a, true);
 }
 
+static void trans_CPY_m_r(DisasContext *s, arg_rpr_esz *a, uint32_t insn)
+{
+    do_cpy_m(s, a->esz, a->rd, a->rd, a->pg, cpu_reg_sp(s, a->rn));
+}
+
+static void trans_CPY_m_v(DisasContext *s, arg_rpr_esz *a, uint32_t insn)
+{
+    int ofs = vec_reg_offset(s, a->rn, 0, a->esz);
+    TCGv_i64 t = load_esz(cpu_env, ofs, a->esz);
+    do_cpy_m(s, a->esz, a->rd, a->rd, a->pg, t);
+    tcg_temp_free_i64(t);
+}
+
 /*
  *** SVE Memory - 32-bit Gather and Unsized Contiguous Group
  */
