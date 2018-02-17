@@ -12789,8 +12789,17 @@ static void disas_a64_insn(CPUARMState *env, DisasContext *s)
     s->fp_access_checked = false;
 
     switch (extract32(insn, 25, 4)) {
-    case 0x0: case 0x1: case 0x2: case 0x3: /* UNALLOCATED */
+    case 0x0: case 0x1: case 0x3: /* UNALLOCATED */
         unallocated_encoding(s);
+        break;
+    case 0x2:
+        if (!arm_dc_feature(s, ARM_FEATURE_SVE)) {
+            unallocated_encoding(s);
+        } else if (!sve_access_check(s) || !fp_access_check(s)) {
+            /* exception raised */
+        } else if (!disas_sve(s, insn)) {
+            unallocated_encoding(s);
+        }
         break;
     case 0x8: case 0x9: /* Data processing - immediate */
         disas_data_proc_imm(s, insn);
