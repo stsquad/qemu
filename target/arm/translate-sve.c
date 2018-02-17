@@ -881,6 +881,28 @@ static void trans_ADR_u32(DisasContext *s, arg_rrri *a, uint32_t insn)
 }
 
 /*
+ *** SVE Integer Misc - Unpredicated Group
+ */
+
+static void trans_FEXPA(DisasContext *s, arg_rr_esz *a, uint32_t insn)
+{
+    static gen_helper_gvec_2 * const fns[4] = {
+        NULL,
+        gen_helper_sve_fexpa_h,
+        gen_helper_sve_fexpa_s,
+        gen_helper_sve_fexpa_d,
+    };
+    unsigned vsz = vec_full_reg_size(s);
+    if (a->esz == 0) {
+        unallocated_encoding(s);
+        return;
+    }
+    tcg_gen_gvec_2_ool(vec_full_reg_offset(s, a->rd),
+                       vec_full_reg_offset(s, a->rn),
+                       vsz, vsz, 0, fns[a->esz]);
+}
+
+/*
  *** SVE Predicate Logical Operations Group
  */
 
