@@ -2948,6 +2948,59 @@ DO_ZPZ_FP_D(sve_ucvt_dd, uint64_t, uint64_to_float64)
 #undef DO_ZPZ_FP
 #undef DO_ZPZ_FP_D
 
+/* 4-operand predicated multiply-add.  This requires 7 operands to pass
+ * "properly", so we need to encode some of the registers into DESC.
+ */
+QEMU_BUILD_BUG_ON(SIMD_DATA_SHIFT + 20 > 32);
+
+#define DO_FMLA(NAME, N, H, NEG1, NEG3)                                     \
+void HELPER(NAME)(CPUARMState *env, void *vg, uint32_t desc)                \
+{                                                                           \
+    intptr_t i = 0, opr_sz = simd_oprsz(desc);                              \
+    unsigned rd = extract32(desc, SIMD_DATA_SHIFT, 5);                      \
+    unsigned rn = extract32(desc, SIMD_DATA_SHIFT + 5, 5);                  \
+    unsigned rm = extract32(desc, SIMD_DATA_SHIFT + 10, 5);                 \
+    unsigned ra = extract32(desc, SIMD_DATA_SHIFT + 15, 5);                 \
+    void *vd = &env->vfp.zregs[rd];                                         \
+    void *vn = &env->vfp.zregs[rn];                                         \
+    void *vm = &env->vfp.zregs[rm];                                         \
+    void *va = &env->vfp.zregs[ra];                                         \
+    do {                                                                    \
+        uint16_t pg = *(uint16_t *)(vg + H1_2(i >> 3));                     \
+        do {                                                                \
+            if (likely(pg & 1)) {                                           \
+                float##N e1 = *(uint##N##_t *)(vn + H(i));                  \
+                float##N e2 = *(uint##N##_t *)(vm + H(i));                  \
+                float##N e3 = *(uint##N##_t *)(va + H(i));                  \
+                float##N r;                                                 \
+                if (NEG1) e1 = float##N##_chs(e1);                          \
+                if (NEG3) e3 = float##N##_chs(e3);                          \
+                r = float##N##_muladd(e1, e2, e3, 0, &env->vfp.fp_status);  \
+                *(uint##N##_t *)(vd + H(i)) = r;                            \
+            }                                                               \
+            i += sizeof(float##N), pg >>= sizeof(float##N);                 \
+        } while (i & 15);                                                   \
+    } while (i < opr_sz);                                                   \
+}
+
+DO_FMLA(sve_fmla_zpzzz_h, 16, H1_2, 0, 0)
+DO_FMLA(sve_fmla_zpzzz_s, 32, H1_4, 0, 0)
+DO_FMLA(sve_fmla_zpzzz_d, 64, , 0, 0)
+
+DO_FMLA(sve_fmls_zpzzz_h, 16, H1_2, 0, 1)
+DO_FMLA(sve_fmls_zpzzz_s, 32, H1_4, 0, 1)
+DO_FMLA(sve_fmls_zpzzz_d, 64, , 0, 1)
+
+DO_FMLA(sve_fnmla_zpzzz_h, 16, H1_2, 1, 0)
+DO_FMLA(sve_fnmla_zpzzz_s, 32, H1_4, 1, 0)
+DO_FMLA(sve_fnmla_zpzzz_d, 64, , 1, 0)
+
+DO_FMLA(sve_fnmls_zpzzz_h, 16, H1_2, 1, 1)
+DO_FMLA(sve_fnmls_zpzzz_s, 32, H1_4, 1, 1)
+DO_FMLA(sve_fnmls_zpzzz_d, 64, , 1, 1)
+
+#undef DO_FMLA
+
 /*
  * Load contiguous data, protected by a governing predicate.
  */
