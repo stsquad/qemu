@@ -2473,6 +2473,16 @@ static void trans_RBIT(DisasContext *s, arg_rpr_esz *a, uint32_t insn)
     do_zpz_ool(s, a, fns[a->esz]);
 }
 
+static void trans_SPLICE(DisasContext *s, arg_rprr_esz *a, uint32_t insn)
+{
+    unsigned vsz = vec_full_reg_size(s);
+    tcg_gen_gvec_4_ool(vec_full_reg_offset(s, a->rd),
+                       vec_full_reg_offset(s, a->rn),
+                       vec_full_reg_offset(s, a->rm),
+                       pred_full_reg_offset(s, a->pg),
+                       vsz, vsz, a->esz, gen_helper_sve_splice);
+}
+
 /*
  *** SVE Memory - 32-bit Gather and Unsized Contiguous Group
  */
