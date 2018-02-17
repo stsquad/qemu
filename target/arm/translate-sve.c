@@ -2112,6 +2112,18 @@ static void trans_TRN2_z(DisasContext *s, arg_rrr_esz *a, uint32_t insn)
 }
 
 /*
+ *** SVE Permute Vector - Predicated Group
+ */
+
+static void trans_COMPACT(DisasContext *s, arg_rpr_esz *a, uint32_t insn)
+{
+    static gen_helper_gvec_3 * const fns[4] = {
+        NULL, NULL, gen_helper_sve_compact_s, gen_helper_sve_compact_d
+    };
+    do_zpz_ool(s, a, fns[a->esz]);
+}
+
+/*
  *** SVE Memory - 32-bit Gather and Unsized Contiguous Group
  */
 
