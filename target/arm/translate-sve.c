@@ -3137,6 +3137,50 @@ DO_ZZI(UMIN, umin)
 #undef DO_ZZI
 
 /*
+ *** SVE Floating Point Multiply-Add Indexed Group
+ */
+
+static void trans_FMLA_zzxz(DisasContext *s, arg_FMLA_zzxz *a, uint32_t insn)
+{
+    static gen_helper_gvec_4_ptr * const fns[3] = {
+        gen_helper_gvec_fmla_idx_h,
+        gen_helper_gvec_fmla_idx_s,
+        gen_helper_gvec_fmla_idx_d,
+    };
+    unsigned vsz = vec_full_reg_size(s);
+    TCGv_ptr status = get_fpstatus_ptr(a->esz == MO_16);
+
+    tcg_gen_gvec_4_ptr(vec_full_reg_offset(s, a->rd),
+                       vec_full_reg_offset(s, a->rn),
+                       vec_full_reg_offset(s, a->rm),
+                       vec_full_reg_offset(s, a->ra),
+                       status, vsz, vsz, a->index * 2 + a->sub,
+                       fns[a->esz - 1]);
+    tcg_temp_free_ptr(status);
+}
+
+/*
+ *** SVE Floating Point Multiply Indexed Group
+ */
+
+static void trans_FMUL_zzx(DisasContext *s, arg_FMUL_zzx *a, uint32_t insn)
+{
+    static gen_helper_gvec_3_ptr * const fns[3] = {
+        gen_helper_gvec_fmul_idx_h,
+        gen_helper_gvec_fmul_idx_s,
+        gen_helper_gvec_fmul_idx_d,
+    };
+    unsigned vsz = vec_full_reg_size(s);
+    TCGv_ptr status = get_fpstatus_ptr(a->esz == MO_16);
+
+    tcg_gen_gvec_3_ptr(vec_full_reg_offset(s, a->rd),
+                       vec_full_reg_offset(s, a->rn),
+                       vec_full_reg_offset(s, a->rm),
+                       status, vsz, vsz, a->index, fns[a->esz - 1]);
+    tcg_temp_free_ptr(status);
+}
+
+/*
  *** SVE Floating Point Accumulating Reduction Group
  */
 
