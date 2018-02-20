@@ -396,6 +396,7 @@ struct CPUState {
     uint32_t halted;
     uint32_t can_do_io;
     int32_t exception_index;
+    bool use_host_fpu;
 
     /* shared by kvm, hax and hvf */
     bool vcpu_dirty;

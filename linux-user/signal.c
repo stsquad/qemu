@@ -20,6 +20,7 @@
 #include "qemu/bitops.h"
 #include <sys/ucontext.h>
 #include <sys/resource.h>
+#include <fenv.h>
 
 #include "qemu.h"
 #include "qemu-common.h"
@@ -638,6 +639,15 @@ static void host_signal_handler(int host_signum, siginfo_t *info,
     target_siginfo_t tinfo;
     ucontext_t *uc = puc;
     struct emulated_sigtable *k;
+
+    /* Catch any FPU exceptions we might get from having tried to use
+     * the host FPU to speed up some calculations
+     */
+    if (host_signum == SIGFPE && cpu->use_host_fpu) {
+        cpu->use_host_fpu = false;
+        (uc->uc_mcontext.fpregs)->mxcsr |= 0x1f80;
+        return;
+    }
 
     /* the CPU emulator uses some host signals to detect exceptions,
        we forward to it some signals */

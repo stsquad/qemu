@@ -306,6 +306,10 @@ static void arm_cpu_reset(CPUState *s)
                               &env->vfp.fp_status);
     set_float_detect_tininess(float_tininess_before_rounding,
                               &env->vfp.standard_fp_status);
+
+    enable_host_fpu(&s->use_host_fpu, &env->vfp.fp_status);
+    enable_host_fpu(&s->use_host_fpu, &env->vfp.standard_fp_status);
+
 #ifndef CONFIG_USER_ONLY
     if (kvm_enabled()) {
         kvm_arm_reset_vcpu(cpu);

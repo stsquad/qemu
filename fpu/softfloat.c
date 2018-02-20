@@ -1905,10 +1905,12 @@ float64 float64_scalbn(float64 a, int n, float_status *status)
  * bits to ensure we get a correctly rounded result.
  *
  * This does mean however the calculation is slower than before,
- * especially for 64 bit floats.
+ * especially for 64 bit floats. However the caller can only do checks
+ * if they actually want to off-load to the library.
  */
 
-static FloatParts sqrt_float(FloatParts a, float_status *s, const FloatFmt *p)
+static FloatParts sqrt_float(FloatParts a, float_status *s,
+                             const FloatFmt *p, bool check_only)
 {
     uint64_t a_frac, r_frac, s_frac;
     int bit, last_bit;
@@ -1926,6 +1928,10 @@ static FloatParts sqrt_float(FloatParts a, float_status *s, const FloatFmt *p)
     }
     if (a.cls == float_class_inf) {
         return a;  /* sqrt(+inf) = +inf */
+    }
+
+    if (check_only) {
+        return a;
     }
 
     assert(a.cls == float_class_normal);
@@ -1973,21 +1979,45 @@ static FloatParts sqrt_float(FloatParts a, float_status *s, const FloatFmt *p)
 float16 __attribute__((flatten)) float16_sqrt(float16 a, float_status *status)
 {
     FloatParts pa = float16_unpack_canonical(a, status);
-    FloatParts pr = sqrt_float(pa, status, &float16_params);
+    FloatParts pr = sqrt_float(pa, status, &float16_params, false);
     return float16_round_pack_canonical(pr, status);
 }
 
 float32 __attribute__((flatten)) float32_sqrt(float32 a, float_status *status)
 {
     FloatParts pa = float32_unpack_canonical(a, status);
-    FloatParts pr = sqrt_float(pa, status, &float32_params);
+    FloatParts pr;
+
+    if (status->use_host_fpu && *status->use_host_fpu) {
+        pr = sqrt_float(pa, status, &float32_params, true);
+        if (pr.cls == float_class_normal) {
+            float32 r = __builtin_sqrt(a);
+            if (*status->use_host_fpu) {
+                return r;
+            }
+        }
+    }
+
+    pr = sqrt_float(pa, status, &float32_params, false);
     return float32_round_pack_canonical(pr, status);
 }
 
 float64 __attribute__((flatten)) float64_sqrt(float64 a, float_status *status)
 {
     FloatParts pa = float64_unpack_canonical(a, status);
-    FloatParts pr = sqrt_float(pa, status, &float64_params);
+    FloatParts pr = sqrt_float(pa, status, &float64_params, true);
+
+    if (status->use_host_fpu && *status->use_host_fpu) {
+        pr = sqrt_float(pa, status, &float64_params, true);
+        if (pr.cls == float_class_normal) {
+            float64 r = __builtin_sqrt(a);
+            if (*status->use_host_fpu) {
+                return r;
+            }
+        }
+    }
+
+    pr = sqrt_float(pa, status, &float64_params, false);
     return float64_round_pack_canonical(pr, status);
 }
 

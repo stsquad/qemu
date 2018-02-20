@@ -174,6 +174,8 @@ typedef struct float_status {
     flag flush_inputs_to_zero;
     flag default_nan_mode;
     flag snan_bit_is_one;
+    /* can we use the host_fpu for some things? */
+    bool *use_host_fpu;
 } float_status;
 
 #endif /* SOFTFLOAT_TYPES_H */

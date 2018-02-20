@@ -20,6 +20,7 @@
 #include "qemu-version.h"
 #include <sys/syscall.h>
 #include <sys/resource.h>
+#include <fenv.h>
 
 #include "qapi/error.h"
 #include "qemu.h"
@@ -4927,6 +4928,13 @@ int main(int argc, char **argv, char **envp)
         }
         gdb_handlesig(cpu, 0);
     }
+
+    feenableexcept(FE_INVALID   |
+                   FE_OVERFLOW  |
+                   FE_UNDERFLOW |
+                   FE_INEXACT);
+    cpu->use_host_fpu = true;
+
     cpu_loop(env);
     /* never exits */
     return 0;

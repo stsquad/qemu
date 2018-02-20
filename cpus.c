@@ -23,6 +23,7 @@
  */
 
 #include "qemu/osdep.h"
+#include <fenv.h>
 #include "qemu/config-file.h"
 #include "cpu.h"
 #include "monitor/monitor.h"
@@ -1078,8 +1079,34 @@ static void qemu_init_sigbus(void)
 
     prctl(PR_MCE_KILL, PR_MCE_KILL_SET, PR_MCE_KILL_EARLY, 0, 0);
 }
+
+static void sigfpu_handler(int n, siginfo_t *siginfo, void *ctx)
+{
+    fprintf(stderr, "%s: got %d, %p/%p\n", __func__, n, siginfo, ctx);
+
+    /* Called asynchronously in VCPU thread.  */
+    g_assert(current_cpu);
+}
+
+static void qemu_init_sigfpu(void)
+{
+    struct sigaction action;
+
+    memset(&action, 0, sizeof(action));
+    action.sa_flags = SA_SIGINFO;
+    action.sa_sigaction = sigfpu_handler;
+    sigaction(SIGBUS, &action, NULL);
+
+    feenableexcept(FE_INVALID   |
+                   FE_OVERFLOW  |
+                   FE_UNDERFLOW |
+                   FE_INEXACT);
+}
 #else /* !CONFIG_LINUX */
 static void qemu_init_sigbus(void)
+{
+}
+static void qemu_init_sigfpu(void)
 {
 }
 #endif /* !CONFIG_LINUX */
@@ -1827,6 +1854,7 @@ static void qemu_tcg_init_vcpu(CPUState *cpu)
     if (!tcg_region_inited) {
         tcg_region_inited = 1;
         tcg_region_init();
+        qemu_init_sigfpu();
     }
 
     if (qemu_tcg_mttcg_enabled() || !single_tcg_cpu_thread) {

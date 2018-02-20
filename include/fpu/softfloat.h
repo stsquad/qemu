@@ -157,6 +157,10 @@ static inline flag get_default_nan_mode(float_status *status)
 {
     return status->default_nan_mode;
 }
+static inline void enable_host_fpu(bool *host_fpu_flag, float_status *status)
+{
+    status->use_host_fpu = host_fpu_flag;
+}
 
 /*----------------------------------------------------------------------------
 | Routine to raise any or all of the software IEC/IEEE floating-point
