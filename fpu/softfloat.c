@@ -1195,6 +1195,51 @@ float64 float64_div(float64 a, float64 b, float_status *status)
 }
 
 /*
+ * Float to Float conversions
+ *
+ * Returns the result of converting one float format to another. The
+ * conversion is performed according to the IEC/IEEE Standard for
+ * Binary Floating-Point Arithmetic.
+ */
+
+float32 float16_to_float32(float16 a, bool ieee, float_status *s)
+{
+    FloatParts p = float16_unpack_canonical(a, s);
+    return float32_round_pack_canonical(p, s);
+}
+
+float64 float16_to_float64(float16 a, bool ieee, float_status *s)
+{
+    FloatParts p = float16_unpack_canonical(a, s);
+    return float64_round_pack_canonical(p, s);
+}
+
+float16 float32_to_float16(float32 a, bool ieee, float_status *s)
+{
+    FloatParts p = float32_unpack_canonical(a, s);
+    return float16_round_pack_canonical(p, s);
+}
+
+float64 float32_to_float64(float32 a, float_status *s)
+{
+    FloatParts p = float32_unpack_canonical(a, s);
+    return float64_round_pack_canonical(p, s);
+}
+
+float16 float64_to_float16(float64 a, bool ieee, float_status *s)
+{
+    FloatParts p = float64_unpack_canonical(a, s);
+    return float16_round_pack_canonical(p, s);
+}
+
+float32 float64_to_float32(float64 a, float_status *s)
+{
+    FloatParts p = float64_unpack_canonical(a, s);
+    return float32_round_pack_canonical(p, s);
+}
+
+
+/*
  * Rounds the floating-point value `a' to an integer, and returns the
  * result as a floating-point value. The operation is performed
  * according to the IEC/IEEE Standard for Binary Floating-Point
@@ -3132,41 +3177,6 @@ float128 uint64_to_float128(uint64_t a, float_status *status)
     return normalizeRoundAndPackFloat128(0, 0x406E, a, 0, status);
 }
 
-
-
-
-/*----------------------------------------------------------------------------
-| Returns the result of converting the single-precision floating-point value
-| `a' to the double-precision floating-point format.  The conversion is
-| performed according to the IEC/IEEE Standard for Binary Floating-Point
-| Arithmetic.
-*----------------------------------------------------------------------------*/
-
-float64 float32_to_float64(float32 a, float_status *status)
-{
-    flag aSign;
-    int aExp;
-    uint32_t aSig;
-    a = float32_squash_input_denormal(a, status);
-
-    aSig = extractFloat32Frac( a );
-    aExp = extractFloat32Exp( a );
-    aSign = extractFloat32Sign( a );
-    if ( aExp == 0xFF ) {
-        if (aSig) {
-            return commonNaNToFloat64(float32ToCommonNaN(a, status), status);
-        }
-        return packFloat64( aSign, 0x7FF, 0 );
-    }
-    if ( aExp == 0 ) {
-        if ( aSig == 0 ) return packFloat64( aSign, 0, 0 );
-        normalizeFloat32Subnormal( aSig, &aExp, &aSig );
-        --aExp;
-    }
-    return packFloat64( aSign, aExp + 0x380, ( (uint64_t) aSig )<<29 );
-
-}
-
 /*----------------------------------------------------------------------------
 | Returns the result of converting the single-precision floating-point value
 | `a' to the extended double-precision floating-point format.  The conversion
@@ -3685,42 +3695,7 @@ int float32_unordered_quiet(float32 a, float32 b, float_status *status)
     return 0;
 }
 
-
-/*----------------------------------------------------------------------------
-| Returns the result of converting the double-precision floating-point value
-| `a' to the single-precision floating-point format.  The conversion is
-| performed according to the IEC/IEEE Standard for Binary Floating-Point
-| Arithmetic.
-*----------------------------------------------------------------------------*/
-
-float32 float64_to_float32(float64 a, float_status *status)
-{
-    flag aSign;
-    int aExp;
-    uint64_t aSig;
-    uint32_t zSig;
-    a = float64_squash_input_denormal(a, status);
-
-    aSig = extractFloat64Frac( a );
-    aExp = extractFloat64Exp( a );
-    aSign = extractFloat64Sign( a );
-    if ( aExp == 0x7FF ) {
-        if (aSig) {
-            return commonNaNToFloat32(float64ToCommonNaN(a, status), status);
-        }
-        return packFloat32( aSign, 0xFF, 0 );
-    }
-    shift64RightJamming( aSig, 22, &aSig );
-    zSig = aSig;
-    if ( aExp || zSig ) {
-        zSig |= 0x40000000;
-        aExp -= 0x381;
-    }
-    return roundAndPackFloat32(aSign, aExp, zSig, status);
-
-}
-
-
+#if 0
 /*----------------------------------------------------------------------------
 | Packs the sign `zSign', exponent `zExp', and significand `zSig' into a
 | half-precision floating-point value, returning the result.  After being
@@ -3852,6 +3827,8 @@ static float16 roundAndPackFloat16(flag zSign, int zExp,
     return packFloat16(zSign, zExp, zSig >> 13);
 }
 
+#endif
+
 /*----------------------------------------------------------------------------
 | If `a' is denormal and we are in flush-to-zero mode then set the
 | input-denormal exception and return zero. Otherwise just return the value.
@@ -3866,7 +3843,7 @@ float16 float16_squash_input_denormal(float16 a, float_status *status)
     }
     return a;
 }
-
+#if 0
 static void normalizeFloat16Subnormal(uint32_t aSig, int *zExpPtr,
                                       uint32_t *zSigPtr)
 {
@@ -3874,156 +3851,7 @@ static void normalizeFloat16Subnormal(uint32_t aSig, int *zExpPtr,
     *zSigPtr = aSig << shiftCount;
     *zExpPtr = 1 - shiftCount;
 }
-
-/* Half precision floats come in two formats: standard IEEE and "ARM" format.
-   The latter gains extra exponent range by omitting the NaN/Inf encodings.  */
-
-float32 float16_to_float32(float16 a, flag ieee, float_status *status)
-{
-    flag aSign;
-    int aExp;
-    uint32_t aSig;
-
-    aSign = extractFloat16Sign(a);
-    aExp = extractFloat16Exp(a);
-    aSig = extractFloat16Frac(a);
-
-    if (aExp == 0x1f && ieee) {
-        if (aSig) {
-            return commonNaNToFloat32(float16ToCommonNaN(a, status), status);
-        }
-        return packFloat32(aSign, 0xff, 0);
-    }
-    if (aExp == 0) {
-        if (aSig == 0) {
-            return packFloat32(aSign, 0, 0);
-        }
-
-        normalizeFloat16Subnormal(aSig, &aExp, &aSig);
-        aExp--;
-    }
-    return packFloat32( aSign, aExp + 0x70, aSig << 13);
-}
-
-float16 float32_to_float16(float32 a, flag ieee, float_status *status)
-{
-    flag aSign;
-    int aExp;
-    uint32_t aSig;
-
-    a = float32_squash_input_denormal(a, status);
-
-    aSig = extractFloat32Frac( a );
-    aExp = extractFloat32Exp( a );
-    aSign = extractFloat32Sign( a );
-    if ( aExp == 0xFF ) {
-        if (aSig) {
-            /* Input is a NaN */
-            if (!ieee) {
-                float_raise(float_flag_invalid, status);
-                return packFloat16(aSign, 0, 0);
-            }
-            return commonNaNToFloat16(
-                float32ToCommonNaN(a, status), status);
-        }
-        /* Infinity */
-        if (!ieee) {
-            float_raise(float_flag_invalid, status);
-            return packFloat16(aSign, 0x1f, 0x3ff);
-        }
-        return packFloat16(aSign, 0x1f, 0);
-    }
-    if (aExp == 0 && aSig == 0) {
-        return packFloat16(aSign, 0, 0);
-    }
-    /* Decimal point between bits 22 and 23. Note that we add the 1 bit
-     * even if the input is denormal; however this is harmless because
-     * the largest possible single-precision denormal is still smaller
-     * than the smallest representable half-precision denormal, and so we
-     * will end up ignoring aSig and returning via the "always return zero"
-     * codepath.
-     */
-    aSig |= 0x00800000;
-    aExp -= 0x71;
-
-    return roundAndPackFloat16(aSign, aExp, aSig, ieee, status);
-}
-
-float64 float16_to_float64(float16 a, flag ieee, float_status *status)
-{
-    flag aSign;
-    int aExp;
-    uint32_t aSig;
-
-    aSign = extractFloat16Sign(a);
-    aExp = extractFloat16Exp(a);
-    aSig = extractFloat16Frac(a);
-
-    if (aExp == 0x1f && ieee) {
-        if (aSig) {
-            return commonNaNToFloat64(
-                float16ToCommonNaN(a, status), status);
-        }
-        return packFloat64(aSign, 0x7ff, 0);
-    }
-    if (aExp == 0) {
-        if (aSig == 0) {
-            return packFloat64(aSign, 0, 0);
-        }
-
-        normalizeFloat16Subnormal(aSig, &aExp, &aSig);
-        aExp--;
-    }
-    return packFloat64(aSign, aExp + 0x3f0, ((uint64_t)aSig) << 42);
-}
-
-float16 float64_to_float16(float64 a, flag ieee, float_status *status)
-{
-    flag aSign;
-    int aExp;
-    uint64_t aSig;
-    uint32_t zSig;
-
-    a = float64_squash_input_denormal(a, status);
-
-    aSig = extractFloat64Frac(a);
-    aExp = extractFloat64Exp(a);
-    aSign = extractFloat64Sign(a);
-    if (aExp == 0x7FF) {
-        if (aSig) {
-            /* Input is a NaN */
-            if (!ieee) {
-                float_raise(float_flag_invalid, status);
-                return packFloat16(aSign, 0, 0);
-            }
-            return commonNaNToFloat16(
-                float64ToCommonNaN(a, status), status);
-        }
-        /* Infinity */
-        if (!ieee) {
-            float_raise(float_flag_invalid, status);
-            return packFloat16(aSign, 0x1f, 0x3ff);
-        }
-        return packFloat16(aSign, 0x1f, 0);
-    }
-    shift64RightJamming(aSig, 29, &aSig);
-    zSig = aSig;
-    if (aExp == 0 && zSig == 0) {
-        return packFloat16(aSign, 0, 0);
-    }
-    /* Decimal point between bits 22 and 23. Note that we add the 1 bit
-     * even if the input is denormal; however this is harmless because
-     * the largest possible single-precision denormal is still smaller
-     * than the smallest representable half-precision denormal, and so we
-     * will end up ignoring aSig and returning via the "always return zero"
-     * codepath.
-     */
-    zSig |= 0x00800000;
-    aExp -= 0x3F1;
-
-    return roundAndPackFloat16(aSign, aExp, zSig, ieee, status);
-}
-
+#endif
 /*----------------------------------------------------------------------------
 | Returns the result of converting the double-precision floating-point value
 | `a' to the extended double-precision floating-point format.  The conversion

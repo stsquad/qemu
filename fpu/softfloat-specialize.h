@@ -292,7 +292,7 @@ float16 float16_maybe_silence_nan(float16 a_, float_status *status)
     }
     return a_;
 }
-
+#if 0
 /*----------------------------------------------------------------------------
 | Returns the result of converting the half-precision floating-point NaN
 | `a' to the canonical NaN format.  If `a' is a signaling NaN, the invalid
@@ -332,6 +332,7 @@ static float16 commonNaNToFloat16(commonNaNT a, float_status *status)
         return float16_default_nan(status);
     }
 }
+#endif
 
 #ifdef NO_SIGNALING_NANS
 int float32_is_quiet_nan(float32 a_, float_status *status)
