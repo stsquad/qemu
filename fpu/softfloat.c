@@ -879,56 +879,67 @@ soft_float64_sub(float64 a, float64 b, float_status *status)
     return float64_round_pack_canonical(pr, status);
 }
 
-#define GEN_FPU_ADDSUB(add_name, sub_name, soft_t, host_t,              \
-                       host_abs_func, min_normal)                       \
-    static inline __attribute__((always_inline)) soft_t                 \
-    fpu_ ## soft_t ## _addsub(soft_t a, soft_t b, bool subtract,        \
-                              float_status *s)                          \
-    {                                                                   \
-        soft_t ## _input_flush2(&a, &b, s);                             \
-        if (likely((soft_t ## _is_normal(a) || soft_t ## _is_zero(a)) && \
-                   (soft_t ## _is_normal(b) || soft_t ## _is_zero(b)) && \
-                   s->float_exception_flags & float_flag_inexact &&     \
-                   s->float_rounding_mode == float_round_nearest_even)) { \
-            host_t ha = soft_t ## _to_ ## host_t(a);                    \
-            host_t hb = soft_t ## _to_ ## host_t(b);                    \
-            host_t hr;                                                  \
-            soft_t r;                                                   \
-                                                                        \
-            if (subtract) {                                             \
-                hb = -hb;                                               \
-            }                                                           \
-            hr = ha + hb;                                               \
-            r = host_t ## _to_ ## soft_t(hr);                           \
-            if (unlikely(soft_t ## _is_infinity(r))) {                  \
-                s->float_exception_flags |= float_flag_overflow;        \
-            } else if (unlikely(host_abs_func(hr) <= min_normal) &&     \
-                       !(soft_t ## _is_zero(a) &&                       \
-                         soft_t ## _is_zero(b))) {                      \
-                goto soft;                                              \
-            }                                                           \
-            return r;                                                   \
-        }                                                               \
-    soft:                                                               \
-        if (subtract) {                                                 \
-            return soft_ ## soft_t ## _sub(a, b, s);                    \
-        } else {                                                        \
-            return soft_ ## soft_t ## _add(a, b, s);                    \
-        }                                                               \
-    }                                                                   \
-                                                                        \
-    soft_t add_name(soft_t a, soft_t b, float_status *status)           \
-    {                                                                   \
-        return fpu_ ## soft_t ## _addsub(a, b, false, status);          \
-    }                                                                   \
-                                                                        \
-    soft_t sub_name(soft_t a, soft_t b, float_status *status)           \
-    {                                                                   \
-        return fpu_ ## soft_t ## _addsub(a, b, true, status);           \
+/* Host FPU wrappers for float32_2op
+ *
+ * We will attempt to shortcut via the FPU when:
+ *  - inputs are normal
+ *  - INEXACT is already set
+ *  - rounding mode matches host (round_nearest_even)
+ * We will use the result if
+ *  - the result in INF (setting flag)
+ *  - result is hasn't maxed out
+ *  - inputs where both zero
+ *
+ * Otherwise we continue to the softfloat implementation
+ */
+
+typedef float (fpu_2op)(float a, float b);
+typedef float32 (soft_2op)(float32 a, float32 b, float_status *s);
+
+static inline __attribute__((always_inline)) float32
+fpu_float32_2op(float32 a, float32 b, fpu_2op *op, soft_2op *sop, float_status *s)
+{
+    float32_input_flush2(&a, &b, s);
+
+    if (likely((float32_is_normal(a) || float32_is_zero(a)) &&
+              (float32_is_normal(b) || float32_is_zero(b)) &&
+              s->float_exception_flags & float_flag_inexact &&
+              s->float_rounding_mode == float_round_nearest_even)) {
+
+            float hr = op(float32_to_float(a), float32_to_float(b));
+            float32 r = float_to_float32(hr);
+
+            if (unlikely(float32_is_infinity(r))) {
+                s->float_exception_flags |= float_flag_overflow;
+            } else if (unlikely(fabsf(hr) <= FLT_MIN) &&
+                       !(float32_is_zero(a) && float32_is_zero(b))) {
+                return sop(a, b, s);
+            }
+            return r;
     }
 
-GEN_FPU_ADDSUB(float32_add, float32_sub, float32, float, fabsf, FLT_MIN)
-#undef GEN_FPU_ADDSUB
+    return sop(a, b, s);
+}
+
+/* Wrap add/sub float32 */
+
+static float fpu_add32(float a, float b) {
+    return a + b;
+}
+
+static float fpu_sub32(float a, float b) {
+    return a - b;
+}
+
+float32 float32_add(float32 a, float32 b, float_status *status)
+{
+    return fpu_float32_2op(a, b, fpu_add32, soft_float32_add, status);
+}
+
+float32 float32_sub(float32 a, float32 b, float_status *status)
+{
+    return fpu_float32_2op(a, b, fpu_sub32, soft_float32_sub, status);
+}
 
 #define GEN_FPU_ADDSUB(add_name, sub_name, soft_t, host_t,              \
                        host_abs_func, min_normal)                       \
