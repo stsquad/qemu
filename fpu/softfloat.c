@@ -893,7 +893,7 @@ soft_float64_sub(float64 a, float64 b, float_status *status)
  * Otherwise we continue to the softfloat implementation
  */
 
-typedef float (fpu_2op)(float a, float b);
+typedef float (fpu_2op)(float a, float b, bool *nocheck);
 typedef float32 (soft_2op)(float32 a, float32 b, float_status *s);
 
 static inline __attribute__((always_inline)) float32
@@ -906,8 +906,13 @@ fpu_float32_2op(float32 a, float32 b, fpu_2op *op, soft_2op *sop, float_status *
               s->float_exception_flags & float_flag_inexact &&
               s->float_rounding_mode == float_round_nearest_even)) {
 
-            float hr = op(float32_to_float(a), float32_to_float(b));
+            bool nocheck = false;
+            float hr = op(float32_to_float(a), float32_to_float(b), &nocheck);
             float32 r = float_to_float32(hr);
+
+            if (nocheck) {
+                return r;
+            }
 
             if (unlikely(float32_is_infinity(r))) {
                 s->float_exception_flags |= float_flag_overflow;
@@ -923,11 +928,11 @@ fpu_float32_2op(float32 a, float32 b, fpu_2op *op, soft_2op *sop, float_status *
 
 /* Wrap add/sub float32 */
 
-static float fpu_add32(float a, float b) {
+static float fpu_add32(float a, float b, bool *nocheck) {
     return a + b;
 }
 
-static float fpu_sub32(float a, float b) {
+static float fpu_sub32(float a, float b, bool *nocheck) {
     return a - b;
 }
 
@@ -1075,38 +1080,23 @@ soft_float64_mul(float64 a, float64 b, float_status *status)
     return float64_round_pack_canonical(pr, status);
 }
 
-#define GEN_FPU_MUL(name, soft_t, host_t, host_abs_func, min_normal)    \
-    soft_t name(soft_t a, soft_t b, float_status *s)                    \
-    {                                                                   \
-        soft_t ## _input_flush2(&a, &b, s);                             \
-        if (likely((soft_t ## _is_normal(a) || soft_t ## _is_zero(a)) && \
-                   (soft_t ## _is_normal(b) || soft_t ## _is_zero(b)) && \
-                   s->float_exception_flags & float_flag_inexact &&     \
-                   s->float_rounding_mode == float_round_nearest_even)) { \
-            if (soft_t ## _is_zero(a) || soft_t ## _is_zero(b)) {       \
-                bool signbit = soft_t ## _is_neg(a) ^ soft_t ## _is_neg(b); \
-                                                                        \
-                return soft_t ## _set_sign(soft_t ## _zero, signbit);   \
-            } else {                                                    \
-                host_t ha = soft_t ## _to_ ## host_t(a);                \
-                host_t hb = soft_t ## _to_ ## host_t(b);                \
-                host_t hr = ha * hb;                                    \
-                soft_t r = host_t ## _to_ ## soft_t(hr);                \
-                                                                        \
-                if (unlikely(soft_t ## _is_infinity(r))) {              \
-                    s->float_exception_flags |= float_flag_overflow;    \
-                } else if (unlikely(host_abs_func(hr) <= min_normal)) { \
-                    goto soft;                                          \
-                }                                                       \
-                return r;                                               \
-            }                                                           \
-        }                                                               \
-    soft:                                                               \
-        return soft_ ## soft_t ## _mul(a, b, s);                        \
-    }
+static float fpu_mul32(float a, float b, bool *nocheck) {
 
-GEN_FPU_MUL(float32_mul, float32, float, fabsf, FLT_MIN)
-#undef GEN_FPU_MUL
+    if (float32_is_zero(a) || float32_is_zero(b)) {
+        bool signbit = float32_is_neg(a) ^ float32_is_neg(b);
+        *nocheck = true;
+        return float32_set_sign((0), signbit);
+    } else {
+        float ha = float32_to_float(a);
+        float hb = float32_to_float(b);
+        float hr = ha * hb;
+        return hr;
+    }
+}
+
+float32 __attribute__((flatten)) float32_mul(float32 a, float32 b, float_status *s) {
+    return fpu_float32_2op(a, b, fpu_mul32, soft_float32_mul, s);
+}
 
 #define GEN_FPU_MUL(name, soft_t, host_t, host_abs_func, min_normal)    \
     soft_t name(soft_t a, soft_t b, float_status *s)                    \
