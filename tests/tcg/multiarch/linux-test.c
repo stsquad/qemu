@@ -16,8 +16,7 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
-#define _GNU_SOURCE
-#include "qemu/osdep.h"
+
 #include <stdarg.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -41,7 +40,6 @@
 #include <dirent.h>
 #include <setjmp.h>
 #include <sys/shm.h>
-#include "qemu/cutils.h"
 
 #define TESTPATH "/tmp/linux-test.tmp"
 #define TESTPORT 7654
