@@ -26,17 +26,23 @@ TEST_SRCS = $(wildcard $(SRC_PATH)/tests/tcg/multiarch/*.c)
 VPATH     += $(SRC_PATH)/tests/tcg/$(ARCH)
 TEST_SRCS += $(wildcard $(SRC_PATH)/tests/tcg/$(ARCH)/*.c)
 
-# We use what ever CC we have
-CFLAGS=-Wall -O0 -g -fno-strict-aliasing -static
-LDFLAGS=-nostdlib
-
 SRCS=$(notdir ${TEST_SRCS})
 TESTS=$(SRCS:.c=)
 
+# We use what ever CC we have
+CFLAGS=-Wall -O0 -g -fno-strict-aliasing -static
+LDFLAGS=
+
+testthread: LDFLAGS=-lpthread
+
 %$(EXESUF): %.c Makefile
-	$(CC) $(CFLAGS) $< -o $@
+	$(CC) $(CFLAGS) $< -o $@ $(LDFLAGS)
 
 all: $(TESTS)
 	@echo "CC is $(CC)"
 	@echo "SRCS is $(SRCS)"
 	@echo "ARCH is $(ARCH)"
+
+.PHONY: clean
+clean:
+	rm $(TESTS)
