@@ -1,13 +1,18 @@
 /* Test path override code */
-#include "config-host.h"
-#include "util/cutils.c"
-#include "util/hexdump.c"
-#include "util/iov.c"
-#include "util/path.c"
-#include "util/qemu-timer-common.c"
+
+#include "qemu/osdep.h"
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
 #include <stdarg.h>
+#include <string.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <linux/limits.h>
+
+#include "qemu/compiler.h"
+#include "qemu/cutils.h"
 
 void qemu_log(const char *fmt, ...);
 
@@ -75,7 +80,7 @@ static unsigned int do_test(void)
     if (close(creat("/tmp/qemu-test_path/DIR1/DIR2/FILE5", 0600)) != 0)
 	return __LINE__;
 
-    init_paths("/tmp/qemu-test_path");
+    /* init_paths("/tmp/qemu-test_path"); */
 
     NO_CHANGE("/tmp");
     NO_CHANGE("/tmp/");
@@ -150,8 +155,8 @@ int main(int argc, char *argv[])
     ret = do_test();
     cleanup();
     if (ret) {
-	fprintf(stderr, "test_path: failed on line %i\n", ret);
-	return 1;
+        fprintf(stderr, "test_path: failed on line %i\n", ret);
+        return 1;
     }
     return 0;
 }
