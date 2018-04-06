@@ -36,6 +36,37 @@ endif
 PROGS=$(QEMU_PROG) $(QEMU_PROGW)
 STPFILES=
 
+# Tests
+ifdef CONFIG_USER_ONLY
+
+.PHONY: guest-tests
+
+ifdef CROSS_CC_GUEST
+
+guest-tests:
+	$(call quiet-command, \
+          (mkdir -p tests && cd tests && \
+	   make -f $(SRC_PATH)/tests/tcg/Makefile CC=$(CROSS_CC_GUEST)), \
+	  "Guest tests","$(CROSS_CC_GUEST)")
+else
+ifeq ($(HAVE_USER_DOCKER),y)
+
+include $(SRC_PATH)/tests/docker/Makefile.include
+
+DOCKER_CROSS_COMPILE=docker-image-debian-ppc64el-cross
+DOCKER_COMPILE_CMD="$(SRC_PATH)/tests/docker/docker.py -s $(SRC_PATH) cc -- "
+
+
+guest-tests: $(DOCKER_CROSS_COMPILE)
+	$(call quiet-command, \
+          (mkdir -p tests && cd tests && \
+	   make -f $(SRC_PATH)/tests/tcg/Makefile CC=$(DOCKER_COMPILE_CMD)), \
+	  "Guest tests","$(DOCKER_CROSS_COMPILE)")
+
+endif
+endif
+endif
+
 config-target.h: config-target.h-timestamp
 config-target.h-timestamp: config-target.mak
 
