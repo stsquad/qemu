@@ -687,10 +687,12 @@ case "$cpu" in
   i386|i486|i586|i686|i86pc|BePC)
     cpu="i386"
     supported_cpu="yes"
+    cross_cc_i386=gcc
   ;;
   x86_64|amd64)
     cpu="x86_64"
     supported_cpu="yes"
+    cross_cc_x86_64=gcc
   ;;
   armv*b|armv*l|arm)
     cpu="arm"
@@ -7025,6 +7027,10 @@ if test "$target_bsd_user" = "yes" ; then
   echo "CONFIG_BSD_USER=y" >> $config_target_mak
 fi
 
+if test -n "$target_compiler"; then
+  echo "CROSS_CC_GUEST=$target_compiler" >> $config_target_mak
+fi
+
 # generate QEMU_CFLAGS/LDFLAGS for targets
 
 cflags=""
@@ -7032,9 +7038,6 @@ ldflags=""
 
 disas_config() {
   echo "CONFIG_${1}_DIS=y" >> $config_target_mak
-  if test -n "$target_compiler"; then
-    echo "CROSS_CC_${1}=$target_compiler" >> $config_target_mak
-  fi
   echo "CONFIG_${1}_DIS=y" >> config-all-disas.mak
 }
 
