@@ -46,7 +46,7 @@ ifdef CROSS_CC_GUEST
 guest-tests:
 	$(call quiet-command, \
           (mkdir -p tests && cd tests && \
-	   make -f $(SRC_PATH)/tests/tcg/Makefile CC=$(CROSS_CC_GUEST)), \
+	   make -f $(SRC_PATH)/tests/tcg/Makefile ARCH=$(TARGET_NAME) CC=$(CROSS_CC_GUEST)), \
 	  "Guest tests","$(CROSS_CC_GUEST)")
 else
 ifeq ($(HAVE_USER_DOCKER),y)
@@ -60,7 +60,7 @@ DOCKER_COMPILE_CMD="$(SRC_PATH)/tests/docker/docker.py -s $(SRC_PATH) cc -- "
 guest-tests: $(DOCKER_CROSS_COMPILE)
 	$(call quiet-command, \
           (mkdir -p tests && cd tests && \
-	   make -f $(SRC_PATH)/tests/tcg/Makefile CC=$(DOCKER_COMPILE_CMD)), \
+	   make -f $(SRC_PATH)/tests/tcg/Makefile ARCH=$(TARGET_NAME) CC=$(DOCKER_COMPILE_CMD)), \
 	  "Guest tests","$(DOCKER_CROSS_COMPILE)")
 
 endif
