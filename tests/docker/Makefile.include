@@ -63,6 +63,14 @@ docker-image-debian-ppc64el-cross: docker-image-debian9
 docker-image-debian-s390x-cross: docker-image-debian9
 docker-image-debian-win32-cross: docker-image-debian8-mxe
 docker-image-debian-win64-cross: docker-image-debian8-mxe
+
+# Debian SID images - we are tracking a rolling distro so we want to
+# force a re-build of the base image if we ever need to build one of
+# it's children.
+.PHONY: docker-image-sid
+docker-image-sid: NOCACHE=1
+
+docker-image-debian-alpha-cross: docker-image-debian-sid
 docker-image-travis: NOUSER=1
 
 # Expand all the pre-requistes for each docker image and test combination
