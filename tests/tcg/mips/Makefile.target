@@ -19,5 +19,4 @@ hello-mips: LDFLAGS+=-nostdlib
 # however they are intended for system tests.
 
 run-hello-mips: hello-mips
-	$(call quiet-command, /bin/true, "BROKEN TEST", "$< SKIPPED on $(TARGET_NAME)")
-
+	$(call skip-test,$<, "BROKEN")
