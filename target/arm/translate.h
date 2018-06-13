@@ -7,6 +7,7 @@
 /* internal defines */
 typedef struct DisasContext {
     DisasContextBase base;
+    CPUState *cpu;
 
     target_ulong pc;
     target_ulong page_start;
@@ -31,6 +32,12 @@ typedef struct DisasContext {
     int fp_excp_el; /* FP exception EL or 0 if enabled */
     int sve_excp_el; /* SVE exception EL or 0 if enabled */
     int sve_len;     /* SVE vector length in bytes */
+
+    /* MOVPRFX state.  -1 for inactive; otherwise bits 0-4 for source
+     * register, and bit 5 indicates movprfx just issued.
+     */
+    int sve_movprfx;
+
     /* Flag indicating that exceptions from secure mode are routed to EL3. */
     bool secure_routed_to_el3;
     bool vfp_enabled; /* FP enabled via FPSCR.EN */

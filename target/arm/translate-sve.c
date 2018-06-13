@@ -96,6 +96,22 @@ static inline int msz_dtype(int msz)
     return dtype[msz];
 }
 
+/* If we have seen a movprfx, return its source register.
+ * Otherwise, pass through bits 0-4 from the insn being decoded.
+ */
+__thread int sve_movprfx;
+static int reg_movprfx(int r)
+{
+    if (sve_movprfx >= 0) {
+        r = sve_movprfx;
+        /* Indicate to aarch64_tr_translate_insn that this insn
+         * has consumed the prefix.  No guest error here!
+         */
+        sve_movprfx = SVE_MOVPRFX_INACTIVE;
+    }
+    return r;
+}
+
 /*
  * Include the generated decoder.
  */
@@ -143,13 +159,19 @@ static int pred_gvec_reg_size(DisasContext *s)
 }
 
 /* Invoke a vector expander on two Zregs.  */
+static void do_vector2_z_nocheck(DisasContext *s, GVecGen2Fn *gvec_fn,
+                                 int esz, int rd, int rn)
+{
+    unsigned vsz = vec_full_reg_size(s);
+    gvec_fn(esz, vec_full_reg_offset(s, rd),
+            vec_full_reg_offset(s, rn), vsz, vsz);
+}
+
 static bool do_vector2_z(DisasContext *s, GVecGen2Fn *gvec_fn,
                          int esz, int rd, int rn)
 {
     if (sve_access_check(s)) {
-        unsigned vsz = vec_full_reg_size(s);
-        gvec_fn(esz, vec_full_reg_offset(s, rd),
-                vec_full_reg_offset(s, rn), vsz, vsz);
+        do_vector2_z_nocheck(s, gvec_fn, esz, rd, rn);
     }
     return true;
 }
@@ -168,6 +190,11 @@ static bool do_vector3_z(DisasContext *s, GVecGen3Fn *gvec_fn,
 }
 
 /* Invoke a vector move on two Zregs.  */
+static void do_mov_z_nocheck(DisasContext *s, int rd, int rn)
+{
+    do_vector2_z_nocheck(s, tcg_gen_gvec_mov, 0, rd, rn);
+}
+
 static bool do_mov_z(DisasContext *s, int rd, int rn)
 {
     return do_vector2_z(s, tcg_gen_gvec_mov, 0, rd, rn);
@@ -4921,5 +4948,94 @@ static bool trans_PRF(DisasContext *s, arg_PRF *a, uint32_t insn)
 {
     /* Prefetch is a nop within QEMU.  */
     sve_access_check(s);
+    return true;
+}
+
+/*
+ * Move Prefix
+ */
+
+/* A prefix instruction must be followed, at PC+4, by [a proper SVE use];
+ * any other use is UNPREDICTABLE.  Which means that the only reason we
+ * should not merge is if there is some internal QEMU state for which we
+ * would break the TB before executing the next instruction.
+ */
+static bool cannot_merge_prefix(DisasContext *s)
+{
+    /* If this is the last insn in the TB, do not merge.
+     * This condition covers both end-of-page and singlestep.
+     */
+    if (s->base.num_insns == s->base.max_insns) {
+        return true;
+    }
+
+    /* If there is a breakpoint on the next insn, do not merge.  */
+    return cpu_breakpoint_test(s->cpu, s->pc, BP_ANY);
+}
+
+static bool trans_MOVPRFX(DisasContext *s, arg_MOVPRFX *a, uint32_t insn)
+{
+    /* TODO: The implementation so far can only handle predicated movprfx.
+     * The helper functions as written take an extra source register to
+     * use in the operation, but the result is only written when predication
+     * succeeds.  For unpredicated movprfx, we need to rearrange the helpers
+     * to allow the final write back to the destination to be unconditional.
+     * In the meantime, emit the move.
+     */
+    if (sve_access_check(s)) {
+        do_mov_z_nocheck(s, a->rd, a->rn);
+        /* We can still set sve_movprfx in order to diagnose guest errors.  */
+        if (!cannot_merge_prefix(s)) {
+            sve_movprfx = 32 | a->rn;  /* mark movprfx issued.  */
+        }
+    }
+    return true;
+}
+
+static bool trans_MOVPRFX_m(DisasContext *s, arg_rpr_esz *a, uint32_t insn)
+{
+    if (cannot_merge_prefix(s)) {
+        /* Implement the predicated move in terms of SEL.  */
+        arg_rprr_esz b = {
+            .rd = a->rd, .rn = a->rn, .rm = a->rd, .esz = a->esz
+        };
+        return trans_SEL_zpzz(s, &b, insn);
+    }
+    if (sve_access_check(s)) {
+        sve_movprfx = 32 | a->rn;  /* mark movprfx issued.  */
+    }
+    return true;
+}
+
+static bool trans_MOVPRFX_z(DisasContext *s, arg_rpr_esz *a, uint32_t insn)
+{
+    if (sve_access_check(s)) {
+        if (cannot_merge_prefix(s)) {
+            /* TODO: Is it worth creating a predicated zeroing move helper?  */
+            do_mov_z_nocheck(s, a->rd, a->rn);
+            do_clr_inactive_zp(s, a->rd, a->pg, a->esz);
+        } else {
+            /* This zeros the inactive elements of the operation without
+             * otherwise moving data.  As with unpredicated movprfx, we
+             * would need changes to the helpers to handle this in one step.
+             * However, we can simplify the operation.
+             *
+             * When rd != rn, we can zero the entire destination register;
+             * active elements will overwrite these zeros during the
+             * following operation.
+             *
+             * When rd == rn, we must conditionally zero inactive elements.
+             * This is nominally identical to the cannot_merge_prefix case
+             * above, however we continue to set sve_movprfx in order
+             * to diagnose incorrect uses of movprfx.
+             */
+            sve_movprfx = 32 | a->rn;  /* mark movprfx issued.  */
+            if (a->rd != a->rn) {
+                do_dupi_z(s, a->rd, 0);
+            } else {
+                do_clr_inactive_zp(s, a->rd, a->pg, a->esz);
+            }
+        }
+    }
     return true;
 }

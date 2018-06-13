@@ -13721,6 +13721,7 @@ static void aarch64_tr_init_disas_context(DisasContextBase *dcbase,
     ARMCPU *arm_cpu = arm_env_get_cpu(env);
     int bound;
 
+    dc->cpu = cpu;
     dc->pc = dc->base.pc_first;
     dc->condjmp = 0;
 
@@ -13745,6 +13746,7 @@ static void aarch64_tr_init_disas_context(DisasContextBase *dcbase,
     dc->fp_excp_el = ARM_TBFLAG_FPEXC_EL(dc->base.tb->flags);
     dc->sve_excp_el = ARM_TBFLAG_SVEEXC_EL(dc->base.tb->flags);
     dc->sve_len = (ARM_TBFLAG_ZCR_LEN(dc->base.tb->flags) + 1) * 16;
+    sve_movprfx = SVE_MOVPRFX_INACTIVE;
     dc->vec_len = 0;
     dc->vec_stride = 0;
     dc->cp_regs = arm_cpu->cp_regs;
@@ -13841,6 +13843,24 @@ static void aarch64_tr_translate_insn(DisasContextBase *dcbase, CPUState *cpu)
         dc->base.is_jmp = DISAS_NORETURN;
     } else {
         disas_a64_insn(env, dc);
+
+        if (sve_movprfx >= 0) {
+            if (sve_movprfx & SVE_MOVPRFX_PRODUCE) {
+                /* We just decoded the MOVPRFX instruction itself.
+                 * Clear that flag, leaving just the source register.
+                 */
+                sve_movprfx &= ~SVE_MOVPRFX_PRODUCE;
+            } else {
+                /* The instruction just decoded did not consume the MOVPRFX.
+                 * This is either a decoding bug, or a guest error with
+                 * UNSPECIFIED results.  Log as if for the latter.
+                 */
+                sve_movprfx = SVE_MOVPRFX_INACTIVE;
+                qemu_log_mask(LOG_GUEST_ERROR,
+                              "MOVPRFX not paired with SVE consumer at 0x%"
+                              PRIx64 "\n", dc->pc - 8);
+            }
+        }
     }
 
     dc->base.pc_next = dc->pc;
@@ -13850,6 +13870,12 @@ static void aarch64_tr_translate_insn(DisasContextBase *dcbase, CPUState *cpu)
 static void aarch64_tr_tb_stop(DisasContextBase *dcbase, CPUState *cpu)
 {
     DisasContext *dc = container_of(dcbase, DisasContext, base);
+
+    /* Arriving here with sve_movprfx active indicates a bug in
+     * cannot_merge_prefix, in that we failed to loop through
+     * aarch64_tr_translate_insn one more time for the consumer.
+     */
+    assert(sve_movprfx < 0);
 
     if (unlikely(dc->base.singlestep_enabled || dc->ss_active)) {
         /* Note that this means single stepping WFI doesn't halt the CPU.

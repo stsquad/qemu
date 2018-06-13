@@ -123,4 +123,15 @@ typedef void GVecGen2iFn(unsigned, uint32_t, uint32_t, int64_t,
 typedef void GVecGen3Fn(unsigned, uint32_t, uint32_t,
                         uint32_t, uint32_t, uint32_t);
 
+/* MOVPRFX state.  < 0 for inactive; otherwise bits 0-4 for source
+ * register, and bit 5 indicates movprfx just issued.
+ */
+#define SVE_MOVPRFX_INACTIVE  INT_MIN
+#define SVE_MOVPRFX_PRODUCE   32
+
+/* FIXME: This should be in DisasContext, but need a change to decodetree.py
+ * to pass along the pointer to !function in order to allow that.
+ */
+extern __thread int sve_movprfx;
+
 #endif /* TARGET_ARM_TRANSLATE_A64_H */
