@@ -52,7 +52,11 @@ QEMU_CFLAGS=
 LDFLAGS=
 
 # The QEMU for this TARGET
+ifdef CONFIG_SOFTMMU
+QEMU=../qemu-system-$(TARGET_NAME)
+else
 QEMU=../qemu-$(TARGET_NAME)
+endif
 
 # If TCG debugging is enabled things are a lot slower
 ifeq ($(CONFIG_DEBUG_TCG),y)
@@ -61,8 +65,12 @@ else
 TIMEOUT=15
 endif
 
-# The order we include is important. We include multiarch, base arch
-# and finally arch if it's not the same as base arch.
+ifdef CONFIG_USER_ONLY
+
+# The order we include is important. For linux-user we include
+# multiarch, base arch and finally arch if it is not the same as base
+# arch.
+
 -include $(SRC_PATH)/tests/tcg/multiarch/Makefile.target
 -include $(SRC_PATH)/tests/tcg/$(TARGET_BASE_ARCH)/Makefile.target
 ifneq ($(TARGET_BASE_ARCH),$(TARGET_NAME))
@@ -77,6 +85,15 @@ endif
 
 %: %.c
 	$(CC) $(CFLAGS) $(EXTRA_CFLAGS) $< -o $@ $(LDFLAGS)
+
+else
+
+# We handle system builds seperatly as we expect the target specific
+# makefile to be more likely to tweaks the compile setup.
+
+-include $(SRC_PATH)/tests/tcg/$(TARGET_NAME)/Makefile.system
+
+endif
 
 all: $(TESTS)
 
