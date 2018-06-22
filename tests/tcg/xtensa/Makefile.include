@@ -1,0 +1,5 @@
+# Makefile.include for xtensa targets
+
+DOCKER_IMAGE=fedora-xtensa-cross
+DOCKER_CROSS_COMPILER=xtensa-linux-gnu-gcc
+DOCKER_CROSS_LINKER=xtensa-linux-gnu-ld
