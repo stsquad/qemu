@@ -161,3 +161,11 @@ matrix:
       sudo: required
       dist: trusty
       compiler: gcc
+    # Avocado tests
+    - env: CONFIG="--target-list=x86_64-softmmu,mips-softmmu --enable-trace-backends=nop --disable-tools --disable-docs"
+           TEST_CMD="avocado run tests/acceptance"
+      python:
+        - "3.6"
+      before_script:
+        - pip install --user avocado-framework
+        - ./configure ${CONFIG} || { cat config.log && exit 1; }
