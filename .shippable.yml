@@ -37,3 +37,12 @@ build:
     - unset CC
     - ./configure ${QEMU_CONFIGURE_OPTS} --target-list=${TARGET_LIST}
     - make -j$(($(getconf _NPROCESSORS_ONLN) + 1))
+# Additional builds
+matrix:
+  include:
+    - pre_ci:
+        - ./configure --target-list=ppc-linux-user --static
+        - make -j$(($(getconf _NPROCESSORS_ONLN) + 1))
+        - make docker-image-powerpc-user-cross
+      env: IMAGE=debian-image-powerpc-user-cross
+           TARGET_LIST=ppc-softmmu
