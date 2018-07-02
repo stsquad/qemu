@@ -36,7 +36,7 @@ build:
   ci:
     - unset CC
     - ./configure ${QEMU_CONFIGURE_OPTS} --target-list=${TARGET_LIST}
-    - make -j$(($(getconf _NPROCESSORS_ONLN) + 1))#
+    - make -j$(($(getconf _NPROCESSORS_ONLN) + 1))
 # Additional builds
 matrix:
   include:
