@@ -4052,7 +4052,6 @@ DO_LD1(sve_ld1hds_r, cpu_ldsw_data_ra, uint64_t, int16_t, )
 DO_LD1(sve_ld1sdu_r, cpu_ldl_data_ra, uint64_t, uint32_t, )
 DO_LD1(sve_ld1sds_r, cpu_ldl_data_ra, uint64_t, int32_t, )
 
-DO_LD1(sve_ld1bb_r, cpu_ldub_data_ra, uint8_t, uint8_t, H1)
 DO_LD2(sve_ld2bb_r, cpu_ldub_data_ra, uint8_t, uint8_t, H1)
 DO_LD3(sve_ld3bb_r, cpu_ldub_data_ra, uint8_t, uint8_t, H1)
 DO_LD4(sve_ld4bb_r, cpu_ldub_data_ra, uint8_t, uint8_t, H1)
@@ -4078,37 +4077,436 @@ DO_LD4(sve_ld4dd_r, cpu_ldq_data_ra, uint64_t, uint64_t, )
 #undef DO_LD4
 
 /*
- * Load contiguous data, first-fault and no-fault.
+ * Special case contiguous loads of bytes to accellerate strings.
+ *
+ * The assumption is that the governing predicate will be mostly true.
+ * When it is not all true, it has been set by whilelo and so has a
+ * block of true elements followed by a block of false elements.
+ * Thus anything we can do to handle as many bytes as possible in one
+ * step will pay dividends.
  */
 
+/*
+ * Load a block of bytes from OFF to MAX into VD from one page.
+ *
+ * For softmmu, we have fully validated the guest page.  For user-only,
+ * we cannot fully validate without taking the mmap lock, but since we
+ * know the access is within one host page, if any access is valid they
+ * all must be valid.  However, it may be that no access is valid and
+ * they have all been predicated false.
+ *
+ * VD is a pointer to the vector register; VG is a pointer to the
+ * predicate register; HOST is a pointer to the guest page in host memory.
+ * Return MAX.
+ *
+ * Because of how vector registers are represented in CPUARMState,
+ * each block of 8 can be read with a little-endian load to be stored
+ * in host-endian order.
+ */
+
+/* For user-only, conditionally load and mask from HOST, returning 0
+ * if the predicate is false.  This is required because, as described
+ * above, we have not fully validated the page, and faults are not
+ * permitted when the predicate is false.
+ * For softmmu, we never arrive here with invalid host memory; just mask.
+ */
+static inline uint64_t ldq_le_pred_b(uint8_t pg, void *host)
+{
 #ifdef CONFIG_USER_ONLY
+    if (pg == 0) {
+        return 0;
+    }
+#endif
+    return ldq_le_p(host) & expand_pred_b(pg);
+}
+
+static inline uint8_t ldub_pred(uint8_t pg, void *host)
+{
+#ifdef CONFIG_USER_ONLY
+    if (!(pg & 1)) {
+        return 0;
+    }
+    return ldub_p(host);
+#else
+    return ldub_p(host) & -(pg & 1);
+#endif
+}
+
+static intptr_t sve_ld1bb_host(void *vd_in, uint8_t *vg, void *host,
+                               intptr_t off, const intptr_t max)
+{
+    const intptr_t max_div_8 = max >> 3;
+    intptr_t off_div_8 = off >> 3;
+    uint64_t *vd = vd_in;
+    uint64_t data;
+
+    /* Assuming OFF and MAX may be misaligned, but also the most common
+     * case is an entire vector register: OFF == 0, MAX % 16 == 0.
+     */
+    if (likely(off + 8 <= max)) {
+        if (unlikely(off & 63)) {
+            /* Align for a loop-of-8.  We know from the range check
+             * above that we have enough remaining to load 8 bytes.
+             */
+            if (unlikely(off & 7)) {
+                int off_7 = off & 7;
+                uint8_t pg = vg[H1(off_div_8)] >> off_7;
+
+                off_7 *= 8;
+                data = ldq_le_pred_b(pg, host + off);
+                data = deposit64(vd[off_div_8], off_7, 64 - off_7, data);
+                vd[off_div_8] = data;
+
+                off_div_8 += 1;
+            }
+
+            /* If there are not sufficient bytes to align for 64
+             * and also execute that loop at least once, skip to tail.
+             */
+            if (ROUND_UP(off_div_8, 8) + 8 > max_div_8) {
+                goto skip_64;
+            }
+
+            /* Align for the loop-of-64.  */
+            if (unlikely(off_div_8 & 7)) {
+                do {
+                    uint8_t pg = vg[off_div_8];
+                    data = ldq_le_pred_b(pg, host + off_div_8 * 8);
+                    vd[off_div_8] = data;
+                } while (++off_div_8 & 7);
+                off = off_div_8 * 8;
+            }
+        }
+
+        /* While we have blocks of 64 remaining, we can perform tests
+         * against large blocks of predicates at once.
+         */
+        for (; off_div_8 + 8 <= max_div_8; off_div_8 += 8) {
+            uint64_t pg = *(uint64_t *)(vg + off_div_8);
+            if (likely(pg == -1ULL)) {
+#ifndef HOST_WORDS_BIGENDIAN
+                memcpy(vd + off_div_8, host + off_div_8 * 8, 64);
+#else
+                intptr_t j;
+                for (j = 0; j < 8; j++) {
+                    data = ldq_le_p(host + (off_div_8 + j) * 8);
+                    vd[off_div_8 + j] = data;
+                }
+#endif
+            } else if (pg == 0) {
+                memset(vd + off_div_8, 0, 64);
+            } else {
+                intptr_t j;
+                for (j = 0; j < 8; j++) {
+                    data = ldq_le_pred_b(pg >> (j * 8),
+                                       host + (off_div_8 + j) * 8);
+                    vd[off_div_8 + j] = data;
+                }
+            }
+        }
+
+ skip_64:
+        /* Final tail or a copy smaller than 64 bytes.  */
+        for (; off_div_8 < max_div_8; off_div_8++) {
+            uint8_t pg = vg[H1(off_div_8)];
+            data = ldq_le_pred_b(pg, host + off_div_8 * 8);
+            vd[off_div_8] = data;
+        }
+
+        /* Restore using OFF.  */
+        off = off_div_8 * 8;
+    }
+
+    /* Final tail or a really small copy.  */
+    if (unlikely(off < max)) {
+        do {
+            uint8_t pg = vg[H1(off >> 3)] >> (off & 7);
+            ((uint8_t *)vd)[H1(off)] = ldub_pred(pg, host + off);
+        } while (++off < max);
+    }
+
+    return max;
+}
+
+/* Skip through a sequence of inactive elements in the guarding
+ * predicate VG, beginning at OFF bounded by MAX.
+ * Return the offset of the active element >= OFF.
+ */
+static intptr_t find_next_active(uint64_t *vg, intptr_t off, intptr_t max)
+{
+    uint64_t pg = vg[off >> 6] >> (off & 63);
+
+    /* In normal usage, the first element is active.  */
+    if (likely(pg & 1)) {
+        return off;
+    }
+
+    off &= -64;
+    while (pg == 0) {
+        if (unlikely(off >= max)) {
+            /* The entire predicate was false.  */
+            return max;
+        }
+        off += 64;
+        pg = vg[off >> 6];
+    }
+    off += ctz64(pg);
+
+    /* We should never see an out of range predicate bit set.  */
+    tcg_debug_assert(off < max);
+    return off;
+}
+
+static intptr_t max_for_page(target_ulong base, intptr_t off, intptr_t max)
+{
+    target_ulong addr = base + off;
+    intptr_t split = -(intptr_t)(addr | TARGET_PAGE_MASK);
+    return MIN(split, max - off) + off;
+}
+
+void HELPER(sve_ld1bb_r)(CPUARMState *env, void *vg,
+                         target_ulong addr, uint32_t desc)
+{
+    void *vd = &env->vfp.zregs[simd_data(desc)];
+    intptr_t split, max = simd_oprsz(desc);
+    ARMVectorReg scratch;
+    uintptr_t ra = GETPC();
+    void *host;
+    uint8_t *result;
+
+#ifdef CONFIG_USER_ONLY
+    host = g2h(addr);
+    split = max_for_page(addr, 0, max);
+
+    /* If the load is entirely within one page, then if any load is
+     * going to fault it must be the first.  Thus all updates to Vd
+     * will be after one fault.
+     */
+    result = split == max ? vd : &scratch;
+    helper_retaddr = ra;
+    sve_ld1bb_host(result, vg, host, 0, max);
+    helper_retaddr = 0;
+#else
+    int mmu_idx = cpu_mmu_index(env, false);
+    intptr_t off;
+
+    host = tlb_vaddr_to_host(env, addr, MMU_DATA_LOAD, mmu_idx);
+    if (host) {
+        split = max_for_page(addr, 0, max);
+        if (likely(split == max)) {
+            /* The load is entirely within a valid page.  No faults.  */
+            sve_ld1bb_host(vd, vg, host, 0, max);
+            return;
+        }
+    }
+
+    result = (uint8_t *)&scratch;
+    memset(result, 0, max);
+
+    for (off = find_next_active(vg, 0, max);
+         off < max;
+         off = find_next_active(vg, off, max)) {
+        host = tlb_vaddr_to_host(env, addr + off, MMU_DATA_LOAD, mmu_idx);
+        if (host) {
+            split = max_for_page(addr, off, max);
+            off = sve_ld1bb_host(result, vg, host - off, off, split);
+        } else {
+            /* Perform one normal byte read.  This may fault,
+             * trapping exactly to the OS.  It may succeed,
+             * loading the TLB entry for the next round.  It may
+             * succeed but not bring in the TLB entry in the
+             * extremely unlikely case we're performing this
+             * operation on I/O memory; but even then we have
+             * still made forward progress.
+             */
+            uint8_t data = cpu_ldub_data_ra(env, addr + off, ra);
+            result[H1(off)] = data;
+            off += 1;
+        }
+    }
+#endif
+
+    /* Write back result when faults are no longer possible.  */
+    if (vd != result) {
+        memcpy(vd, result, max);
+    }
+}
+
+/*
+ * Load contiguous data, first-fault and no-fault.
+ *
+ * For user-only, one could argue that we should hold the mmap_lock during
+ * the operation so that there is no race between page_check_range and the
+ * load operation.  However, unmapping pages out from under operating thread
+ * is extrodinarily unlikely.  This theoretical race condition also affects
+ * linux-user/ in its get_user/put_user macros.
+ *
+ * TODO: Construct some helpers, written in assembly, that interact with
+ * handle_cpu_signal to produce memory ops which can properly report errors
+ * without racing.
+ */
 
 /* Fault on byte I.  All bits in FFR from I are cleared.  The vector
- * result from I is CONSTRAINED UNPREDICTABLE; we choose the MERGE
- * option, which leaves subsequent data unchanged.
+ * result from I is CONSTRAINED UNPREDICTABLE; we choose the ZERO
+ * option, accomplished by completely zeroing a result temporary.
  */
 static void record_fault(CPUARMState *env, uintptr_t i, uintptr_t oprsz)
 {
     uint64_t *ffr = env->vfp.pregs[FFR_PRED_NUM].p;
 
     if (i & 63) {
-        ffr[i / 64] &= MAKE_64BIT_MASK(0, i & 63);
+        ffr[i >> 6] &= MAKE_64BIT_MASK(0, i & 63);
         i = ROUND_UP(i, 64);
     }
     for (; i < oprsz; i += 64) {
-        ffr[i / 64] = 0;
+        ffr[i >> 6] = 0;
     }
 }
 
-/* Hold the mmap lock during the operation so that there is no race
- * between page_check_range and the load operation.  We expect the
- * usual case to have no faults at all, so we check the whole range
- * first and if successful defer to the normal load operation.
- *
- * TODO: Change mmap_lock to a rwlock so that multiple readers
- * can run simultaneously.  This will probably help other uses
- * within QEMU as well.
- */
+void HELPER(sve_ldff1bb_r)(CPUARMState *env, void *vg,
+                           target_ulong addr, uint32_t desc)
+{
+    void *vd = &env->vfp.zregs[simd_data(desc)];
+    intptr_t off, split, max = simd_oprsz(desc);
+    ARMVectorReg scratch;
+    uint8_t *result = (uint8_t *)&scratch;
+
+#ifdef CONFIG_USER_ONLY
+    helper_retaddr = GETPC();
+
+    split = max_for_page(addr, 0, max);
+    if (likely(split == max)) {
+        /* The entire operation is within one page.  */
+        sve_ld1bb_host(vd, vg, g2h(addr), 0, max);
+        helper_retaddr = 0;
+        return;
+    }
+
+    /* Skip to the first true predicate.  */
+    off = find_next_active(vg, 0, max);
+    if (unlikely(off == max)) {
+        /* The entire predicate was false; no load occurs.  */
+        memset(vd, 0, max);
+        helper_retaddr = 0;
+        return;
+    }
+
+    /* The page containing this first element at ADDR+OFF must be valid.
+     * Take only the rest of this page.
+     */
+    memset(result, 0, max);
+    off = sve_ld1bb_host(result, vg, g2h(addr), off,
+                         max_for_page(addr, 0, max));
+    helper_retaddr = 0;
+#else
+    int mmu_idx = cpu_mmu_index(env, false);
+    void *host = tlb_vaddr_to_host(env, addr, MMU_DATA_LOAD, mmu_idx);
+
+    split = max_for_page(addr, 0, max);
+    if (likely(host != 0 && split == max)) {
+        /* The entire operation is within one page.  */
+        sve_ld1bb_host(vd, vg, host, 0, max);
+        return;
+    }
+
+    /* Skip to the first true predicate.  */
+    off = find_next_active(vg, 0, max);
+    if (unlikely(off >= max)) {
+        /* The entire predicate was false; no load occurs.  */
+        memset(vd, 0, max);
+        return;
+    }
+
+    /* Perform one normal byte read, which will fault or not.
+     * But it is likely to bring the page into the tlb.
+     */
+    memset(result, 0, max);
+    result[H1(off)] = helper_ret_ldub_mmu(env, addr,
+                                          make_memop_idx(MO_UB, mmu_idx),
+                                          GETPC());
+    off += 1;
+
+    /* Try again to read the balance of the page.  */
+    host = tlb_vaddr_to_host(env, addr + off, MMU_DATA_LOAD, mmu_idx);
+    if (likely(host != 0)) {
+        off = sve_ld1bb_host(result, vg, host - off, off,
+                             max_for_page(addr, off, max));
+    }
+#endif
+
+    memcpy(vd, result, max);
+    record_fault(env, off, max);
+}
+
+void HELPER(sve_ldnf1bb_r)(CPUARMState *env, void *vg,
+                             target_ulong addr, uint32_t desc)
+{
+    void *vd = &env->vfp.zregs[simd_data(desc)];
+    intptr_t off, max = simd_oprsz(desc);
+
+#ifdef CONFIG_USER_ONLY
+    /* Do not set helper_retaddr as there should be no fault.  */
+
+    if (likely(page_check_range(addr, max, PAGE_READ) == 0)) {
+        /* The entire operation is valid.  */
+        sve_ld1bb_host(vd, vg, g2h(addr), 0, max);
+        return;
+    }
+
+    /* There will be no fault, so we may modify in advance.  */
+    memset(vd, 0, max);
+
+    /* Skip to the first true predicate.  */
+    off = find_next_active(vg, 0, max);
+    if (unlikely(off == max)) {
+        /* The entire predicate was false; no load occurs.  */
+        return;
+    }
+
+    if (likely(page_check_range(addr + off, 1, PAGE_READ) == 0)) {
+        /* At least one byte is valid; take the rest of the page.  */
+        off = sve_ld1bb_host(vd, vg, g2h(addr), off,
+                             max_for_page(addr, off, max));
+    }
+#else
+    int mmu_idx = cpu_mmu_index(env, false);
+    intptr_t split;
+    void *host;
+
+    /* Unless we can load the entire vector from the same page,
+     * we need to search for the first active element.
+     */
+    off = 0;
+    split = max_for_page(addr, 0, max);
+    if (unlikely(split != max)) {
+        /* There will be no fault, so we may modify in advance.  */
+        memset(vd, 0, max);
+
+        off = find_next_active(vg, 0, max);
+        if (unlikely(off == max)) {
+            /* The entire predicate was false; no load occurs.  */
+            return;
+        }
+
+        /* Recompute.  */
+        split = max_for_page(addr, 0, max);
+    }
+
+    /* If the address is not in the TLB, we have no way to bring the
+     * entry into the TLB without also risking a fault.  Note that
+     * the corollary is that we never load from an address not in RAM.
+     * ??? This last may be out of spec.
+     */
+    host = tlb_vaddr_to_host(env, addr + off, MMU_DATA_LOAD, mmu_idx);
+    if (likely(host != 0)) {
+        off = sve_ld1bb_host(vd, vg, host - off, off, split);
+    }
+#endif
+
+    record_fault(env, off, max);
+}
+
+#ifdef CONFIG_USER_ONLY
 #define DO_LDFF1(PART, FN, TYPEE, TYPEM, H)                             \
 static void do_sve_ldff1##PART(CPUARMState *env, void *vd, void *vg,    \
                                target_ulong addr, intptr_t oprsz,       \
@@ -4190,7 +4588,6 @@ void HELPER(sve_ldnf1##PART)(CPUARMState *env, void *vg,        \
 
 #endif
 
-DO_LDFF1(bb_r,  cpu_ldub_data_ra, uint8_t, uint8_t, H1)
 DO_LDFF1(bhu_r, cpu_ldub_data_ra, uint16_t, uint8_t, H1_2)
 DO_LDFF1(bhs_r, cpu_ldsb_data_ra, uint16_t, int8_t, H1_2)
 DO_LDFF1(bsu_r, cpu_ldub_data_ra, uint32_t, uint8_t, H1_4)
@@ -4212,7 +4609,6 @@ DO_LDFF1(dd_r,  cpu_ldq_data_ra, uint64_t, uint64_t, )
 
 #undef DO_LDFF1
 
-DO_LDNF1(bb_r)
 DO_LDNF1(bhu_r)
 DO_LDNF1(bhs_r)
 DO_LDNF1(bsu_r)
