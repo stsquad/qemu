@@ -110,7 +110,10 @@ static void kill_qemu(QTestState *s)
         pid = waitpid(s->qemu_pid, &wstatus, 0);
 
         if (pid == s->qemu_pid && WIFSIGNALED(wstatus)) {
-            assert(!WCOREDUMP(wstatus));
+            if (WCOREDUMP(wstatus)) {
+                   fprintf(stderr, "Child QEMU (%s) dumped core\n", getenv("QTEST_QEMU_BINARY"));
+                   abort();
+            }
         }
     }
 }
