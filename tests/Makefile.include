@@ -908,6 +908,13 @@ $(patsubst %, check-%, $(check-unit-y) $(check-speed-y)): check-%: %
 		MALLOC_PERTURB_=$${MALLOC_PERTURB_:-$$(( $${RANDOM:-0} % 255 + 1))} \
 		gtester $(GTESTER_OPTIONS) -m=$(SPEED) $*,"GTESTER","$*")
 
+# Special debug rule for rcutorture:
+check-tests/rcutorture: MALLOC_PERTURB_=$${MALLOC_PERTURB_:-$$(( $${RANDOM:-0} % 255 + 1))}
+check-tests/rcutorture: tests/rcutorture$(EXESUF)
+	@if ! gtester $(GTESTER_OPTIONS) --verbose -m=$(SPEED) $*; \
+		then objdump -d $*; exit 1; \
+	fi
+
 # gtester tests with XML output
 
 $(patsubst %, check-report-qtest-%.xml, $(QTEST_TARGETS)): check-report-qtest-%.xml: $(check-qtest-y)
