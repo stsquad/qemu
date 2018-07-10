@@ -4855,7 +4855,7 @@ void HELPER(NAME)(CPUARMState *env, void *vd, void *vg, void *vm,       \
     intptr_t i, oprsz = simd_oprsz(desc);                               \
     unsigned scale = simd_data(desc);                                   \
     uintptr_t ra = GETPC();                                             \
-    for (i = 0; i < oprsz; i++) {                                       \
+    for (i = 0; i < oprsz; ) {                                          \
         uint16_t pg = *(uint16_t *)(vg + H1_2(i >> 3));                 \
         do {                                                            \
             TYPEM m = 0;                                                \
@@ -4936,7 +4936,7 @@ void HELPER(NAME)(CPUARMState *env, void *vd, void *vg, void *vm,       \
     uintptr_t ra = GETPC();                                             \
     bool first = true;                                                  \
     mmap_lock();                                                        \
-    for (i = 0; i < oprsz; i++) {                                       \
+    for (i = 0; i < oprsz; ) {                                          \
         uint16_t pg = *(uint16_t *)(vg + H1_2(i >> 3));                 \
         do {                                                            \
             TYPEM m = 0;                                                \
