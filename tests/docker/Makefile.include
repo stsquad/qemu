@@ -149,8 +149,16 @@ docker-image-debian-mips64el-user-cross: docker-binfmt-image-debian-mips64el-use
 DOCKER_USER_IMAGES += debian-mips64el-user-cross
 DOCKER_PARTIAL_IMAGES += debian-mips-cross debian-mipsel-cross debian-mips64el-cross
 
+# No ppc64el cross-compilers in non-x86 Debian images, so use linux-user
+docker-binfmt-image-debian-ppc64el-user: DEB_ARCH = ppc64el
+docker-binfmt-image-debian-ppc64el-user: DEB_TYPE = stretch
+docker-binfmt-image-debian-ppc64el-user: EXECUTABLE = ${BUILD_DIR}/ppc64le-linux-user/qemu-ppc64le
+docker-image-debian-ppc64el-user-cross: docker-binfmt-image-debian-ppc64el-user
+DOCKER_USER_IMAGES += debian-ppc64el-user-cross
+DOCKER_PARTIAL_IMAGES += debian-ppc64el-cross
+
 else
-DOCKER_PARTIAL_IMAGES += debian-mips64el-user-cross
+DOCKER_PARTIAL_IMAGES += debian-mips64el-user-cross debian-ppc64el-user-cross
 endif
 
 
