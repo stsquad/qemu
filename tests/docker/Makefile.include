@@ -157,8 +157,15 @@ docker-image-debian-ppc64el-user-cross: docker-binfmt-image-debian-ppc64el-user
 DOCKER_USER_IMAGES += debian-ppc64el-user-cross
 DOCKER_PARTIAL_IMAGES += debian-ppc64el-cross
 
+# No s390x cross-compilers in non-x86 Debian images, so use linux-user
+docker-binfmt-image-debian-s390x-user: DEB_ARCH = s390x
+docker-binfmt-image-debian-s390x-user: DEB_TYPE = stretch
+docker-binfmt-image-debian-s390x-user: EXECUTABLE = ${BUILD_DIR}/s390x-linux-user/qemu-s390x
+docker-image-debian-s390x-user-cross: docker-binfmt-image-debian-s390x-user
+DOCKER_USER_IMAGES += debian-s390x-user-cross
+DOCKER_PARTIAL_IMAGES += debian-s390x-cross
 else
-DOCKER_PARTIAL_IMAGES += debian-mips64el-user-cross debian-ppc64el-user-cross
+DOCKER_PARTIAL_IMAGES += debian-mips64el-user-cross debian-ppc64el-user-cross debian-s390x-user-cross
 endif
 
 
