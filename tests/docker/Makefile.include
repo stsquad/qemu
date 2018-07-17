@@ -136,6 +136,10 @@ DOCKER_USER_IMAGES += debian-powerpc-user
 
 ifneq ($(ARCH),x86_64)
 
+ifeq ($(ARCH),aarch64)
+# no point having a cross compiler when it is the native one
+DOCKER_PARTIAL_IMAGES += debian-arm64-cross
+endif
 
 endif
 
