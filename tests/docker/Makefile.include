@@ -141,7 +141,18 @@ ifeq ($(ARCH),aarch64)
 DOCKER_PARTIAL_IMAGES += debian-arm64-cross
 endif
 
+# No MIPS cross-compilers in non-x86 Debian images, so use linux-user
+docker-binfmt-image-debian-mips64el-user: DEB_ARCH = mips64el
+docker-binfmt-image-debian-mips64el-user: DEB_TYPE = stretch
+docker-binfmt-image-debian-mips64el-user: EXECUTABLE = ${BUILD_DIR}/mips64el-linux-user/qemu-mips64el
+docker-image-debian-mips64el-user-cross: docker-binfmt-image-debian-mips64el-user
+DOCKER_USER_IMAGES += debian-mips64el-user-cross
+DOCKER_PARTIAL_IMAGES += debian-mips-cross debian-mipsel-cross debian-mips64el-cross
+
+else
+DOCKER_PARTIAL_IMAGES += debian-mips64el-user-cross
 endif
+
 
 # Expand all the pre-requistes for each docker image and test combination
 $(foreach i,$(filter-out $(DOCKER_PARTIAL_IMAGES),$(DOCKER_IMAGES) $(DOCKER_DEPRECATED_IMAGES)), \
