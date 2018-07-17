@@ -8,7 +8,6 @@ DOCKER_DEPRECATED_IMAGES := debian
 # we don't run tests on intermediate images (used as base by another image)
 DOCKER_PARTIAL_IMAGES := debian debian8 debian9 debian8-mxe debian-ports debian-sid debian-bootstrap
 DOCKER_IMAGES := $(filter-out $(DOCKER_DEPRECATED_IMAGES),$(sort $(notdir $(basename $(wildcard $(DOCKER_FILES_DIR)/*.docker)))))
-DOCKER_TARGETS := $(patsubst %,docker-image-%,$(DOCKER_IMAGES))
 # Use a global constant ccache directory to speed up repetitive builds
 DOCKER_CCACHE_DIR := $$HOME/.cache/qemu-docker-ccache
 
@@ -37,8 +36,6 @@ $(DOCKER_SRC_COPY):
 		"COPY","RUNNER")
 
 docker-qemu-src: $(DOCKER_SRC_COPY)
-
-docker-image: ${DOCKER_TARGETS}
 
 # General rule for building docker images. If we are a sub-make
 # invoked with SKIP_DOCKER_BUILD we still check the image is up to date
@@ -142,6 +139,10 @@ $(foreach i,$(filter-out $(DOCKER_PARTIAL_IMAGES),$(DOCKER_IMAGES) $(DOCKER_DEPR
 	) \
 )
 
+# Expand a rule to build all useable images
+DOCKER_TARGETS := $(patsubst %,docker-image-%,$(filter-out $(DOCKER_PARTIAL_IMAGES),$(DOCKER_IMAGES)))
+docker-all-images: $(DOCKER_TARGETS)
+
 docker:
 	@echo 'Build QEMU and run tests inside Docker containers'
 	@echo
@@ -155,7 +156,7 @@ docker:
 	@echo '                         Note: "TEST" is one of the listed test name,'
 	@echo '                         or a script name under $$QEMU_SRC/tests/docker/;'
 	@echo '                         "IMAGE" is one of the listed container name."'
-	@echo '    docker-image:        Build all images.'
+	@echo '    docker-all-images:   Build all images.'
 	@echo '    docker-image-IMAGE:  Build image "IMAGE".'
 	@echo '    docker-run:          For manually running a "TEST" with "IMAGE"'
 	@echo
