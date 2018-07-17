@@ -1,0 +1,16 @@
+#
+# Docker mips64el user cross-compiler target
+#
+# This is a binfmt image for when the MIPS cross compilers are not
+# available in the host architecture archives. This image is based of
+# the debootstrapped qemu:debian-mips64el-user but doesn't need any
+# extra magic once it is setup.
+#
+
+FROM qemu:debian-mips64el-user
+
+MAINTAINER Alex Bennee <alex.bennee@linaro.org>
+
+RUN echo man-db man-db/auto-update boolean false | debconf-set-selections
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get build-dep -yy qemu
