@@ -127,6 +127,18 @@ docker-binfmt-image-debian-powerpc-user: EXECUTABLE = ${BUILD_DIR}/ppc-linux-use
 docker-image-debian-powerpc-user-cross: docker-binfmt-image-debian-powerpc-user
 DOCKER_USER_IMAGES += debian-powerpc-user
 
+# Modifications for non-x86 hosts
+#
+# While docker itself is now multiarch aware and will generally do the
+# right thing (assuming the source also supports multiple
+# architectures) there are still variations we need to take into
+# account. These are all done here.
+
+ifneq ($(ARCH),x86_64)
+
+
+endif
+
 # Expand all the pre-requistes for each docker image and test combination
 $(foreach i,$(filter-out $(DOCKER_PARTIAL_IMAGES),$(DOCKER_IMAGES) $(DOCKER_DEPRECATED_IMAGES)), \
 	$(foreach t,$(DOCKER_TESTS) $(DOCKER_TOOLS), \
