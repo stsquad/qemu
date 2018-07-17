@@ -136,9 +136,16 @@ DOCKER_USER_IMAGES += debian-powerpc-user
 
 ifneq ($(ARCH),x86_64)
 
+# Don't include non-multiarch images
+DOCKER_PARTIAL_IMAGES += travis centos7
+
 ifeq ($(ARCH),aarch64)
 # no point having a cross compiler when it is the native one
 DOCKER_PARTIAL_IMAGES += debian-arm64-cross
+# hub.docker.com's older Debian images are not multiarch
+DOCKER_PARTIAL_IMAGES += debian-win32-cross debian-win64-cross
+# older Ubuntu's need fixing up as well
+DOCKER_PARTIAL_IMAGES += ubuntu
 endif
 
 # No MIPS cross-compilers in non-x86 Debian images, so use linux-user
