@@ -382,6 +382,9 @@ dummy := $(call unnest-vars,, \
                 trace-obj-y \
                 slirp-obj-y)
 
+# we need to know what Docker images can be built before we can
+# decide on all the tests that can be built.
+include $(SRC_PATH)/tests/docker/Makefile.include
 include $(SRC_PATH)/tests/Makefile.include
 
 all: $(DOCS) $(TOOLS) $(HELPERS-y) recurse-all modules
@@ -959,7 +962,6 @@ endif
 # Dependencies in Makefile.objs files come from our recursive subdir rules
 -include $(wildcard *.d tests/*.d)
 
-include $(SRC_PATH)/tests/docker/Makefile.include
 include $(SRC_PATH)/tests/vm/Makefile.include
 
 .PHONY: help
