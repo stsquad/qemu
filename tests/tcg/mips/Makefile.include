@@ -6,8 +6,13 @@
 #
 
 ifeq ($(TARGET_NAME),mips64el)
+ifneq ($(ARCH),x86_64)
+DOCKER_IMAGE=debian-mips64el-user-cross
+DOCKER_CROSS_COMPILER=gcc
+else
 DOCKER_IMAGE=debian-mips64el-cross
 DOCKER_CROSS_COMPILER=mips64el-linux-gnuabi64-gcc
+endif
 else ifeq ($(TARGET_NAME),mips64)
 DOCKER_IMAGE=debian-mips64-cross
 DOCKER_CROSS_COMPILER=mips64-linux-gnuabi64-gcc
