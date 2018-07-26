@@ -926,7 +926,15 @@ uint32_t sve_zcr_len_for_el(CPUARMState *env, int el);
 
 static inline bool is_a64(CPUARMState *env)
 {
+#ifdef CONFIG_USER_ONLY
+# ifdef TARGET_AARCH64
+    return true;
+# else
+    return false;
+# endif
+#else
     return env->aarch64;
+#endif
 }
 
 /* you can call this signal handler from your SIGBUS and SIGSEGV
