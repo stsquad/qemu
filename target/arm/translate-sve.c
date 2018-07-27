@@ -4602,25 +4602,34 @@ static const uint8_t dtype_esz[16] = {
     3, 2, 1, 3
 };
 
+static TCGMemOpIdx sve_memopidx(DisasContext *s, int dtype)
+{
+    return make_memop_idx(s->be_data | dtype_mop[dtype], get_mem_index(s));
+}
+
 static void do_mem_zpa(DisasContext *s, int zt, int pg, TCGv_i64 addr,
-                       gen_helper_gvec_mem *fn)
+                       int dtype, gen_helper_gvec_mem *fn)
 {
     unsigned vsz = vec_full_reg_size(s);
     TCGv_ptr t_pg;
-    TCGv_i32 desc;
+    TCGv_i32 t_desc;
+    int desc;
 
     /* For e.g. LD4, there are not enough arguments to pass all 4
      * registers as pointers, so encode the regno into the data field.
      * For consistency, do this even for LD1.
      */
-    desc = tcg_const_i32(simd_desc(vsz, vsz, zt));
+    desc = sve_memopidx(s, dtype);
+    desc |= zt << MEMOPIDX_SHIFT;
+    desc = simd_desc(vsz, vsz, desc);
+    t_desc = tcg_const_i32(desc);
     t_pg = tcg_temp_new_ptr();
 
     tcg_gen_addi_ptr(t_pg, cpu_env, pred_full_reg_offset(s, pg));
-    fn(cpu_env, t_pg, addr, desc);
+    fn(cpu_env, t_pg, addr, t_desc);
 
     tcg_temp_free_ptr(t_pg);
-    tcg_temp_free_i32(desc);
+    tcg_temp_free_i32(t_desc);
 }
 
 static void do_ld_zpa(DisasContext *s, int zt, int pg,
@@ -4683,7 +4692,7 @@ static void do_ld_zpa(DisasContext *s, int zt, int pg,
      * accessible via the instruction encoding.
      */
     assert(fn != NULL);
-    do_mem_zpa(s, zt, pg, addr, fn);
+    do_mem_zpa(s, zt, pg, addr, dtype, fn);
 }
 
 static bool trans_LD_zprr(DisasContext *s, arg_rprr_load *a, uint32_t insn)
@@ -4766,7 +4775,8 @@ static bool trans_LDFF1_zprr(DisasContext *s, arg_rprr_load *a, uint32_t insn)
         TCGv_i64 addr = new_tmp_a64(s);
         tcg_gen_shli_i64(addr, cpu_reg(s, a->rm), dtype_msz(a->dtype));
         tcg_gen_add_i64(addr, addr, cpu_reg_sp(s, a->rn));
-        do_mem_zpa(s, a->rd, a->pg, addr, fns[s->be_data == MO_BE][a->dtype]);
+        do_mem_zpa(s, a->rd, a->pg, addr, a->dtype,
+                   fns[s->be_data == MO_BE][a->dtype]);
     }
     return true;
 }
@@ -4824,7 +4834,8 @@ static bool trans_LDNF1_zpri(DisasContext *s, arg_rpri_load *a, uint32_t insn)
         TCGv_i64 addr = new_tmp_a64(s);
 
         tcg_gen_addi_i64(addr, cpu_reg_sp(s, a->rn), off);
-        do_mem_zpa(s, a->rd, a->pg, addr, fns[s->be_data == MO_BE][a->dtype]);
+        do_mem_zpa(s, a->rd, a->pg, addr, a->dtype,
+                   fns[s->be_data == MO_BE][a->dtype]);
     }
     return true;
 }
@@ -4839,17 +4850,21 @@ static void do_ldrq(DisasContext *s, int zt, int pg, TCGv_i64 addr, int msz)
     };
     unsigned vsz = vec_full_reg_size(s);
     TCGv_ptr t_pg;
-    TCGv_i32 desc;
+    TCGv_i32 t_desc;
+    int desc;
 
     /* Load the first quadword using the normal predicated load helpers.  */
-    desc = tcg_const_i32(simd_desc(16, 16, zt));
+    desc = sve_memopidx(s, msz_dtype(msz));
+    desc |= zt << MEMOPIDX_SHIFT;
+    desc = simd_desc(16, 16, desc);
+    t_desc = tcg_const_i32(desc);
     t_pg = tcg_temp_new_ptr();
 
     tcg_gen_addi_ptr(t_pg, cpu_env, pred_full_reg_offset(s, pg));
-    fns[s->be_data == MO_BE][msz](cpu_env, t_pg, addr, desc);
+    fns[s->be_data == MO_BE][msz](cpu_env, t_pg, addr, t_desc);
 
     tcg_temp_free_ptr(t_pg);
-    tcg_temp_free_i32(desc);
+    tcg_temp_free_i32(t_desc);
 
     /* Replicate that first quadword.  */
     if (vsz > 16) {
@@ -5000,7 +5015,7 @@ static void do_st_zpa(DisasContext *s, int zt, int pg, TCGv_i64 addr,
         fn = fn_multiple[be][nreg - 1][msz];
     }
     assert(fn != NULL);
-    do_mem_zpa(s, zt, pg, addr, fn);
+    do_mem_zpa(s, zt, pg, addr, msz_dtype(msz), fn);
 }
 
 static bool trans_ST_zprr(DisasContext *s, arg_rprr_store *a, uint32_t insn)
@@ -5038,24 +5053,31 @@ static bool trans_ST_zpri(DisasContext *s, arg_rpri_store *a, uint32_t insn)
  *** SVE gather loads / scatter stores
  */
 
-static void do_mem_zpz(DisasContext *s, int zt, int pg, int zm, int scale,
-                       TCGv_i64 scalar, gen_helper_gvec_mem_scatter *fn)
+static void do_mem_zpz(DisasContext *s, int zt, int pg, int zm,
+                       int scale, TCGv_i64 scalar, int msz,
+                       gen_helper_gvec_mem_scatter *fn)
 {
     unsigned vsz = vec_full_reg_size(s);
-    TCGv_i32 desc = tcg_const_i32(simd_desc(vsz, vsz, scale));
     TCGv_ptr t_zm = tcg_temp_new_ptr();
     TCGv_ptr t_pg = tcg_temp_new_ptr();
     TCGv_ptr t_zt = tcg_temp_new_ptr();
+    TCGv_i32 t_desc;
+    int desc;
+
+    desc = sve_memopidx(s, msz_dtype(msz));
+    desc |= scale << MEMOPIDX_SHIFT;
+    desc = simd_desc(vsz, vsz, scale);
+    t_desc = tcg_const_i32(desc);
 
     tcg_gen_addi_ptr(t_pg, cpu_env, pred_full_reg_offset(s, pg));
     tcg_gen_addi_ptr(t_zm, cpu_env, vec_full_reg_offset(s, zm));
     tcg_gen_addi_ptr(t_zt, cpu_env, vec_full_reg_offset(s, zt));
-    fn(cpu_env, t_zt, t_pg, t_zm, scalar, desc);
+    fn(cpu_env, t_zt, t_pg, t_zm, scalar, t_desc);
 
     tcg_temp_free_ptr(t_zt);
     tcg_temp_free_ptr(t_zm);
     tcg_temp_free_ptr(t_pg);
-    tcg_temp_free_i32(desc);
+    tcg_temp_free_i32(t_desc);
 }
 
 /* Indexed by [be][ff][xs][u][msz].  */
@@ -5244,7 +5266,7 @@ static bool trans_LD1_zprz(DisasContext *s, arg_LD1_zprz *a, uint32_t insn)
     assert(fn != NULL);
 
     do_mem_zpz(s, a->rd, a->pg, a->rm, a->scale * a->msz,
-               cpu_reg_sp(s, a->rn), fn);
+               cpu_reg_sp(s, a->rn), a->msz, fn);
     return true;
 }
 
@@ -5275,7 +5297,7 @@ static bool trans_LD1_zpiz(DisasContext *s, arg_LD1_zpiz *a, uint32_t insn)
      * by loading the immediate into the scalar parameter.
      */
     imm = tcg_const_i64(a->imm << a->msz);
-    do_mem_zpz(s, a->rd, a->pg, a->rn, 0, imm, fn);
+    do_mem_zpz(s, a->rd, a->pg, a->rn, 0, imm, a->msz, fn);
     tcg_temp_free_i64(imm);
     return true;
 }
@@ -5350,7 +5372,7 @@ static bool trans_ST1_zprz(DisasContext *s, arg_ST1_zprz *a, uint32_t insn)
         g_assert_not_reached();
     }
     do_mem_zpz(s, a->rd, a->pg, a->rm, a->scale * a->msz,
-               cpu_reg_sp(s, a->rn), fn);
+               cpu_reg_sp(s, a->rn), a->msz, fn);
     return true;
 }
 
@@ -5381,7 +5403,7 @@ static bool trans_ST1_zpiz(DisasContext *s, arg_ST1_zpiz *a, uint32_t insn)
      * by loading the immediate into the scalar parameter.
      */
     imm = tcg_const_i64(a->imm << a->msz);
-    do_mem_zpz(s, a->rd, a->pg, a->rn, 0, imm, fn);
+    do_mem_zpz(s, a->rd, a->pg, a->rn, 0, imm, a->msz, fn);
     tcg_temp_free_i64(imm);
     return true;
 }
