@@ -5124,91 +5124,259 @@ DO_LD1_ZPZ_D(dd_be, zd)
 
 /* First fault loads with a vector index.  */
 
-#ifdef CONFIG_USER_ONLY
+/* Load one element into VD+REG_OFF from (ENV,VADDR) without faulting.
+ * The controlling predicate is known to be true.  Return true if the
+ * load was successful.
+ */
+typedef bool sve_ld1_nf_fn(CPUARMState *env, void *vd, intptr_t reg_off,
+                           target_ulong vaddr, int mmu_idx);
 
-#define DO_LDFF1_ZPZ(NAME, TYPEE, TYPEI, TYPEM, FN, H)                  \
-void HELPER(NAME)(CPUARMState *env, void *vd, void *vg, void *vm,       \
-                  target_ulong base, uint32_t desc)                     \
-{                                                                       \
-    intptr_t i, oprsz = simd_oprsz(desc);                               \
-    unsigned scale = simd_data(desc);                                   \
-    uintptr_t ra = GETPC();                                             \
-    bool first = true;                                                  \
-    mmap_lock();                                                        \
-    for (i = 0; i < oprsz; ) {                                          \
-        uint16_t pg = *(uint16_t *)(vg + H1_2(i >> 3));                 \
-        do {                                                            \
-            TYPEM m = 0;                                                \
-            if (pg & 1) {                                               \
-                target_ulong off = *(TYPEI *)(vm + H(i));               \
-                target_ulong addr = base + (off << scale);              \
-                if (!first &&                                           \
-                    page_check_range(addr, sizeof(TYPEM), PAGE_READ)) { \
-                    record_fault(env, i, oprsz);                        \
-                    goto exit;                                          \
-                }                                                       \
-                m = FN(env, addr, ra);                                  \
-                first = false;                                          \
-            }                                                           \
-            *(TYPEE *)(vd + H(i)) = m;                                  \
-            i += sizeof(TYPEE), pg >>= sizeof(TYPEE);                   \
-        } while (i & 15);                                               \
-    }                                                                   \
- exit:                                                                  \
-    mmap_unlock();                                                      \
+#ifdef CONFIG_SOFTMMU
+#define DO_LD_NF(NAME, H, TYPEE, TYPEM, HOST) \
+static bool sve_ld##NAME##_nf(CPUARMState *env, void *vd, intptr_t reg_off, \
+                            target_ulong addr, int mmu_idx)                 \
+{                                                                           \
+    target_ulong next_page = -(addr | TARGET_PAGE_MASK);                    \
+    if (likely(next_page - addr >= sizeof(TYPEM))) {                        \
+        void *host = tlb_vaddr_to_host(env, addr, MMU_DATA_LOAD, mmu_idx);  \
+        if (likely(host)) {                                                 \
+            TYPEM val = HOST(host);                                         \
+            *(TYPEE *)(vd + H(reg_off)) = val;                              \
+            return true;                                                    \
+        }                                                                   \
+    }                                                                       \
+    return false;                                                           \
 }
-
 #else
-
-#define DO_LDFF1_ZPZ(NAME, TYPEE, TYPEI, TYPEM, FN, H)                  \
-void HELPER(NAME)(CPUARMState *env, void *vd, void *vg, void *vm,       \
-                  target_ulong base, uint32_t desc)                     \
-{                                                                       \
-    g_assert_not_reached();                                             \
+#define DO_LD_NF(NAME, H, TYPEE, TYPEM, HOST) \
+static bool sve_ld##NAME##_nf(CPUARMState *env, void *vd, intptr_t reg_off, \
+                            target_ulong addr, int mmu_idx)                 \
+{                                                                           \
+    if (likely(page_check_range(addr, sizeof(TYPEM), PAGE_READ))) {         \
+        TYPEM val = HOST(g2h(addr));                                        \
+        *(TYPEE *)(vd + H(reg_off)) = val;                                  \
+        return true;                                                        \
+    }                                                                       \
+    return false;                                                           \
 }
-
 #endif
 
-#define DO_LDFF1_ZPZ_S(NAME, TYPEI, TYPEM, FN) \
-    DO_LDFF1_ZPZ(NAME, uint32_t, TYPEI, TYPEM, FN, H1_4)
-#define DO_LDFF1_ZPZ_D(NAME, TYPEI, TYPEM, FN) \
-    DO_LDFF1_ZPZ(NAME, uint64_t, TYPEI, TYPEM, FN, )
+DO_LD_NF(bsu, H1_4, uint32_t, uint8_t, ldub_p)
+DO_LD_NF(bss, H1_4, uint32_t,  int8_t, ldsb_p)
+DO_LD_NF(bdu,     , uint64_t, uint8_t, ldub_p)
+DO_LD_NF(bds,     , uint64_t,  int8_t, ldsb_p)
 
-DO_LDFF1_ZPZ_S(sve_ldffbsu_zsu, uint32_t, uint8_t,  cpu_ldub_data_ra)
-DO_LDFF1_ZPZ_S(sve_ldffhsu_zsu, uint32_t, uint16_t, cpu_lduw_data_ra)
-DO_LDFF1_ZPZ_S(sve_ldffssu_zsu, uint32_t, uint32_t, cpu_ldl_data_ra)
-DO_LDFF1_ZPZ_S(sve_ldffbss_zsu, uint32_t, int8_t,   cpu_ldub_data_ra)
-DO_LDFF1_ZPZ_S(sve_ldffhss_zsu, uint32_t, int16_t,  cpu_lduw_data_ra)
+DO_LD_NF(hsu_le, H1_4, uint32_t, uint16_t, lduw_le_p)
+DO_LD_NF(hss_le, H1_4, uint32_t,  int16_t, ldsw_le_p)
+DO_LD_NF(hsu_be, H1_4, uint32_t, uint16_t, lduw_be_p)
+DO_LD_NF(hss_be, H1_4, uint32_t,  int16_t, ldsw_be_p)
+DO_LD_NF(hdu_le,     , uint64_t, uint16_t, lduw_le_p)
+DO_LD_NF(hds_le,     , uint64_t,  int16_t, ldsw_le_p)
+DO_LD_NF(hdu_be,     , uint64_t, uint16_t, lduw_be_p)
+DO_LD_NF(hds_be,     , uint64_t,  int16_t, ldsw_be_p)
 
-DO_LDFF1_ZPZ_S(sve_ldffbsu_zss, int32_t, uint8_t,  cpu_ldub_data_ra)
-DO_LDFF1_ZPZ_S(sve_ldffhsu_zss, int32_t, uint16_t, cpu_lduw_data_ra)
-DO_LDFF1_ZPZ_S(sve_ldffssu_zss, int32_t, uint32_t, cpu_ldl_data_ra)
-DO_LDFF1_ZPZ_S(sve_ldffbss_zss, int32_t, int8_t,   cpu_ldub_data_ra)
-DO_LDFF1_ZPZ_S(sve_ldffhss_zss, int32_t, int16_t,  cpu_lduw_data_ra)
+DO_LD_NF(ss_le,  H1_4, uint32_t, uint32_t, ldl_le_p)
+DO_LD_NF(ss_be,  H1_4, uint32_t, uint32_t, ldl_be_p)
+DO_LD_NF(sdu_le,     , uint64_t, uint32_t, ldl_le_p)
+DO_LD_NF(sds_le,     , uint64_t,  int32_t, ldl_le_p)
+DO_LD_NF(sdu_be,     , uint64_t, uint32_t, ldl_be_p)
+DO_LD_NF(sds_be,     , uint64_t,  int32_t, ldl_be_p)
 
-DO_LDFF1_ZPZ_D(sve_ldffbdu_zsu, uint32_t, uint8_t,  cpu_ldub_data_ra)
-DO_LDFF1_ZPZ_D(sve_ldffhdu_zsu, uint32_t, uint16_t, cpu_lduw_data_ra)
-DO_LDFF1_ZPZ_D(sve_ldffsdu_zsu, uint32_t, uint32_t, cpu_ldl_data_ra)
-DO_LDFF1_ZPZ_D(sve_ldffddu_zsu, uint32_t, uint64_t, cpu_ldq_data_ra)
-DO_LDFF1_ZPZ_D(sve_ldffbds_zsu, uint32_t, int8_t,   cpu_ldub_data_ra)
-DO_LDFF1_ZPZ_D(sve_ldffhds_zsu, uint32_t, int16_t,  cpu_lduw_data_ra)
-DO_LDFF1_ZPZ_D(sve_ldffsds_zsu, uint32_t, int32_t,  cpu_ldl_data_ra)
+DO_LD_NF(dd_le,      , uint64_t, uint64_t, ldq_le_p)
+DO_LD_NF(dd_be,      , uint64_t, uint64_t, ldq_be_p)
 
-DO_LDFF1_ZPZ_D(sve_ldffbdu_zss, int32_t, uint8_t,  cpu_ldub_data_ra)
-DO_LDFF1_ZPZ_D(sve_ldffhdu_zss, int32_t, uint16_t, cpu_lduw_data_ra)
-DO_LDFF1_ZPZ_D(sve_ldffsdu_zss, int32_t, uint32_t, cpu_ldl_data_ra)
-DO_LDFF1_ZPZ_D(sve_ldffddu_zss, int32_t, uint64_t, cpu_ldq_data_ra)
-DO_LDFF1_ZPZ_D(sve_ldffbds_zss, int32_t, int8_t,   cpu_ldub_data_ra)
-DO_LDFF1_ZPZ_D(sve_ldffhds_zss, int32_t, int16_t,  cpu_lduw_data_ra)
-DO_LDFF1_ZPZ_D(sve_ldffsds_zss, int32_t, int32_t,  cpu_ldl_data_ra)
+/*
+ * Common helper for all gather first-faulting loads.
+ */
+struct ldff1_z_parm {
+    zreg_off_fn *off_fn;
+    sve_ld1_tlb_fn *tlb_fn;
+    sve_ld1_nf_fn *nonfault_fn;
+};
 
-DO_LDFF1_ZPZ_D(sve_ldffbdu_zd, uint64_t, uint8_t,  cpu_ldub_data_ra)
-DO_LDFF1_ZPZ_D(sve_ldffhdu_zd, uint64_t, uint16_t, cpu_lduw_data_ra)
-DO_LDFF1_ZPZ_D(sve_ldffsdu_zd, uint64_t, uint32_t, cpu_ldl_data_ra)
-DO_LDFF1_ZPZ_D(sve_ldffddu_zd, uint64_t, uint64_t, cpu_ldq_data_ra)
-DO_LDFF1_ZPZ_D(sve_ldffbds_zd, uint64_t, int8_t,   cpu_ldub_data_ra)
-DO_LDFF1_ZPZ_D(sve_ldffhds_zd, uint64_t, int16_t,  cpu_lduw_data_ra)
-DO_LDFF1_ZPZ_D(sve_ldffsds_zd, uint64_t, int32_t,  cpu_ldl_data_ra)
+static void sve_ldff1_zs(CPUARMState *env, void *vd, void *vg, void *vm,
+                         target_ulong base, uint32_t desc, uintptr_t ra,
+                         const struct ldff1_z_parm *parm)
+{
+    const int mmu_idx = cpu_mmu_index(env, false);
+    intptr_t reg_off, reg_max = simd_oprsz(desc);
+    unsigned scale = simd_data(desc);
+    ARMVectorReg scratch;
+    target_ulong addr;
+
+    /* Skip to the first true predicate.  */
+    reg_off = find_next_active(vg, 0, reg_max, MO_32);
+    if (unlikely(reg_off == reg_max)) {
+        /* The entire predicate was false; no load occurs.  */
+        memset(vd, 0, reg_max);
+        return;
+    }
+
+    /* Begin with a clear result.  For leading predicated false elements,
+     * this is the required result.  For trailing elements, this provides
+     * the constrained unpredictable ZERO consistent with any fault that
+     * we may report.
+     */
+    memset(&scratch, 0, sizeof(scratch));
+
+    /* Perform one normal read, which will fault or not.  */
+    set_helper_retaddr(ra);
+    addr = parm->off_fn(vm, reg_off);
+    addr = base + (addr << scale);
+    parm->tlb_fn(env, &scratch, reg_off, addr, mmu_idx, ra);
+
+    /* The rest of the reads will be non-faulting.  */
+    set_helper_retaddr(0);
+    while (1) {
+        reg_off = find_next_active(vg, reg_off + 4, reg_max, MO_32);
+        if (reg_off >= reg_max) {
+            break;
+        }
+
+        addr = parm->off_fn(vm, reg_off);
+        addr = base + (addr << scale);
+        if (!parm->nonfault_fn(env, &scratch, reg_off, addr, mmu_idx)) {
+            record_fault(env, reg_off, reg_max);
+            break;
+        }
+    }
+
+    memcpy(vd, &scratch, reg_max);
+}
+
+static void sve_ldff1_zd(CPUARMState *env, void *vd, void *vg, void *vm,
+                         target_ulong base, uint32_t desc, uintptr_t ra,
+                         const struct ldff1_z_parm *parm)
+{
+    const int mmu_idx = cpu_mmu_index(env, false);
+    intptr_t reg_off, reg_max = simd_oprsz(desc);
+    unsigned scale = simd_data(desc);
+    ARMVectorReg scratch;
+    target_ulong addr;
+
+    /* Skip to the first true predicate.  */
+    reg_off = find_next_active(vg, 0, reg_max, MO_64);
+    if (unlikely(reg_off == reg_max)) {
+        /* The entire predicate was false; no load occurs.  */
+        memset(vd, 0, reg_max);
+        return;
+    }
+
+    /* Begin with a clear result.  For leading predicated false elements,
+     * this is the required result.  For trailing elements, this provides
+     * the constrained unpredictable ZERO consistent with any fault that
+     * we may report.
+     */
+    memset(&scratch, 0, sizeof(scratch));
+
+    /* Perform one normal read, which will fault or not.  */
+    set_helper_retaddr(ra);
+    addr = parm->off_fn(vm, reg_off);
+    addr = base + (addr << scale);
+    parm->tlb_fn(env, &scratch, reg_off, addr, mmu_idx, ra);
+
+    /* The rest of the reads will be non-faulting.  */
+    set_helper_retaddr(0);
+    while (1) {
+        reg_off = find_next_active(vg, reg_off + 8, reg_max, MO_64);
+        if (reg_off >= reg_max) {
+            break;
+        }
+
+        addr = parm->off_fn(vm, reg_off);
+        addr = base + (addr << scale);
+        if (!parm->nonfault_fn(env, &scratch, reg_off, addr, mmu_idx)) {
+            record_fault(env, reg_off, reg_max);
+            break;
+        }
+    }
+
+    memcpy(vd, &scratch, reg_max);
+}
+
+#define DO_LDFF1_ZPZ_S(MEM, OFS) \
+void HELPER(sve_ldff##MEM##_##OFS)                                \
+    (CPUARMState *env, void *vd, void *vg, void *vm,              \
+     target_ulong base, uint32_t desc)                            \
+{                                                                 \
+    static struct ldff1_z_parm const p =                          \
+        { off_##OFS##_s, sve_ld1##MEM##_tlb, sve_ld##MEM##_nf };  \
+    sve_ldff1_zs(env, vd, vg, vm, base, desc, GETPC(), &p);       \
+}
+
+#define DO_LDFF1_ZPZ_D(MEM, OFS) \
+void HELPER(sve_ldff##MEM##_##OFS)                                \
+    (CPUARMState *env, void *vd, void *vg, void *vm,              \
+     target_ulong base, uint32_t desc)                            \
+{                                                                 \
+    static struct ldff1_z_parm const p =                          \
+        { off_##OFS##_d, sve_ld1##MEM##_tlb, sve_ld##MEM##_nf };  \
+    sve_ldff1_zd(env, vd, vg, vm, base, desc, GETPC(), &p);       \
+}
+
+DO_LDFF1_ZPZ_S(bsu, zsu)
+DO_LDFF1_ZPZ_S(bsu, zss)
+DO_LDFF1_ZPZ_D(bdu, zsu)
+DO_LDFF1_ZPZ_D(bdu, zss)
+DO_LDFF1_ZPZ_D(bdu, zd)
+
+DO_LDFF1_ZPZ_S(bss, zsu)
+DO_LDFF1_ZPZ_S(bss, zss)
+DO_LDFF1_ZPZ_D(bds, zsu)
+DO_LDFF1_ZPZ_D(bds, zss)
+DO_LDFF1_ZPZ_D(bds, zd)
+
+DO_LDFF1_ZPZ_S(hsu_le, zsu)
+DO_LDFF1_ZPZ_S(hsu_le, zss)
+DO_LDFF1_ZPZ_D(hdu_le, zsu)
+DO_LDFF1_ZPZ_D(hdu_le, zss)
+DO_LDFF1_ZPZ_D(hdu_le, zd)
+
+DO_LDFF1_ZPZ_S(hsu_be, zsu)
+DO_LDFF1_ZPZ_S(hsu_be, zss)
+DO_LDFF1_ZPZ_D(hdu_be, zsu)
+DO_LDFF1_ZPZ_D(hdu_be, zss)
+DO_LDFF1_ZPZ_D(hdu_be, zd)
+
+DO_LDFF1_ZPZ_S(hss_le, zsu)
+DO_LDFF1_ZPZ_S(hss_le, zss)
+DO_LDFF1_ZPZ_D(hds_le, zsu)
+DO_LDFF1_ZPZ_D(hds_le, zss)
+DO_LDFF1_ZPZ_D(hds_le, zd)
+
+DO_LDFF1_ZPZ_S(hss_be, zsu)
+DO_LDFF1_ZPZ_S(hss_be, zss)
+DO_LDFF1_ZPZ_D(hds_be, zsu)
+DO_LDFF1_ZPZ_D(hds_be, zss)
+DO_LDFF1_ZPZ_D(hds_be, zd)
+
+DO_LDFF1_ZPZ_S(ss_le,  zsu)
+DO_LDFF1_ZPZ_S(ss_le,  zss)
+DO_LDFF1_ZPZ_D(sdu_le, zsu)
+DO_LDFF1_ZPZ_D(sdu_le, zss)
+DO_LDFF1_ZPZ_D(sdu_le, zd)
+
+DO_LDFF1_ZPZ_S(ss_be,  zsu)
+DO_LDFF1_ZPZ_S(ss_be,  zss)
+DO_LDFF1_ZPZ_D(sdu_be, zsu)
+DO_LDFF1_ZPZ_D(sdu_be, zss)
+DO_LDFF1_ZPZ_D(sdu_be, zd)
+
+DO_LDFF1_ZPZ_D(sds_le, zsu)
+DO_LDFF1_ZPZ_D(sds_le, zss)
+DO_LDFF1_ZPZ_D(sds_le, zd)
+
+DO_LDFF1_ZPZ_D(sds_be, zsu)
+DO_LDFF1_ZPZ_D(sds_be, zss)
+DO_LDFF1_ZPZ_D(sds_be, zd)
+
+DO_LDFF1_ZPZ_D(dd_le, zsu)
+DO_LDFF1_ZPZ_D(dd_le, zss)
+DO_LDFF1_ZPZ_D(dd_le, zd)
+
+DO_LDFF1_ZPZ_D(dd_be, zsu)
+DO_LDFF1_ZPZ_D(dd_be, zss)
+DO_LDFF1_ZPZ_D(dd_be, zd)
 
 /* Stores with a vector index.  */
 
