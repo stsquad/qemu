@@ -1689,6 +1689,45 @@ static void swap_memmove(void *vd, void *vs, size_t n)
     }
 }
 
+/* Similarly for memset of 0.  */
+static void swap_memzero(void *vd, size_t n)
+{
+    uintptr_t d = (uintptr_t)vd;
+    uintptr_t o = (d | n) & 7;
+    size_t i;
+
+    if (likely(n == 0)) {
+        return;
+    }
+#ifndef HOST_WORDS_BIGENDIAN
+    o = 0;
+#endif
+    switch (o) {
+    case 0:
+        memset(vd, 0, n);
+        break;
+
+    case 4:
+        for (i = 0; i < n; i += 4) {
+            *(uint32_t *)H1_4(d + i) = 0;
+        }
+        break;
+
+    case 2:
+    case 6:
+        for (i = 0; i < n; i += 2) {
+            *(uint16_t *)H1_2(d + i) = 0;
+        }
+        break;
+
+    default:
+        for (i = 0; i < n; i++) {
+            *(uint8_t *)H1(d + i) = 0;
+        }
+        break;
+    }
+}
+
 void HELPER(sve_ext)(void *vd, void *vn, void *vm, uint32_t desc)
 {
     intptr_t opr_sz = simd_oprsz(desc);
@@ -4510,8 +4549,7 @@ DO_LDN_2(4, dd, 8)
  */
 
 /* Fault on byte I.  All bits in FFR from I are cleared.  The vector
- * result from I is CONSTRAINED UNPREDICTABLE; we choose the ZERO option,
- * by completely zeroing a result temporary before beginning the loads.
+ * result from I is CONSTRAINED UNPREDICTABLE; we choose the MERGE option.
  */
 static void record_fault(CPUARMState *env, uintptr_t i, uintptr_t oprsz)
 {
@@ -4542,9 +4580,8 @@ static void sve_ldff1_r(CPUARMState *env, void *vg, const target_ulong addr,
     const int diffsz = esz - msz;
     const intptr_t reg_max = simd_oprsz(desc);
     const intptr_t mem_max = reg_max >> diffsz;
-    ARMVectorReg scratch;
-    void *result, *host;
     intptr_t split, reg_off, mem_off;
+    void *host;
 
     set_helper_retaddr(retaddr);
 
@@ -4570,14 +4607,6 @@ static void sve_ldff1_r(CPUARMState *env, void *vg, const target_ulong addr,
     }
     mem_off = reg_off >> diffsz;
 
-    /* Begin with a clear result.  For leading predicated false elements,
-     * this is the required result.  For trailing elements after the page
-     * break, this provides the constrained unpredictable ZERO consistent
-     * with any fault that we may report.
-     */
-    result = &scratch;
-    memset(result, 0, reg_max);
-
 #ifdef CONFIG_USER_ONLY
     /* The page(s) containing this first element at ADDR+MEM_OFF must
      * be valid.  Considering that this first element may be misaligned
@@ -4585,13 +4614,19 @@ static void sve_ldff1_r(CPUARMState *env, void *vg, const target_ulong addr,
      * the last byte of the element.
      */
     split = max_for_page(addr, mem_off + (1 << msz) - 1, mem_max);
-    mem_off = host_fn(result, vg, g2h(addr), mem_off, split);
+    mem_off = host_fn(vd, vg, g2h(addr), mem_off, split);
+
+    /* After any fault, zero any leading predicated false elts.  */
+    swap_memzero(vd, reg_off);
     reg_off = mem_off << diffsz;
 #else
     /* Perform one normal read, which will fault or not.
      * But it is likely to bring the page into the tlb.
      */
-    tlb_fn(env, result, reg_off, addr + mem_off, oi, retaddr);
+    tlb_fn(env, vd, reg_off, addr + mem_off, oi, retaddr);
+
+    /* After any fault, zero any leading predicated false elts.  */
+    swap_memzero(vd, reg_off);
     mem_off += 1 << msz;
     reg_off += 1 << esz;
 
@@ -4600,7 +4635,7 @@ static void sve_ldff1_r(CPUARMState *env, void *vg, const target_ulong addr,
     if (split >= (1 << msz)) {
         host = tlb_vaddr_to_host(env, addr + mem_off, MMU_DATA_LOAD, mmu_idx);
         if (host) {
-            mem_off = host_fn(result, vg, host - mem_off, mem_off, split);
+            mem_off = host_fn(vd, vg, host - mem_off, mem_off, split);
             reg_off = mem_off << diffsz;
         }
     }
@@ -4608,7 +4643,6 @@ static void sve_ldff1_r(CPUARMState *env, void *vg, const target_ulong addr,
 
     set_helper_retaddr(0);
     record_fault(env, reg_off, reg_max);
-    memcpy(vd, result, reg_max);
 }
 
 /*
@@ -4629,12 +4663,25 @@ static void sve_ldnf1_r(CPUARMState *env, void *vg, const target_ulong addr,
 #ifdef CONFIG_USER_ONLY
     /* Do not set helper_retaddr as there should be no fault.  */
     host = g2h(addr);
-
     if (likely(page_check_range(addr, mem_max, PAGE_READ) == 0)) {
         /* The entire operation is valid.  */
         host_fn(vd, vg, host, 0, mem_max);
         return;
     }
+#else
+    const int mmu_idx = extract32(desc, SIMD_DATA_SHIFT, 4);
+    /* Unless we can load the entire vector from the same page,
+     * we need to search for the first active element.
+     */
+    split = max_for_page(addr, 0, mem_max);
+    if (likely(split == mem_max)) {
+        host = tlb_vaddr_to_host(env, addr, MMU_DATA_LOAD, mmu_idx);
+        if (host) {
+            host_fn(vd, vg, host, 0, mem_max);
+            return;
+        }
+    }
+#endif
 
     /* There will be no fault, so we may modify in advance.  */
     memset(vd, 0, reg_max);
@@ -4647,6 +4694,7 @@ static void sve_ldnf1_r(CPUARMState *env, void *vg, const target_ulong addr,
     }
     mem_off = reg_off >> diffsz;
 
+#ifdef CONFIG_USER_ONLY
     if (page_check_range(addr + mem_off, 1 << msz, PAGE_READ) == 0) {
         /* At least one load is valid; take the rest of the page.  */
         split = max_for_page(addr, mem_off + (1 << msz) - 1, mem_max);
@@ -4654,34 +4702,13 @@ static void sve_ldnf1_r(CPUARMState *env, void *vg, const target_ulong addr,
         reg_off = mem_off << diffsz;
     }
 #else
-    const int mmu_idx = extract32(desc, SIMD_DATA_SHIFT, 4);
-
-    /* Unless we can load the entire vector from the same page,
-     * we need to search for the first active element.
-     */
-    mem_off = reg_off = 0;
-    split = max_for_page(addr, 0, mem_max);
-    if (unlikely(split != mem_max)) {
-        /* There will be no fault, so we may modify in advance.  */
-        memset(vd, 0, reg_max);
-
-        reg_off = find_next_active(vg, 0, reg_max, esz);
-        if (unlikely(reg_off == reg_max)) {
-            /* The entire predicate was false; no load occurs.  */
-            return;
-        }
-        mem_off = reg_off >> diffsz;
-
-        /* Recompute.  */
-        split = max_for_page(addr, mem_off, mem_max);
-    }
-
     /* If the address is not in the TLB, we have no way to bring the
      * entry into the TLB without also risking a fault.  Note that
      * the corollary is that we never load from an address not in RAM.
      * ??? This last may be out of spec.
      */
     host = tlb_vaddr_to_host(env, addr + mem_off, MMU_DATA_LOAD, mmu_idx);
+    split = max_for_page(addr, mem_off, mem_max);
     if (host && split >= (1 << msz)) {
         mem_off = host_fn(vd, vg, host - mem_off, mem_off, split);
         reg_off = mem_off << diffsz;
@@ -5187,132 +5214,106 @@ DO_LD_NF(dd_be,      , uint64_t, uint64_t, ldq_be_p)
 /*
  * Common helper for all gather first-faulting loads.
  */
-struct ldff1_z_parm {
-    zreg_off_fn *off_fn;
-    sve_ld1_tlb_fn *tlb_fn;
-    sve_ld1_nf_fn *nonfault_fn;
-};
-
-static void sve_ldff1_zs(CPUARMState *env, void *vd, void *vg, void *vm,
-                         target_ulong base, uint32_t desc, uintptr_t ra,
-                         const struct ldff1_z_parm *parm)
+static inline void sve_ldff1_zs(CPUARMState *env, void *vd, void *vg, void *vm,
+                                target_ulong base, uint32_t desc, uintptr_t ra,
+                                zreg_off_fn *off_fn, sve_ld1_tlb_fn *tlb_fn,
+                                sve_ld1_nf_fn *nonfault_fn)
 {
     const TCGMemOpIdx oi = extract32(desc, SIMD_DATA_SHIFT, MEMOPIDX_SHIFT);
     const int mmu_idx = oi & 15;
     const int scale = extract32(desc, SIMD_DATA_SHIFT + MEMOPIDX_SHIFT, 2);
     intptr_t reg_off, reg_max = simd_oprsz(desc);
-    ARMVectorReg scratch;
     target_ulong addr;
 
     /* Skip to the first true predicate.  */
     reg_off = find_next_active(vg, 0, reg_max, MO_32);
-    if (unlikely(reg_off == reg_max)) {
-        /* The entire predicate was false; no load occurs.  */
-        memset(vd, 0, reg_max);
-        return;
-    }
-
-    /* Begin with a clear result.  For leading predicated false elements,
-     * this is the required result.  For trailing elements, this provides
-     * the constrained unpredictable ZERO consistent with any fault that
-     * we may report.
-     */
-    memset(&scratch, 0, sizeof(scratch));
-
-    /* Perform one normal read, which will fault or not.  */
-    set_helper_retaddr(ra);
-    addr = parm->off_fn(vm, reg_off);
-    addr = base + (addr << scale);
-    parm->tlb_fn(env, &scratch, reg_off, addr, oi, ra);
-
-    /* The rest of the reads will be non-faulting.  */
-    set_helper_retaddr(0);
-    while (1) {
-        reg_off = find_next_active(vg, reg_off + 4, reg_max, MO_32);
-        if (reg_off >= reg_max) {
-            break;
-        }
-
-        addr = parm->off_fn(vm, reg_off);
+    if (likely(reg_off < reg_max)) {
+        /* Perform one normal read, which will fault or not.  */
+        set_helper_retaddr(ra);
+        addr = off_fn(vm, reg_off);
         addr = base + (addr << scale);
-        if (!parm->nonfault_fn(env, &scratch, reg_off, addr, mmu_idx)) {
-            record_fault(env, reg_off, reg_max);
-            break;
-        }
+        tlb_fn(env, vd, reg_off, addr, oi, ra);
+
+        /* The rest of the reads will be non-faulting.  */
+        set_helper_retaddr(0);
     }
 
-    memcpy(vd, &scratch, reg_max);
+    /* After any fault, zero the leading predicated false elements.  */
+    swap_memzero(vd, reg_off);
+
+    while (likely((reg_off += 4) < reg_max)) {
+        uint64_t pg = *(uint64_t *)(vg + (reg_off >> 6) * 8);
+        if (likely((pg >> (reg_off & 63)) & 1)) {
+            addr = off_fn(vm, reg_off);
+            addr = base + (addr << scale);
+            if (!nonfault_fn(env, vd, reg_off, addr, mmu_idx)) {
+                record_fault(env, reg_off, reg_max);
+                break;
+            }
+        } else {
+            *(uint32_t *)(vd + H1_4(reg_off)) = 0;
+        }
+    }
 }
 
-static void sve_ldff1_zd(CPUARMState *env, void *vd, void *vg, void *vm,
-                         target_ulong base, uint32_t desc, uintptr_t ra,
-                         const struct ldff1_z_parm *parm)
+static inline void sve_ldff1_zd(CPUARMState *env, void *vd, void *vg, void *vm,
+                                target_ulong base, uint32_t desc, uintptr_t ra,
+                                zreg_off_fn *off_fn, sve_ld1_tlb_fn *tlb_fn,
+                                sve_ld1_nf_fn *nonfault_fn)
 {
     const TCGMemOpIdx oi = extract32(desc, SIMD_DATA_SHIFT, MEMOPIDX_SHIFT);
     const int mmu_idx = oi & 15;
     const int scale = extract32(desc, SIMD_DATA_SHIFT + MEMOPIDX_SHIFT, 2);
     intptr_t reg_off, reg_max = simd_oprsz(desc);
-    ARMVectorReg scratch;
     target_ulong addr;
 
     /* Skip to the first true predicate.  */
     reg_off = find_next_active(vg, 0, reg_max, MO_64);
-    if (unlikely(reg_off == reg_max)) {
-        /* The entire predicate was false; no load occurs.  */
-        memset(vd, 0, reg_max);
-        return;
-    }
-
-    /* Begin with a clear result.  For leading predicated false elements,
-     * this is the required result.  For trailing elements, this provides
-     * the constrained unpredictable ZERO consistent with any fault that
-     * we may report.
-     */
-    memset(&scratch, 0, sizeof(scratch));
-
-    /* Perform one normal read, which will fault or not.  */
-    set_helper_retaddr(ra);
-    addr = parm->off_fn(vm, reg_off);
-    addr = base + (addr << scale);
-    parm->tlb_fn(env, &scratch, reg_off, addr, oi, ra);
-
-    /* The rest of the reads will be non-faulting.  */
-    set_helper_retaddr(0);
-    while (1) {
-        reg_off = find_next_active(vg, reg_off + 8, reg_max, MO_64);
-        if (reg_off >= reg_max) {
-            break;
-        }
-
-        addr = parm->off_fn(vm, reg_off);
+    if (likely(reg_off < reg_max)) {
+        /* Perform one normal read, which will fault or not.  */
+        set_helper_retaddr(ra);
+        addr = off_fn(vm, reg_off);
         addr = base + (addr << scale);
-        if (!parm->nonfault_fn(env, &scratch, reg_off, addr, mmu_idx)) {
-            record_fault(env, reg_off, reg_max);
-            break;
-        }
+        tlb_fn(env, vd, reg_off, addr, oi, ra);
+
+        /* The rest of the reads will be non-faulting.  */
+        set_helper_retaddr(0);
     }
 
-    memcpy(vd, &scratch, reg_max);
+    /* After any fault, zero the leading predicated false elements.  */
+    swap_memzero(vd, reg_off);
+
+    while (likely((reg_off += 8) < reg_max)) {
+        uint8_t pg = *(uint8_t *)(vg + H1(reg_off >> 3));
+        if (likely(pg & 1)) {
+            addr = off_fn(vm, reg_off);
+            addr = base + (addr << scale);
+            if (!nonfault_fn(env, vd, reg_off, addr, mmu_idx)) {
+                record_fault(env, reg_off, reg_max);
+                break;
+            }
+        } else {
+            *(uint64_t *)(vd + reg_off) = 0;
+        }
+    }
 }
 
 #define DO_LDFF1_ZPZ_S(MEM, OFS) \
-void HELPER(sve_ldff##MEM##_##OFS)                                \
-    (CPUARMState *env, void *vd, void *vg, void *vm,              \
-     target_ulong base, uint32_t desc)                            \
-{                                                                 \
-    static struct ldff1_z_parm const p =                          \
-        { off_##OFS##_s, sve_ld1##MEM##_tlb, sve_ld##MEM##_nf };  \
-    sve_ldff1_zs(env, vd, vg, vm, base, desc, GETPC(), &p);       \
+void HELPER(sve_ldff##MEM##_##OFS)                                      \
+    (CPUARMState *env, void *vd, void *vg, void *vm,                    \
+     target_ulong base, uint32_t desc)                                  \
+{                                                                       \
+    sve_ldff1_zs(env, vd, vg, vm, base, desc, GETPC(),                  \
+                 off_##OFS##_s, sve_ld1##MEM##_tlb, sve_ld##MEM##_nf);  \
 }
 
 #define DO_LDFF1_ZPZ_D(MEM, OFS) \
-void HELPER(sve_ldff##MEM##_##OFS)                                \
-    (CPUARMState *env, void *vd, void *vg, void *vm,              \
-     target_ulong base, uint32_t desc)                            \
-{                                                                 \
-    static struct ldff1_z_parm const p =                          \
-        { off_##OFS##_d, sve_ld1##MEM##_tlb, sve_ld##MEM##_nf };  \
-    sve_ldff1_zd(env, vd, vg, vm, base, desc, GETPC(), &p);       \
+void HELPER(sve_ldff##MEM##_##OFS)                                      \
+    (CPUARMState *env, void *vd, void *vg, void *vm,                    \
+     target_ulong base, uint32_t desc)                                  \
+{                                                                       \
+    sve_ldff1_zd(env, vd, vg, vm, base, desc, GETPC(),                  \
+                 off_##OFS##_d, sve_ld1##MEM##_tlb, sve_ld##MEM##_nf);  \
 }
 
 DO_LDFF1_ZPZ_S(bsu, zsu)
