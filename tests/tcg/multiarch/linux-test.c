@@ -17,7 +17,6 @@
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 #define _GNU_SOURCE
-#include <stdarg.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -27,7 +26,6 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
-#include <errno.h>
 #include <utime.h>
 #include <time.h>
 #include <sys/time.h>
@@ -41,32 +39,9 @@
 #include <setjmp.h>
 #include <sys/shm.h>
 #include <assert.h>
+#include "tcg-tests.h"
 
 #define STACK_SIZE 16384
-
-static void error1(const char *filename, int line, const char *fmt, ...)
-{
-    va_list ap;
-    va_start(ap, fmt);
-    fprintf(stderr, "%s:%d: ", filename, line);
-    vfprintf(stderr, fmt, ap);
-    fprintf(stderr, "\n");
-    va_end(ap);
-    exit(1);
-}
-
-static int __chk_error(const char *filename, int line, int ret)
-{
-    if (ret < 0) {
-        error1(filename, line, "%m (ret=%d, errno=%d/%s)",
-               ret, errno, strerror(errno));
-    }
-    return ret;
-}
-
-#define error(fmt, ...) error1(__FILE__, __LINE__, fmt, ## __VA_ARGS__)
-
-#define chk_error(ret) __chk_error(__FILE__, __LINE__, (ret))
 
 /*******************************************************/
 

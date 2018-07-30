@@ -7,6 +7,7 @@
 #include <pthread.h>
 #include <sys/wait.h>
 #include <sched.h>
+#include "tcg-tests.h"
 
 void checked_write(int fd, const void *buf, size_t count)
 {
@@ -43,10 +44,10 @@ void test_pthread(void)
 {
     pthread_t tid1, tid2;
 
-    pthread_create(&tid1, NULL, thread1_func, "hello1");
-    pthread_create(&tid2, NULL, thread2_func, "hello2");
-    pthread_join(tid1, NULL);
-    pthread_join(tid2, NULL);
+    chk_error(pthread_create(&tid1, NULL, thread1_func, "hello1"));
+    chk_error(pthread_create(&tid2, NULL, thread2_func, "hello2"));
+    chk_error(pthread_join(tid1, NULL));
+    chk_error(pthread_join(tid2, NULL));
     printf("End of pthread test.\n");
 }
 
