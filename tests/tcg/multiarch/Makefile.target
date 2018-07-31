@@ -35,3 +35,7 @@ run-test-mmap: test-mmap
 run-test-mmap-%: test-mmap
 	$(call run-test, test-mmap-$*, $(QEMU) -p $* $<,\
 		"$< ($* byte pages) on $(TARGET_NAME)")
+
+run-atomic-test: atomic-test
+	$(call run-test, test-mmap, $(QEMU) $< atomic-inc-u64 atomic-add-u64, \
+		"$< (inc/add) on $(TARGET_NAME)")
