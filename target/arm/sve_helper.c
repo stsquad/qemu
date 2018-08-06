@@ -5053,7 +5053,7 @@ static void sve_ld1_zd(CPUARMState *env, void *vd, void *vg, void *vm,
     for (i = 0; i < oprsz; i++) {
         uint8_t pg = *(uint8_t *)(vg + H1(i));
         if (pg & 1) {
-            target_ulong off = off_fn(vm, i);
+            target_ulong off = off_fn(vm, i * 8);
             tlb_fn(env, &scratch, i * 8, base + (off << scale), oi, ra);
         }
     }
