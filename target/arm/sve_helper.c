@@ -4498,20 +4498,20 @@ static void sve_ld4_r(CPUARMState *env, void *vg, target_ulong addr,
 void __attribute__((flatten)) HELPER(sve_ld##N##bb_r)               \
     (CPUARMState *env, void *vg, target_ulong addr, uint32_t desc)  \
 {                                                                   \
-    sve_ld##N##_r(env, vg, addr, desc, GETPC(), 1, sve_ld1bb_tlb);  \
+    sve_ld##N##_r(env, vg, addr, desc, 1, GETPC(), sve_ld1bb_tlb);  \
 }
 
 #define DO_LDN_2(N, SUFF, SIZE)                                       \
 void __attribute__((flatten)) HELPER(sve_ld##N##SUFF##_le_r)          \
     (CPUARMState *env, void *vg, target_ulong addr, uint32_t desc)    \
 {                                                                     \
-    sve_ld##N##_r(env, vg, addr, desc, GETPC(), SIZE,                 \
+    sve_ld##N##_r(env, vg, addr, desc, SIZE, GETPC(),                 \
                   sve_ld1##SUFF##_le_tlb);                            \
 }                                                                     \
 void __attribute__((flatten)) HELPER(sve_ld##N##SUFF##_be_r)          \
     (CPUARMState *env, void *vg, target_ulong addr, uint32_t desc)    \
 {                                                                     \
-    sve_ld##N##_r(env, vg, addr, desc, GETPC(), SIZE,                 \
+    sve_ld##N##_r(env, vg, addr, desc, SIZE, GETPC(),                 \
                   sve_ld1##SUFF##_be_tlb);                            \
 }
 
