@@ -5066,7 +5066,7 @@ static void do_mem_zpz(DisasContext *s, int zt, int pg, int zm,
 
     desc = sve_memopidx(s, msz_dtype(msz));
     desc |= scale << MEMOPIDX_SHIFT;
-    desc = simd_desc(vsz, vsz, scale);
+    desc = simd_desc(vsz, vsz, desc);
     t_desc = tcg_const_i32(desc);
 
     tcg_gen_addi_ptr(t_pg, cpu_env, pred_full_reg_offset(s, pg));
