@@ -5060,7 +5060,7 @@ static void sve_ld1_zd(CPUARMState *env, void *vd, void *vg, void *vm,
     set_helper_retaddr(0);
 
     /* Wait until all exceptions have been raised to write back.  */
-    memcpy(vd, &scratch, oprsz);
+    memcpy(vd, &scratch, oprsz * 8);
 }
 
 #define DO_LD1_ZPZ_S(MEM, OFS) \
