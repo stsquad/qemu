@@ -4735,24 +4735,24 @@ void HELPER(sve_ldnf1##PART##_r)(CPUARMState *env, void *vg,            \
 void HELPER(sve_ldff1##PART##_le_r)(CPUARMState *env, void *vg,         \
                                     target_ulong addr, uint32_t desc)   \
 {                                                                       \
-    sve_ldff1_r(env, vg, addr, desc, GETPC(), ESZ, 0,                   \
+    sve_ldff1_r(env, vg, addr, desc, GETPC(), ESZ, MSZ,                 \
                 sve_ld1##PART##_le_host, sve_ld1##PART##_le_tlb);       \
 }                                                                       \
 void HELPER(sve_ldnf1##PART##_le_r)(CPUARMState *env, void *vg,         \
                                     target_ulong addr, uint32_t desc)   \
 {                                                                       \
-    sve_ldnf1_r(env, vg, addr, desc, ESZ, 0, sve_ld1##PART##_le_host);  \
+    sve_ldnf1_r(env, vg, addr, desc, ESZ, MSZ, sve_ld1##PART##_le_host); \
 }                                                                       \
 void HELPER(sve_ldff1##PART##_be_r)(CPUARMState *env, void *vg,         \
                                     target_ulong addr, uint32_t desc)   \
 {                                                                       \
-    sve_ldff1_r(env, vg, addr, desc, GETPC(), ESZ, 0,                   \
+    sve_ldff1_r(env, vg, addr, desc, GETPC(), ESZ, MSZ,                 \
                 sve_ld1##PART##_be_host, sve_ld1##PART##_be_tlb);       \
 }                                                                       \
 void HELPER(sve_ldnf1##PART##_be_r)(CPUARMState *env, void *vg,         \
                                     target_ulong addr, uint32_t desc)   \
 {                                                                       \
-    sve_ldnf1_r(env, vg, addr, desc, ESZ, 0, sve_ld1##PART##_be_host);  \
+    sve_ldnf1_r(env, vg, addr, desc, ESZ, MSZ, sve_ld1##PART##_be_host); \
 }
 
 DO_LDFF1_LDNF1_1(bb,  0)
