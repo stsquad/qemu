@@ -316,6 +316,7 @@ uint16_t half_numbers[] = {
     0xfc01, /* -NaN / AHP */
     0xfc00, /* -Inf */
     0xfbff, /* -Max */
+    0xfbfe,
     0xc000, /* -2 */
     0xbc00, /* -1 */
     0x8001, /* -MIN subnormal */
@@ -323,6 +324,7 @@ uint16_t half_numbers[] = {
     0x0000, /* +0 */
     0x0001, /* MIN subnormal */
     0x3c00, /* 1 */
+    0x7bfe,
     0x7bff, /* Max */
     0x7c00, /* Inf */
     0x7c01, /* NaN / AHP */
@@ -330,71 +332,172 @@ uint16_t half_numbers[] = {
     0x7fff, /* NaN / AHP +Max*/
 };
 
-static void convert_half_to_double(void)
+typedef struct {
+    void (*convert_half) (uint16_t input, int i);
+    char *description;
+} half_test_t;
+
+static void convert_half_to_double(uint16_t input, int i)
 {
-    int i;
-
-    printf("Converting half-precision to double-precision\n");
-
-    for (i = 0; i < ARRAY_SIZE(half_numbers); ++i) {
-        uint16_t input = half_numbers[i];
-        double output;
-
-        feclearexcept(FE_ALL_EXCEPT);
-
-        print_half_number(i, input);
+    double output;
 #if defined(__arm__)
-        /* asm("vcvtb.f64.f16 %P0, %1" : "=w" (output) : "t" (input)); */
-        output = input;
+    /* asm("vcvtb.f64.f16 %P0, %1" : "=w" (output) : "t" (input)); */
+    output = input;
 #else
-        asm("fcvt %d0, %h1" : "=w" (output) : "x" (input));
+    asm("fcvt %d0, %h1" : "=w" (output) : "x" (input));
 #endif
-        print_double_number(i, output);
-    }
+    print_double_number(i, output);
 }
 
-static void convert_half_to_single(void)
+static void convert_half_to_single(uint16_t input, int i)
 {
-    int i;
-
-    printf("Converting half-precision to single-precision\n");
-
-    for (i = 0; i < ARRAY_SIZE(half_numbers); ++i) {
-        uint16_t input = half_numbers[i];
-        float output;
-
-        feclearexcept(FE_ALL_EXCEPT);
-
-        print_half_number(i, input);
+    float output;
 #if defined(__arm__)
-        asm("vcvtb.f32.f16 %0, %1" : "=w" (output) : "x" ((uint32_t)input));
+    asm("vcvtb.f32.f16 %0, %1" : "=w" (output) : "x" ((uint32_t)input));
 #else
-        asm("fcvt %s0, %h1" : "=w" (output) : "x" (input));
+    asm("fcvt %s0, %h1" : "=w" (output) : "x" (input));
 #endif
-        print_single_number(i, output);
-    }
+    print_single_number(i, output);
 }
 
-static void convert_half_to_integer(void)
-{
-    int i;
-
-    printf("Converting half-precision to integer\n");
-
-    for (i = 0; i < ARRAY_SIZE(half_numbers); ++i) {
-        uint16_t input = half_numbers[i];
-        int64_t output;
-
-        feclearexcept(FE_ALL_EXCEPT);
-
-        print_half_number(i, input);
 #if defined(__arm__)
-        /* asm("vcvt.s32.f16 %0, %1" : "=t" (output) : "t" (input)); v8.2*/
-        output = input;
+#define conv_half_scaled64(scale) \
+    asm("vcvt.s32.f32 %P0, %1, #scale" : "=w" (output) : "t" (input));
 #else
-        asm("fcvt %s0, %h1" : "=w" (output) : "x" (input));
+#define conv_half_scaled64(scale) \
+    asm("fcvtzs %x0, %h1, #%2" : "=r" (output) : "w" (input), "i" (scale));
 #endif
-        print_int64(i, output);
+
+static void convert_half_to_fixed64(uint16_t input, int i)
+{
+    int64_t output;
+
+    conv_half_scaled64(1);
+    print_int64(i, output);
+    conv_half_scaled64(2);
+    print_int64(i, output);
+    conv_half_scaled64(4);
+    print_int64(i, output);
+    conv_half_scaled64(8);
+    print_int64(i, output);
+    conv_half_scaled64(16);
+    print_int64(i, output);
+    conv_half_scaled64(32);
+    print_int64(i, output);
+}
+
+#if defined(__arm__)
+#define conv_half_scaled32(scale) \
+    asm("vcvt.s32.f32 %P0, %1, #scale" : "=w" (output) : "t" (input));
+#else
+#define conv_half_scaled32(scale) \
+    asm("fcvtzs %w0, %s1, #%2" : "=r" (output) : "x" (input), "i" (scale));
+#endif
+
+static void convert_half_to_fixed32(uint16_t input, int i)
+{
+    int32_t output;
+    conv_half_scaled32(1);
+    print_int32(i, output);
+    conv_half_scaled32(2);
+    print_int32(i, output);
+    conv_half_scaled32(4);
+    print_int32(i, output);
+    conv_half_scaled32(8);
+    print_int32(i, output);
+    conv_half_scaled32(16);
+    print_int32(i, output);
+    conv_half_scaled32(16);
+    print_int32(i, output);
+    conv_half_scaled32(32);
+    print_int32(i, output);
+}
+
+static void convert_half_to_int64(uint16_t input, int i)
+{
+    int64_t output;
+#if defined(__arm__)
+    /* asm("vcvt.s32.f16 %0, %1" : "=t" (output) : "t" (input)); v8.2*/
+    output = input;
+#else
+    asm("fcvtzs %x0, %h1" : "=r" (output) : "x" (input));
+#endif
+    print_int64(i, output);
+}
+
+static void convert_half_to_int32(uint16_t input, int i)
+{
+    int32_t output;
+#if defined(__arm__)
+    /* asm("vcvt.s32.f16 %0, %1" : "=t" (output) : "t" (input)); v8.2*/
+    output = input;
+#else
+    asm("fcvtzs %w0, %h1" : "=r" (output) : "x" (input));
+#endif
+    print_int32(i, output);
+}
+
+static void convert_half_to_uint64(uint16_t input, int i)
+{
+    uint64_t output;
+#if defined(__arm__)
+    /* asm("vcvt.s32.f16 %0, %1" : "=t" (output) : "t" (input)); v8.2*/
+    output = input;
+#else
+    asm("fcvtzu %x0, %h1" : "=r" (output) : "x" (input));
+#endif
+    print_int64(i, output);
+}
+
+static void convert_half_to_uint32(uint16_t input, int i)
+{
+    uint32_t output;
+#if defined(__arm__)
+    /* asm("vcvt.s32.f16 %0, %1" : "=t" (output) : "t" (input)); v8.2*/
+    output = input;
+#else
+    asm("fcvtzu %w0, %h1" : "=r" (output) : "x" (input));
+#endif
+    print_int32(i, output);
+}
+
+static void convert_half_to_uint16(uint16_t input, int i)
+{
+    uint16_t output;
+#if defined(__arm__)
+    /* asm("vcvt.s32.f16 %0, %1" : "=t" (output) : "t" (input)); v8.2*/
+    output = input;
+#else
+    asm("fcvtzu %h0, %h1" : "=w" (output) : "x" (input));
+#endif
+    print_half_number(i, output);
+}
+
+half_test_t half_tests[] = {
+    {convert_half_to_double, "half-precision to double-precision"},
+    {convert_half_to_single, "half-precision to single-precision"},
+    {convert_half_to_fixed64, "half-precision to fixed point 64 bit int"},
+    {convert_half_to_fixed32, "half-precision to fixed point 32 bit int"},
+    {convert_half_to_int64, "half-precision to 64 bit int"},
+    {convert_half_to_int32, "half-precision to 32 bit int"},
+    {convert_half_to_uint64, "half-precision to 64 bit uint"},
+    {convert_half_to_uint32, "half-precision to 32 bit uint"},
+    {convert_half_to_uint16, "half-precision to 16 bit uint"},
+};
+
+static void convert_halves(void)
+{
+    int i,j;
+
+    for (i = 0; i < ARRAY_SIZE(half_tests); ++i) {
+        half_test_t *test = &half_tests[i];
+        printf("Converting %s\n", test->description);
+        for (j = 0; j < ARRAY_SIZE(half_numbers); ++j) {
+            uint16_t input = half_numbers[j];
+            feclearexcept(FE_ALL_EXCEPT);
+            print_half_number(j, input);
+            test->convert_half(input, j);
+        }
     }
 }
 
@@ -421,14 +524,13 @@ void run_tests(void) {
         convert_single_to_double();
         convert_double_to_half();
         convert_double_to_single();
-        convert_half_to_single();
-        convert_half_to_double();
+
+        convert_halves();
     }
 
     /* convert to integer */
     convert_single_to_integer();
     convert_double_to_integer();
-    convert_half_to_integer();
 }
 
 int main(int argc, char *argv[argc])
