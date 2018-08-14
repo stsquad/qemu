@@ -625,6 +625,246 @@ static void convert_halves(void)
 }
 
 typedef struct {
+    void (*convert_integer32) (uint32_t input, int i);
+    char *description;
+} integer32_test_t;
+
+void convert_int32_to_half(uint32_t input, int i)
+{
+    uint16_t output;
+#if defined(__arm__)
+    /* asm("vcvt.s32.f16 %0, %1" : "=t" (output) : "t" (input)); v8.2*/
+    output = input;
+#else
+    asm("scvtf %h0, %w1" : "=w" (output) : "r" (input));
+#endif
+    print_half_number(i, output);
+}
+
+#if defined(__arm__)
+#define conv_scaled32_half(scale) \
+    asm("vcvt.f16.s32 %0, %1, %2" : "=r" (output) : "t" (input), "i" (scale));
+#else
+#define conv_scaled32_half(scale) \
+    asm("scvtf %h0, %w1, #%2" : "=w" (output) : "r" (input), "i" (scale));
+#endif
+
+static void convert_fixed32_to_half(uint32_t input, int i)
+{
+    uint16_t output;
+    conv_scaled32_half(1);
+    print_half_number(i, output);
+    conv_scaled32_half(2);
+    print_half_number(i, output);
+    conv_scaled32_half(4);
+    print_half_number(i, output);
+    conv_scaled32_half(32);
+    print_half_number(i, output);
+}
+
+integer32_test_t integer32_tests[] = {
+    { convert_int32_to_half, "signed int32 to half-precision" },
+    { convert_fixed32_to_half, "fixed point int32 to half-precision"},
+};
+
+typedef struct {
+    void (*convert_integer64) (uint64_t input, int i);
+    char *description;
+} integer64_test_t;
+
+#if defined(__arm__)
+#define conv_scaled64_half(scale) \
+    asm("vcvt.f16.s64 %0, %1, %2" : "=r" (output) : "t" (input), "i" (scale));
+#else
+#define conv_scaled64_half(scale) \
+    asm("scvtf %h0, %x1, #%2" : "=w" (output) : "r" (input), "i" (scale));
+#endif
+
+static void convert_fixed64_to_half(uint64_t input, int i)
+{
+    uint16_t output;
+    conv_scaled64_half(1);
+    print_half_number(i, output);
+    conv_scaled64_half(2);
+    print_half_number(i, output);
+    conv_scaled64_half(4);
+    print_half_number(i, output);
+    conv_scaled64_half(32);
+    print_half_number(i, output);
+    conv_scaled64_half(37);
+    print_half_number(i, output);
+    conv_scaled64_half(38);
+    print_half_number(i, output);
+    conv_scaled64_half(39);
+    print_half_number(i, output);
+}
+
+integer64_test_t integer64_tests[] = {
+    { convert_fixed64_to_half, "fixed point int64 to half-precision"},
+};
+
+uint32_t uint32_numbers[] = {
+    0x00000000,
+    0x00000001,
+    0x00000010,
+    0x00000100,
+    0x00001000,
+    0x0000FFDF,
+    0x0000FFE0, /* f16 max exact int */
+    0x0000FFE1,
+    0x0000FFFF,
+    0x00010000,
+    0x00100000,
+    0x00ffffff,
+    0x01000000, /* f32 max exact int */
+    0x01000001,
+    0x10000000,
+    0x20000000,
+    0x40000000,
+    0x80000000, /* sign bit for int32_t */
+    0x80000001,
+    0x8000001f,
+    0x8000003f,
+    0x8000007f,
+    0x800000ff,
+    0x800001ff,
+    0x8000031f,
+    0x800007ff,
+    0x80000fff,
+    0x8000ffff,
+    0x800fffff,
+    0x80ffffff,
+    0x8fffffff,
+    0x9fffffff,
+    0xafffffff,
+    0xbfffffff,
+    0xcfffffff,
+    0xdfffffff,
+    0xefffffff,
+    0xffffffff,
+    0xfffffffe,
+    0xfffffffd,
+    0xfffffffc,
+    0xfffffff8,
+    0xfffffff0,
+    0xffffffe0,
+    0xffffffd0,
+    0xffffffc0,
+    0xffffff80,
+    0xfffffe00,
+    0xfffffd00,
+    0xfffffc00,
+    0xfffff800,
+    0xfffff000,
+    0xffffe000,
+    0xffffd000,
+    0xffffc000,
+    0xffff8000,
+    0xfff80000,
+    0xff800000,
+    0xff000000,
+    0xfe000000,
+    0xfd000000,
+    0xfc000000,
+    0xf8000000,
+    0xf0000000,
+    0xe0000000,
+    0xd0000000,
+    0xc0000000,
+    0x80000000
+};
+
+uint64_t uint64_numbers[] = {
+    0x0000000000000000UL,
+    0x0000000000000001UL,
+    0x0000000000000010UL,
+    0x0000000000000100UL,
+    0x0000000000001000UL,
+    0x000000000000FFDFUL,
+    0x000000000000FFE0UL, /* f16 max exact int */
+    0x000000000000FFE1UL,
+    0x000000000000FFFFUL,
+    0x0000000000010000UL,
+    0x0000000000100000UL,
+    0x0000000000ffffffUL,
+    0x0000000001000000UL, /* f32 max exact int */
+    0x0000000001000001UL,
+    0x0000000010000000UL,
+    0x0000000020000000UL,
+    0x0000000040000000UL,
+    0x0000000080000000UL,
+    0x0000000800000000UL,
+    0x0000008000000000UL,
+    0x0000080000000000UL,
+    0x0000800000000000UL,
+    0x0008000000000000UL,
+    0x0080000000000000UL,
+    0x0800000000000000UL,
+    0x8000000000000000UL, /* sign bit for in64_t */
+    0x8000000000000001UL,
+    0x800000000000001fUL,
+    0x800000000000003fUL,
+    0x800000000000007fUL,
+    0x80000000000000ffUL,
+    0x80000000000001ffUL,
+    0x800000000000031fUL,
+    0x80000000000007ffUL,
+    0x8000000000000fffUL,
+    0x800000000000ffffUL,
+    0x80000000000fffffUL,
+    0x8000000000ffffffUL,
+    0x800000000fffffffUL,
+    0x80000000ffffffffUL,
+    0x8000000fffffffffUL,
+    0x800000ffffffffffUL,
+    0x80000fffffffffffUL,
+    0x8000ffffffffffffUL,
+    0x800fffffffffffffUL,
+    0x800fffffffffffffUL,
+    0x80ffffffffffffffUL,
+    0x81ffffffffffffffUL,
+    0x83ffffffffffffffUL,
+    0x87ffffffffffffffUL,
+    0x8fffffffffffffffUL,
+    0x9fffffffffffffffUL,
+    0xafffffffffffffffUL,
+    0xbfffffffffffffffUL,
+    0xcfffffffffffffffUL,
+    0xdfffffffffffffffUL,
+    0xefffffffffffffffUL,
+    0xf000000000000000UL,
+    0xffc00bffffffffffUL, /* z3 test case */
+    0xffffffffffffffffUL,
+};
+
+static void convert_integers(void)
+{
+    int i,j;
+
+    for (i = 0; i < ARRAY_SIZE(integer32_tests); ++i) {
+        integer32_test_t *test = &integer32_tests[i];
+        printf("Converting %s\n", test->description);
+        for (j = 0; j < ARRAY_SIZE(uint32_numbers); ++j) {
+            uint32_t input = uint32_numbers[j];
+            feclearexcept(FE_ALL_EXCEPT);
+            print_int32(j, input);
+            test->convert_integer32(input, j);
+        }
+    }
+
+    for (i = 0; i < ARRAY_SIZE(integer64_tests); ++i) {
+        integer64_test_t *test = &integer64_tests[i];
+        printf("Converting %s\n", test->description);
+        for (j = 0; j < ARRAY_SIZE(uint64_numbers); ++j) {
+            uint64_t input = uint64_numbers[j];
+            feclearexcept(FE_ALL_EXCEPT);
+            print_int64(j, input);
+            test->convert_integer64(input, j);
+        }
+    }
+}
+
+typedef struct {
     int flag;
     char *desc;
 } float_mapping;
@@ -646,6 +886,7 @@ void run_tests(void) {
         convert_singles();
         convert_doubles();
         convert_halves();
+        convert_integers();
     }
 }
 
