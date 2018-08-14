@@ -67,8 +67,18 @@ static void print_int64(int i, int64_t num)
     int flags = fetestexcept(FE_ALL_EXCEPT);
     char *fstr = get_flag_state(flags);
 
-    printf("%02d   INT64: %20" PRId64 "/%#020" PRIx64 " (%#x => %s)\n",
+    printf("%02d  INT64: %20" PRId64 "/%#020" PRIx64 " (%#x => %s)\n",
            i, num, int64_as_hex, flags, fstr);
+}
+
+static void print_int32(int i, int32_t num)
+{
+    uint32_t int32_as_hex = *(uint32_t *) &num;
+    int flags = fetestexcept(FE_ALL_EXCEPT);
+    char *fstr = get_flag_state(flags);
+
+    printf("%02d  INT32: %6" PRId32 "/%#10" PRIx32 " (%#x => %s)\n",
+           i, num, int32_as_hex, flags, fstr);
 }
 
 #ifndef SNANF
