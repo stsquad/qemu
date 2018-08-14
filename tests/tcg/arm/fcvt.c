@@ -201,6 +201,7 @@ test_doubles double_numbers[] = {
     {-NAN},
     {-INFINITY},
     {-DBL_MAX},
+    {.h = 0xffc00bffffffffff },
     {-FLT_MAX-1.0},
     {-FLT_MAX},
     {-1.111E+31},
@@ -227,9 +228,10 @@ test_doubles double_numbers[] = {
     {131007.0},
     {131008.0}, /* max AFP */
     {131009.0},
-    {.h = 0x41dfffffffc00000 }, /* to int = 0x7fffffff */
+    { .h = 0x41dfffffffc00000 }, /* to int = 0x7fffffff */
     {FLT_MAX},
     {FLT_MAX + 1.0},
+    { .h = 0x3ff40000000001 },
     {DBL_MAX},
     {INFINITY},
     {NAN},
@@ -237,75 +239,136 @@ test_doubles double_numbers[] = {
     {SNAN},
 };
 
-static void convert_double_to_half(void)
+typedef struct {
+    void (*convert_double) (double input, int i);
+    char *description;
+} double_test_t;
+
+
+static void convert_double_to_half(double input, int i)
 {
-    int i;
-
-    printf("Converting double-precision to half-precision\n");
-
-    for (i = 0; i < ARRAY_SIZE(double_numbers); ++i) {
-        double input = double_numbers[i].d;
-        uint16_t output;
-
-        feclearexcept(FE_ALL_EXCEPT);
-
-        print_double_number(i, input);
-
-        /* as we don't have _Float16 support */
+    uint16_t output;
+    /* as we don't have _Float16 support */
 #if defined(__arm__)
-        /* asm("vcvtb.f16.f64 %0, %P1" : "=t" (output) : "x" (input)); */
-        output = input;
+    /* asm("vcvtb.f16.f64 %0, %P1" : "=t" (output) : "x" (input)); */
+    output = input;
 #else
-        asm("fcvt %h0, %d1" : "=w" (output) : "x" (input));
+    asm("fcvt %h0, %d1" : "=w" (output) : "x" (input));
 #endif
-        print_half_number(i, output);
-    }
+    print_half_number(i, output);
 }
 
-static void convert_double_to_single(void)
+static void convert_double_to_single(double input, int i)
 {
-    int i;
-
-    printf("Converting double-precision to single-precision\n");
-
-    for (i = 0; i < ARRAY_SIZE(double_numbers); ++i) {
-        double input = double_numbers[i].d;
-        uint32_t output;
-
-        feclearexcept(FE_ALL_EXCEPT);
-
-        print_double_number(i, input);
-
+    float output;
 #if defined(__arm__)
-        asm("vcvt.f32.f64 %0, %P1" : "=w" (output) : "x" (input));
+    asm("vcvt.f32.f64 %0, %P1" : "=w" (output) : "x" (input));
 #else
-        asm("fcvt %s0, %d1" : "=w" (output) : "x" (input));
+    asm("fcvt %s0, %d1" : "=w" (output) : "x" (input));
 #endif
-
-        print_single_number(i, output);
-    }
+    print_single_number(i, output);
 }
 
-static void convert_double_to_integer(void)
-{
-    int i;
-
-    printf("Converting double-precision to integer\n");
-
-    for (i = 0; i < ARRAY_SIZE(double_numbers); ++i) {
-        double input = double_numbers[i].d;
-        int64_t output;
-
-        feclearexcept(FE_ALL_EXCEPT);
-
-        print_double_number(i, input);
 #if defined(__arm__)
-        /* asm("vcvt.s32.f32 %s0, %s1" : "=t" (output) : "t" (input)); */
-        output = input;
+#define conv_double_scaled32(scale) \
+    asm("vcvt.s32.f32 %0, %1, #%2" : "=r" (output) : "t" (input), "i" (scale));
 #else
-        asm("fcvtzs %0, %d1" : "=r" (output) : "w" (input));
+#define conv_double_scaled32(scale) \
+    asm("fcvtzs %w0, %s1, #%2" : "=r" (output) : "x" (input), "i" (scale));
 #endif
-        print_int64(i, output);
+
+static void convert_double_to_fixed32(double input, int i)
+{
+    int32_t output;
+
+    conv_double_scaled32(1);
+    print_int32(i, output);
+    conv_double_scaled32(2);
+    print_int32(i, output);
+    conv_double_scaled32(4);
+    print_int32(i, output);
+    conv_double_scaled32(8);
+    print_int32(i, output);
+    conv_double_scaled32(16);
+    print_int32(i, output);
+    conv_double_scaled32(16);
+    print_int32(i, output);
+    conv_double_scaled32(32);
+    print_int32(i, output);
+}
+
+#if defined(__arm__)
+#define conv_double_scaled64(scale) \
+    asm("vcvt.s64.f32 %0, %1, #%2" : "=r" (output) : "t" (input), "i" (scale));
+#else
+#define conv_double_scaled64(scale) \
+    asm("fcvtzs %x0, %d1, #%2" : "=r" (output) : "x" (input), "i" (scale));
+#endif
+
+static void convert_double_to_fixed64(double input, int i)
+{
+    int64_t output;
+
+    conv_double_scaled64(1);
+    print_int64(i, output);
+    conv_double_scaled64(2);
+    print_int64(i, output);
+    conv_double_scaled64(4);
+    print_int64(i, output);
+    conv_double_scaled64(8);
+    print_int64(i, output);
+    conv_double_scaled64(16);
+    print_int64(i, output);
+    conv_double_scaled64(32);
+    print_int64(i, output);
+}
+
+static void convert_double_to_int32(double input, int i)
+{
+    int32_t output;
+#if defined(__arm__)
+    /* asm("vcvt.s32.f32 %s0, %s1" : "=t" (output) : "t" (input)); */
+    output = input;
+#else
+    asm("fcvtzs %w0, %d1" : "=r" (output) : "w" (input));
+#endif
+    print_int32(i, output);
+}
+
+static void convert_double_to_int64(double input, int i)
+{
+    int64_t output;
+#if defined(__arm__)
+    /* asm("vcvt.s32.f32 %s0, %s1" : "=t" (output) : "t" (input)); */
+    output = input;
+#else
+    asm("fcvtzs %x0, %d1" : "=r" (output) : "w" (input));
+#endif
+    print_int64(i, output);
+}
+
+double_test_t double_tests[] = {
+    { convert_double_to_half, "double-precision to half-precision" },
+    { convert_double_to_single, "double-precision to single-precision" },
+    { convert_double_to_fixed32, "double-precision to fixed point 32 bit int" },
+    { convert_double_to_fixed64, "double-precision to fixed point 64 bit int" },
+    { convert_double_to_int32, "double-precision to 32 bit int" },
+    { convert_double_to_int64, "double-precision to 64 bit int" },
+};
+
+static void convert_doubles(void)
+{
+    int i,j;
+
+    for (i = 0; i < ARRAY_SIZE(double_tests); ++i) {
+        double_test_t *test = &double_tests[i];
+        printf("Converting %s\n", test->description);
+        for (j = 0; j < ARRAY_SIZE(double_numbers); ++j) {
+            double input = double_numbers[j].d;
+            feclearexcept(FE_ALL_EXCEPT);
+            print_double_number(j, input);
+            test->convert_double(input, j);
+        }
     }
 }
 
@@ -362,7 +425,7 @@ static void convert_half_to_single(uint16_t input, int i)
 
 #if defined(__arm__)
 #define conv_half_scaled64(scale) \
-    asm("vcvt.s32.f32 %P0, %1, #scale" : "=w" (output) : "t" (input));
+    asm("vcvt.s64.f32 %0, %1, #%2" : "=r" (output) : "t" (input), "i" (scale));
 #else
 #define conv_half_scaled64(scale) \
     asm("fcvtzs %x0, %h1, #%2" : "=r" (output) : "w" (input), "i" (scale));
@@ -388,7 +451,7 @@ static void convert_half_to_fixed64(uint16_t input, int i)
 
 #if defined(__arm__)
 #define conv_half_scaled32(scale) \
-    asm("vcvt.s32.f32 %P0, %1, #scale" : "=w" (output) : "t" (input));
+    asm("vcvt.s32.f16 %0, %1, %2" : "=r" (output) : "t" (input), "i" (scale));
 #else
 #define conv_half_scaled32(scale) \
     asm("fcvtzs %w0, %s1, #%2" : "=r" (output) : "x" (input), "i" (scale));
@@ -522,15 +585,12 @@ void run_tests(void) {
         printf("### Rounding %s\n", round_flags[i].desc);
         convert_single_to_half();
         convert_single_to_double();
-        convert_double_to_half();
-        convert_double_to_single();
-
+        convert_doubles();
         convert_halves();
     }
 
     /* convert to integer */
     convert_single_to_integer();
-    convert_double_to_integer();
 }
 
 int main(int argc, char *argv[argc])
