@@ -10,6 +10,7 @@ AARCH64_TESTS=$(filter-out $(ARM_TESTS), $(TESTS))
 AARCH64_TESTS+=fcvt
 TESTS:=$(AARCH64_TESTS)
 
+fcvt: CFLAGS+=-march=armv8.2-a+fp16
 fcvt: LDFLAGS+=-lm
 
 run-fcvt: fcvt
