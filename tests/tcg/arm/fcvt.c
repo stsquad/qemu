@@ -400,11 +400,9 @@ float_mapping round_flags[] = {
     { FE_TOWARDZERO, "to zero" }
 };
 
-int main(int argc, char *argv[argc])
-{
-    int i;
 
-    printf("#### Enabling IEEE Half Precision\n");
+void run_tests(void) {
+    int i;
 
     for (i = 0; i < ARRAY_SIZE(round_flags); ++i) {
         fesetround(round_flags[i].flag);
@@ -421,6 +419,14 @@ int main(int argc, char *argv[argc])
     convert_single_to_integer();
     convert_double_to_integer();
     convert_half_to_integer();
+}
+
+int main(int argc, char *argv[argc])
+{
+
+    printf("#### Enabling IEEE Half Precision\n");
+
+    run_tests();
 
     /* And now with ARM alternative FP16 */
 #if defined(__arm__)
@@ -438,21 +444,7 @@ int main(int argc, char *argv[argc])
 
     printf("#### Enabling ARM Alternative Half Precision\n");
 
-    for (i = 0; i < ARRAY_SIZE(round_flags); ++i) {
-        fesetround(round_flags[i].flag);
-        printf("### Rounding %s\n", round_flags[i].desc);
-        convert_single_to_half();
-        convert_single_to_double();
-        convert_double_to_half();
-        convert_double_to_single();
-        convert_half_to_single();
-        convert_half_to_double();
-    }
-
-    /* convert to integer */
-    convert_single_to_integer();
-    convert_double_to_integer();
-    convert_half_to_integer();
+    run_tests();
 
     return 0;
 }
