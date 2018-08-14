@@ -121,72 +121,133 @@ float single_numbers[] = { -SNANF,
                            NAN,
                            SNANF };
 
-static void convert_single_to_half(void)
+typedef struct {
+    void (*convert_single) (float input, int i);
+    char *description;
+} single_test_t;
+
+static void convert_single_to_half(float input, int i)
 {
-    int i;
-
-    printf("Converting single-precision to half-precision\n");
-
-    for (i = 0; i < ARRAY_SIZE(single_numbers); ++i) {
-        float input = single_numbers[i];
-
-        feclearexcept(FE_ALL_EXCEPT);
-
-        print_single_number(i, input);
 #if defined(__arm__)
-        uint32_t output;
-        asm("vcvtb.f16.f32 %0, %1" : "=t" (output) : "x" (input));
+    uint32_t output;
+    asm("vcvtb.f16.f32 %0, %1" : "=t" (output) : "x" (input));
 #else
-        uint16_t output;
-        asm("fcvt %h0, %s1" : "=w" (output) : "x" (input));
+    uint16_t output;
+    asm("fcvt %h0, %s1" : "=w" (output) : "x" (input));
 #endif
-        print_half_number(i, output);
-    }
+    print_half_number(i, output);
 }
 
-static void convert_single_to_double(void)
+static void convert_single_to_double(float input, int i)
 {
-    int i;
-
-    printf("Converting single-precision to double-precision\n");
-
-    for (i = 0; i < ARRAY_SIZE(single_numbers); ++i) {
-        float input = single_numbers[i];
-        /* uint64_t output; */
-        double output;
-
-        feclearexcept(FE_ALL_EXCEPT);
-
-        print_single_number(i, input);
+    double output;
 #if defined(__arm__)
-        asm("vcvt.f64.f32 %P0, %1" : "=w" (output) : "t" (input));
+    asm("vcvt.f64.f32 %0, %1" : "=w" (output) : "t" (input));
 #else
-        asm("fcvt %d0, %s1" : "=w" (output) : "x" (input));
+    asm("fcvt %d0, %s1" : "=w" (output) : "x" (input));
 #endif
-        print_double_number(i, output);
-    }
+    print_double_number(i, output);
 }
 
-static void convert_single_to_integer(void)
-{
-    int i;
-
-    printf("Converting single-precision to integer\n");
-
-    for (i = 0; i < ARRAY_SIZE(single_numbers); ++i) {
-        float input = single_numbers[i];
-        int64_t output;
-
-        feclearexcept(FE_ALL_EXCEPT);
-
-        print_single_number(i, input);
 #if defined(__arm__)
-        /* asm("vcvt.s32.f32 %s0, %s1" : "=t" (output) : "t" (input)); */
-        output = input;
+#define conv_single_scaled32(scale) \
+    asm("vcvt.s32.f32 %0, %1, %2" : "=r" (output) : "t" (input), "i" (scale));
 #else
-        asm("fcvtzs %0, %s1" : "=r" (output) : "w" (input));
+#define conv_single_scaled32(scale) \
+    asm("fcvtzs %w0, %s1, #%2" : "=r" (output) : "x" (input), "i" (scale));
 #endif
-        print_int64(i, output);
+
+static void convert_single_to_fixed32(float input, int i)
+{
+    int32_t output;
+
+    conv_single_scaled32(1);
+    print_int32(i, output);
+    conv_single_scaled32(2);
+    print_int32(i, output);
+    conv_single_scaled32(4);
+    print_int32(i, output);
+    conv_single_scaled32(8);
+    print_int32(i, output);
+    conv_single_scaled32(16);
+    print_int32(i, output);
+    conv_single_scaled32(16);
+    print_int32(i, output);
+    conv_single_scaled32(32);
+    print_int32(i, output);
+}
+
+#if defined(__arm__)
+#define conv_single_scaled64(scale) \
+    asm("vcvt.s64.f32 %0, %1, #%2" : "=r" (output) : "t" (input), "i" (scale));
+#else
+#define conv_single_scaled64(scale) \
+    asm("fcvtzs %x0, %s1, #%2" : "=r" (output) : "x" (input), "i" (scale));
+#endif
+
+static void convert_single_to_fixed64(float input, int i)
+{
+    int64_t output;
+    conv_single_scaled64(1);
+    print_int64(i, output);
+    conv_single_scaled64(2);
+    print_int64(i, output);
+    conv_single_scaled64(4);
+    print_int64(i, output);
+    conv_single_scaled64(8);
+    print_int64(i, output);
+    conv_single_scaled64(16);
+    print_int64(i, output);
+    conv_single_scaled64(32);
+    print_int64(i, output);
+}
+
+static void convert_single_to_int32(float input, int i)
+{
+    int32_t output;
+#if defined(__arm__)
+    /* asm("vcvt.s32.f32 %s0, %s1" : "=t" (output) : "t" (input)); */
+    output = input;
+#else
+    asm("fcvtzs %w0, %s1" : "=r" (output) : "w" (input));
+#endif
+    print_int32(i, output);
+}
+
+static void convert_single_to_int64(float input, int i)
+{
+    int64_t output;
+#if defined(__arm__)
+    /* asm("vcvt.s32.f32 %s0, %s1" : "=t" (output) : "t" (input)); */
+    output = input;
+#else
+    asm("fcvtzs %x0, %s1" : "=r" (output) : "w" (input));
+#endif
+    print_int32(i, output);
+}
+
+single_test_t single_tests[] = {
+    { convert_single_to_half, "single-precision to half-precision" },
+    { convert_single_to_double, "single-precision to double-precision" },
+    { convert_single_to_fixed32, "single-precision to fixed point 32 bit int" },
+    { convert_single_to_fixed64, "single-precision to fixed point 64 bit int" },
+    { convert_single_to_int32, "single-precision to 32 bit int" },
+    { convert_single_to_int64, "single-precision to 64 bit int" },
+};
+
+static void convert_singles(void)
+{
+    int i,j;
+
+    for (i = 0; i < ARRAY_SIZE(single_tests); ++i) {
+        single_test_t *test = &single_tests[i];
+        printf("Converting %s\n", test->description);
+        for (j = 0; j < ARRAY_SIZE(single_numbers); ++j) {
+            uint16_t input = single_numbers[j];
+            feclearexcept(FE_ALL_EXCEPT);
+            print_single_number(j, input);
+            test->convert_single(input, j);
+        }
     }
 }
 
@@ -243,7 +304,6 @@ typedef struct {
     void (*convert_double) (double input, int i);
     char *description;
 } double_test_t;
-
 
 static void convert_double_to_half(double input, int i)
 {
@@ -583,14 +643,10 @@ void run_tests(void) {
     for (i = 0; i < ARRAY_SIZE(round_flags); ++i) {
         fesetround(round_flags[i].flag);
         printf("### Rounding %s\n", round_flags[i].desc);
-        convert_single_to_half();
-        convert_single_to_double();
+        convert_singles();
         convert_doubles();
         convert_halves();
     }
-
-    /* convert to integer */
-    convert_single_to_integer();
 }
 
 int main(int argc, char *argv[argc])
