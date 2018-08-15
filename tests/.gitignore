@@ -10,6 +10,7 @@ rcutorture
 test-*
 !test-*.c
 !docker/test-*
+!tcg/*/test-*
 test-qapi-commands.[ch]
 test-qapi-events.[ch]
 test-qapi-types.[ch]
