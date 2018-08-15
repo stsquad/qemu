@@ -26,6 +26,12 @@ op_value_t invert_uint32(op_value_t a)
     return r;
 }
 
+op_value_t add_uint32(op_value_t a, op_value_t b)
+{
+    op_value_t r = { .u32 = a.u32 + b.u32 };
+    return r;
+}
+
 /*
  * Test Data
  */
@@ -77,6 +83,11 @@ test_func_desc_t tests[] = {
       { &u32_data, NULL, NULL }, NULL,
       "invert_uint32", "invert 32 bit uints"
     },
+    { TWO_OP,
+      { .two = add_uint32  },
+      { &u32_data, &u32_data, NULL }, NULL,
+      "add_uint32", "add to 32 bit uints"
+    },
 };
 
 /*
@@ -119,13 +130,38 @@ static bool run_single_op_test(test_func_desc_t *test)
 {
     int i;
     test_data_t *input = test->in_data[0];
+
     printf("test data of %ld elements\n", input->length);
+
     for (i = 0; i < input->length; i++) {
         op_value_t in, out;
         in = get_data(input, i);
         print_data(in, input->esize, 1);
         out = test->fn.one(in);
         print_data(out, input->esize, 0);
+    }
+
+    return true;
+}
+
+static bool run_two_op_test(test_func_desc_t *test)
+{
+    int i;
+    test_data_t *a = test->in_data[0];
+    test_data_t *b = test->in_data[1];
+    size_t esz = a->esize;
+
+    assert(a->length == b->length);
+
+    printf("test data of %ld elements\n", a->length);
+    for (i = 0; i < a->length; i++) {
+        op_value_t in1, in2, out;
+        in1 = get_data(a, i);
+        print_data(in1, a->esize, 1);
+        in2 = get_data(b, i);
+        print_data(in2, b->esize, 2);
+        out = test->fn.two(in1, in2);
+        print_data(out, esz, 0);
     }
 
     return true;
@@ -144,6 +180,9 @@ static void run_tests(char *tname) {
         switch (t->fn_type) {
         case ONE_OP:
             run_single_op_test(t);
+            break;
+        case TWO_OP:
+            run_two_op_test(t);
             break;
         default:
             break;
