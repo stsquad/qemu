@@ -81,16 +81,69 @@ static inline op_value_t get_data(test_data_t *d, int element)
     return val;
 }
 
-static inline void print_data(op_value_t v, size_t esz, int i)
+static inline void print_data(test_func_desc_t *t, op_value_t v, size_t esz, int i)
 {
+    bool show_float = false;
+    int float_flags = 0;
+    char flag_str[256] = "";
+
     if (i) {
         printf("IN%d: ", i);
     } else {
         printf("OUT: ");
+        if (t->fn_res != RES_INPUT) {
+            switch (t->fn_res) {
+            case RES_DOUBLE:
+                esz = sizeof(uint64_t);
+                show_float = true;
+                break;
+            case RES_SINGLE:
+                esz = sizeof(uint32_t);
+                show_float = true;
+                break;
+            default:
+                assert(false);
+            }
+        }
     }
+
+#if defined(HANDLE_FLOAT_OPS)
+    if (show_float) {
+        float_flags = fetestexcept(FE_ALL_EXCEPT);
+        if (float_flags) {
+            snprintf(flag_str, sizeof(flag_str), "%s %s %s %s %s",
+                     float_flags & FE_OVERFLOW ? "OVERFLOW" : "",
+                     float_flags & FE_UNDERFLOW ? "UNDERFLOW" : "",
+                     float_flags & FE_DIVBYZERO ? "DIV0" : "",
+                     float_flags & FE_INEXACT ? "INEXACT" : "",
+                     float_flags & FE_INVALID ? "INVALID" : "");
+        } else {
+            snprintf(flag_str, sizeof(flag_str), "OK");
+        }
+    }
+#endif
+
     switch (esz) {
+    case 8:
+        if (show_float) {
+            double as_float = (double) v.u64;
+            printf("DOUBLE %02.20e / %#020" PRIx64 " (%#x => %s)\n",
+                   as_float, v.u64, float_flags, flag_str);
+        } else {
+            printf("%#020" PRIx64"\n", v.u64);
+        }
+        break;
     case 4:
-        printf("%#020" PRIx64"\n", v.u64);
+        if (show_float) {
+            float as_float = (float) v.u32;
+            printf("SINGLE %02.20e / %#010x  (%#x => %s)\n",
+                   as_float, v.u32, float_flags, flag_str);
+        } else {
+            printf("%#020" PRIx64"\n", v.u64);
+        }
+        break;
+    case 2:
+        printf("%#04x\n", v.u16);
         break;
     default:
         assert(false);
@@ -107,9 +160,9 @@ static inline bool run_single_op_test(test_func_desc_t *test)
     for (i = 0; i < input->length; i++) {
         op_value_t in, out;
         in = get_data(input, i);
-        print_data(in, input->esize, 1);
+        print_data(test, in, input->esize, 1);
         out = test->fn.one(in);
-        print_data(out, input->esize, 0);
+        print_data(test, out, input->esize, 0);
     }
 
     return true;
@@ -128,11 +181,11 @@ static inline bool run_two_op_test(test_func_desc_t *test)
     for (i = 0; i < a->length; i++) {
         op_value_t in1, in2, out;
         in1 = get_data(a, i);
-        print_data(in1, a->esize, 1);
+        print_data(test, in1, a->esize, 1);
         in2 = get_data(b, i);
-        print_data(in2, b->esize, 2);
+        print_data(test, in2, b->esize, 2);
         out = test->fn.two(in1, in2);
-        print_data(out, esz, 0);
+        print_data(test, out, esz, 0);
     }
 
     return true;
