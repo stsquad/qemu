@@ -75,12 +75,12 @@ uint32_t uint32_sequence[] = {
 test_data_t u32_data = { sizeof(uint32_t), ARRAY_SIZE(uint32_sequence), &uint32_sequence[0]};
 
 test_func_desc_t tests[] = {
-    { ONE_OP,
+    { ONE_OP, RES_INPUT,
       { .one = invert_uint32  },
       { &u32_data, NULL, NULL }, NULL,
       "invert_uint32", "invert 32 bit uints"
     },
-    { TWO_OP,
+    { TWO_OP, RES_INPUT,
       { .two = add_uint32  },
       { &u32_data, &u32_data, NULL }, NULL,
       "add_uint32", "add to 32 bit uints"

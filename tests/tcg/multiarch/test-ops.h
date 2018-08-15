@@ -12,6 +12,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <assert.h>
 
 typedef union {
     uint16_t u16;
@@ -37,8 +38,15 @@ typedef struct {
     void *data;
 } test_data_t;
 
+typedef enum {
+    RES_INPUT = 0,  /* same size as input */
+    RES_SINGLE, /* single precision float */
+    RES_DOUBLE, /* double precision float */
+} result_t;
+
 typedef struct {
     fnop_type_t fn_type;
+    result_t fn_res;
     union {
         one_op_fn one;
         two_op_fn two;
