@@ -11,6 +11,7 @@
 #define __TEST_OPS_H__
 
 #include <stdint.h>
+#include <stdbool.h>
 
 typedef union {
     uint16_t u16;
@@ -50,5 +51,83 @@ typedef struct {
     char *desc;
 } test_func_desc_t;
 
+#define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
+
+/*
+ * Utility Functions and Test Runner
+ */
+
+static inline op_value_t get_data(test_data_t *d, int element)
+{
+    op_value_t val;
+
+    switch (d->esize) {
+    case 4:
+        val.u32 = ((uint32_t *) d->data)[element];
+        break;
+    default:
+        assert(false);
+        break;
+    }
+
+    return val;
+}
+
+static inline void print_data(op_value_t v, size_t esz, int i)
+{
+    if (i) {
+        printf("IN%d: ", i);
+    } else {
+        printf("OUT: ");
+    }
+    switch (esz) {
+    case 4:
+        printf("%#020" PRIx64"\n", v.u64);
+        break;
+    default:
+        assert(false);
+    }
+}
+
+static inline bool run_single_op_test(test_func_desc_t *test)
+{
+    int i;
+    test_data_t *input = test->in_data[0];
+
+    printf("test data of %ld elements\n", input->length);
+
+    for (i = 0; i < input->length; i++) {
+        op_value_t in, out;
+        in = get_data(input, i);
+        print_data(in, input->esize, 1);
+        out = test->fn.one(in);
+        print_data(out, input->esize, 0);
+    }
+
+    return true;
+}
+
+static inline bool run_two_op_test(test_func_desc_t *test)
+{
+    int i;
+    test_data_t *a = test->in_data[0];
+    test_data_t *b = test->in_data[1];
+    size_t esz = a->esize;
+
+    assert(a->length == b->length);
+
+    printf("test data of %ld elements\n", a->length);
+    for (i = 0; i < a->length; i++) {
+        op_value_t in1, in2, out;
+        in1 = get_data(a, i);
+        print_data(in1, a->esize, 1);
+        in2 = get_data(b, i);
+        print_data(in2, b->esize, 2);
+        out = test->fn.two(in1, in2);
+        print_data(out, esz, 0);
+    }
+
+    return true;
+}
 
 #endif /* __TEST_OPS_H__ */

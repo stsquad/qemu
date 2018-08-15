@@ -20,6 +20,7 @@ TESTS		+=$(MULTIARCH_TESTS)
 #
 
 testthread: LDFLAGS+=-lpthread
+op-test: test-ops.h
 
 # We define the runner for test-mmap after the individual
 # architectures have defined their supported pages sizes. If no
