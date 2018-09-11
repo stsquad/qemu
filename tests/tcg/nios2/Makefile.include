@@ -1,0 +1,2 @@
+DOCKER_IMAGE=buildroot-nios2-cross
+DOCKER_CROSS_COMPILER=nios2-linux-gcc
