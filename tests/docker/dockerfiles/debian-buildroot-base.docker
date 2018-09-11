@@ -1,0 +1,26 @@
+#
+# Buildroot base setup on Debian
+#
+
+FROM debian:stretch-slim
+ENV BUILDROOT_VERSION=2018.08
+
+# Duplicate deb line as deb-src
+RUN cat /etc/apt/sources.list | sed "s/^deb\ /deb-src /" >> /etc/apt/sources.list
+
+# Install common build utilities
+RUN apt update && DEBIAN_FRONTEND=noninteractive apt install -yy eatmydata
+RUN DEBIAN_FRONTEND=noninteractive eatmydata \
+    apt install -y bc \
+                   build-essential \
+                   cpio \
+                   file \
+                   python \
+                   unzip \
+                   rsync \
+                   wget
+
+# Grab the current buildroot version and unpack in /opt
+RUN mkdir -p /opt
+RUN cd /opt && wget https://buildroot.org/downloads/buildroot-${BUILDROOT_VERSION}.tar.gz
+RUN cd /opt && tar -xvf buildroot-${BUILDROOT_VERSION}.tar.gz
