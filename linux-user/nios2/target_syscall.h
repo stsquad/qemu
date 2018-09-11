@@ -2,7 +2,7 @@
 #define TARGET_SYSCALL_H
 
 #define UNAME_MACHINE "nios2"
-#define UNAME_MINIMUM_RELEASE "3.19.0"
+#define UNAME_MINIMUM_RELEASE "4.16.0"
 
 struct target_pt_regs {
     unsigned long  r8;    /* r8-r15 Caller-saved GP registers */
