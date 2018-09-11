@@ -120,6 +120,10 @@ docker-image-debian-riscv64-cross: docker-image-debian-sid
 docker-image-debian-powerpc-cross: docker-image-debian-sid
 docker-image-travis: NOUSER=1
 
+# Buildroot base images
+# These involve building the toolchains and can take some time
+docker-image-buildroot-nios2-cross: docker-image-debian-buildroot-base
+
 # Specialist build images, sometimes very limited tools
 docker-image-tricore-cross: docker-image-debian9
 

@@ -1,0 +1,10 @@
+#
+# NIOS II toolchain
+#
+FROM qemu:debian-buildroot-base
+
+RUN cd /opt/buildroot-${BUILDROOT_VERSION} && make qemu_nios2_10m50_defconfig
+RUN cd /opt/buildroot-${BUILDROOT_VERSION} && make toolchain
+
+# The toolchain is in /opt/buildroot-${BUILDROOT_VERSION}/output/host/bin/nios2-*
+RUN ln -s /opt/buildroot-${BUILDROOT_VERSION}/output/host/bin/nios2-* /usr/bin
