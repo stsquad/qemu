@@ -77,11 +77,13 @@ test_data_t u32_data = { sizeof(uint32_t), ARRAY_SIZE(uint32_sequence), &uint32_
 test_func_desc_t tests[] = {
     { ONE_OP, RES_INPUT,
       { .one = invert_uint32  },
+      NULL,
       { &u32_data, NULL, NULL }, NULL,
       "invert_uint32", "invert 32 bit uints"
     },
     { TWO_OP, RES_INPUT,
       { .two = add_uint32  },
+      NULL,
       { &u32_data, &u32_data, NULL }, NULL,
       "add_uint32", "add to 32 bit uints"
     },
@@ -103,7 +105,7 @@ static void run_tests(char *tname) {
             run_single_op_test(t);
             break;
         case TWO_OP:
-            run_two_op_test(t);
+            run_two_op_test(t, NULL, 0);
             break;
         default:
             break;

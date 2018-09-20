@@ -27,6 +27,13 @@ typedef op_value_t (*one_op_fn) (op_value_t first);
 typedef op_value_t (*two_op_fn) (op_value_t first, op_value_t second);
 typedef op_value_t (*three_op_fn) (op_value_t first, op_value_t second, op_value_t third);
 
+/* optional setup to run before each iteration and check for
+ * side-effects (e.g. FP flags)
+ */
+typedef void (*setup_fn) (uintptr_t data);
+typedef bool (*check_side_fn) (void *reference);
+
+
 typedef enum {
     ONE_OP,
     TWO_OP,
@@ -54,6 +61,9 @@ typedef struct {
         two_op_fn two;
         three_op_fn *three;
     } fn;
+    /* optional */
+    check_side_fn check;
+
     test_data_t *in_data[3];
     test_data_t *out_data;
 
@@ -170,7 +180,7 @@ static inline bool run_single_op_test(test_func_desc_t *test)
     return true;
 }
 
-static inline bool run_two_op_test(test_func_desc_t *test)
+static inline bool run_two_op_test(test_func_desc_t *test, setup_fn setup, uintptr_t udata)
 {
     int i;
     test_data_t *a = test->in_data[0];
@@ -179,7 +189,7 @@ static inline bool run_two_op_test(test_func_desc_t *test)
 
     assert(a->length == b->length);
 
-    printf("test data of %ld elements\n", a->length);
+    printf("%s: %ld tests\n", test->name, a->length);
     for (i = 0; i < a->length; i++) {
         op_value_t in1, in2, out;
         in1 = get_data(a, i);
@@ -189,6 +199,7 @@ static inline bool run_two_op_test(test_func_desc_t *test)
         out = test->fn.two(in1, in2);
         print_data(test, out, esz, 0);
     }
+
 
     return true;
 }
