@@ -20,6 +20,9 @@ typedef union {
     uint16_t u16;
     uint32_t u32;
     uint64_t u64;
+    /* hmm how to ensure alignment??? */
+    float    f32;
+    double   f64;
 } op_value_t;
 
 /* prototypes for op-test function */
@@ -84,6 +87,9 @@ static inline op_value_t get_data(test_data_t *d, int element)
     switch (d->esize) {
     case 4:
         val.u32 = ((uint32_t *) d->data)[element];
+        break;
+    case 8:
+        val.u64 = ((uint64_t *) d->data)[element];
         break;
     default:
         assert(false);
@@ -167,7 +173,7 @@ static inline bool run_single_op_test(test_func_desc_t *test)
     int i;
     test_data_t *input = test->in_data[0];
 
-    printf("test data of %ld elements\n", input->length);
+    printf("%s: %zd tests\n", test->name, input->length);
 
     for (i = 0; i < input->length; i++) {
         op_value_t in, out;
@@ -189,7 +195,7 @@ static inline bool run_two_op_test(test_func_desc_t *test, setup_fn setup, uintp
 
     assert(a->length == b->length);
 
-    printf("%s: %ld tests\n", test->name, a->length);
+    printf("%s: %zd tests\n", test->name, a->length);
     for (i = 0; i < a->length; i++) {
         op_value_t in1, in2, out;
         in1 = get_data(a, i);
