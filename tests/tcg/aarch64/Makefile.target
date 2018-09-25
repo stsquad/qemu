@@ -16,6 +16,7 @@ run-fcvt: fcvt
 	$(call run-test,$<,$(QEMU) $<, "$< on $(TARGET_NAME)")
 	$(call diff-out,$<,$(AARCH64_SRC)/fcvt.ref)
 
+fops: test-ops.h
 fops: LDFLAGS+=-lm
 fops: CFLAGS+=-I$(SRC_PATH)/tests/tcg/multiarch
 
