@@ -17,17 +17,17 @@
 
 op_value_t fadd_double(op_value_t a, op_value_t b)
 {
-    double da = (double) a.u64;
-    double db = (double) b.u64;
-    op_value_t r = { .u64 = (uint64_t) (da + db ) };
+    double da = *(double *) &a.u64;
+    double db = *(double *) &b.u64;
+    op_value_t r = { .f64 = (da + db) };
     return r;
 }
 
 op_value_t fdiv_double(op_value_t a, op_value_t b)
 {
-    double da = (double) a.u64;
-    double db = (double) b.u64;
-    op_value_t r = { .u64 = (uint64_t) (da / db ) };
+    double da = *(double *) &a.u64;
+    double db = *(double *) &b.u64;
+    op_value_t r = { .f64 = (da / db) };
     return r;
 }
 
@@ -100,7 +100,7 @@ static void run_tests(char *test) {
     for (i = 0; i < ARRAY_SIZE(tests); ++i) {
         test_func_desc_t *t = &tests[i];
 
-        if (test && strcmp(tests->name, test)) {
+        if (test && strcmp(t->name, test)!=0) {
             continue;
         }
 
