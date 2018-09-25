@@ -295,7 +295,7 @@ stack_protector=""
 if test -e "$source_path/.git"
 then
     git_update=yes
-    git_submodules="ui/keycodemapdb"
+    git_submodules="ui/keycodemapdb tests/fp/berkeley-testfloat-3 tests/fp/berkeley-softfloat-3"
 else
     git_update=no
     git_submodules=""
