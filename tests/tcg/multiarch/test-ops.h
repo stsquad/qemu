@@ -186,9 +186,8 @@ static inline bool run_single_op_test(test_func_desc_t *test)
     return true;
 }
 
-static inline bool run_two_op_test(test_func_desc_t *test, setup_fn setup, uintptr_t udata)
+static inline bool run_two_op_test(test_func_desc_t *test, int i, setup_fn setup, uintptr_t udata)
 {
-    int i;
     test_data_t *a = test->in_data[0];
     test_data_t *b = test->in_data[1];
     size_t esz = a->esize;
@@ -196,7 +195,7 @@ static inline bool run_two_op_test(test_func_desc_t *test, setup_fn setup, uintp
     assert(a->length == b->length);
 
     printf("%s: %zd tests\n", test->name, a->length);
-    for (i = 0; i < a->length; i++) {
+    for (/* start from index i*/; i < a->length; i++) {
         op_value_t in1, in2, out;
         in1 = get_data(a, i);
         print_data(test, in1, a->esize, 1);

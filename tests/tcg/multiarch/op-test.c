@@ -105,7 +105,7 @@ static void run_tests(char *tname) {
             run_single_op_test(t);
             break;
         case TWO_OP:
-            run_two_op_test(t, NULL, 0);
+            run_two_op_test(t, 0, NULL, 0);
             break;
         default:
             break;

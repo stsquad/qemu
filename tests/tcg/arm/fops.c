@@ -94,7 +94,7 @@ static void setup_fpu(uintptr_t data)
 
 static int rmodes[] = { FE_DOWNWARD };
 
-static void run_tests(char *test) {
+static void run_tests(char *test, int index) {
     int i, j;
 
     for (i = 0; i < ARRAY_SIZE(tests); ++i) {
@@ -107,7 +107,7 @@ static void run_tests(char *test) {
         for (j = 0; j < ARRAY_SIZE(rmodes); j++) {
             switch (t->fn_type) {
             case TWO_OP:
-                run_two_op_test(t, &setup_fpu, rmodes[j]);
+                run_two_op_test(t, index, &setup_fpu, rmodes[j]);
                 break;
             default:
                 assert(false);
@@ -120,11 +120,16 @@ static void run_tests(char *test) {
 int main(int argc, char *argv[])
 {
     char *test = NULL;
+    int index = 0;
 
-    if (argc == 2) {
+    if (argc >= 2) {
         test = argv[1];
     }
 
-    run_tests(test);
+    if (argc == 3) {
+        index = strtol(argv[2], 0, 10);
+    }
+
+    run_tests(test, index);
     return 0;
 }
