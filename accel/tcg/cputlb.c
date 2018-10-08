@@ -76,8 +76,16 @@ QEMU_BUILD_BUG_ON(NB_MMU_MODES > 16);
 void tlb_init(CPUState *cpu)
 {
     CPUArchState *env = cpu->env_ptr;
+    int i;
 
     qemu_spin_init(&env->tlb_lock);
+    for (i = 0; i < NB_MMU_MODES; i++) {
+        size_t n_entries = CPU_TLB_SIZE;
+
+        env->tlb_mask[i] = (n_entries - 1) << CPU_TLB_ENTRY_BITS;
+        env->tlb_table[i] = g_new(CPUTLBEntry, n_entries);
+        env->iotlb[i] = g_new0(CPUIOTLBEntry, n_entries);
+    }
 }
 
 /* flush_all_helper: run fn across all cpus
@@ -120,6 +128,7 @@ size_t tlb_flush_count(void)
 static void tlb_flush_nocheck(CPUState *cpu)
 {
     CPUArchState *env = cpu->env_ptr;
+    int i;
 
     /* The QOM tests will trigger tlb_flushes without setting up TCG
      * so we bug out here in that case.
@@ -139,7 +148,9 @@ static void tlb_flush_nocheck(CPUState *cpu)
      * that do not hold the lock are performed by the same owner thread.
      */
     qemu_spin_lock(&env->tlb_lock);
-    memset(env->tlb_table, -1, sizeof(env->tlb_table));
+    for (i = 0; i < NB_MMU_MODES; i++) {
+        memset(env->tlb_table[i], -1, sizeof_tlb(env, i));
+    }
     memset(env->tlb_v_table, -1, sizeof(env->tlb_v_table));
     qemu_spin_unlock(&env->tlb_lock);
 
@@ -200,7 +211,7 @@ static void tlb_flush_by_mmuidx_async_work(CPUState *cpu, run_on_cpu_data data)
         if (test_bit(mmu_idx, &mmu_idx_bitmask)) {
             tlb_debug("%d\n", mmu_idx);
 
-            memset(env->tlb_table[mmu_idx], -1, sizeof(env->tlb_table[0]));
+            memset(env->tlb_table[mmu_idx], -1, sizeof_tlb(env, mmu_idx));
             memset(env->tlb_v_table[mmu_idx], -1, sizeof(env->tlb_v_table[0]));
         }
     }
@@ -523,8 +534,9 @@ void tlb_reset_dirty(CPUState *cpu, ram_addr_t start1, ram_addr_t length)
     qemu_spin_lock(&env->tlb_lock);
     for (mmu_idx = 0; mmu_idx < NB_MMU_MODES; mmu_idx++) {
         unsigned int i;
+        unsigned int n = tlb_n_entries(env, mmu_idx);
 
-        for (i = 0; i < CPU_TLB_SIZE; i++) {
+        for (i = 0; i < n; i++) {
             tlb_reset_dirty_range_locked(&env->tlb_table[mmu_idx][i], start1,
                                          length);
         }
