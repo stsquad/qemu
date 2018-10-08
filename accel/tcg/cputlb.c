@@ -82,6 +82,7 @@ void tlb_init(CPUState *cpu)
     for (i = 0; i < NB_MMU_MODES; i++) {
         size_t n_entries = CPU_TLB_SIZE;
 
+        env->tlb_desc[i].n_used_entries = 0;
         env->tlb_mask[i] = (n_entries - 1) << CPU_TLB_ENTRY_BITS;
         env->tlb_table[i] = g_new(CPUTLBEntry, n_entries);
         env->iotlb[i] = g_new0(CPUIOTLBEntry, n_entries);
@@ -150,6 +151,7 @@ static void tlb_flush_nocheck(CPUState *cpu)
     qemu_spin_lock(&env->tlb_lock);
     for (i = 0; i < NB_MMU_MODES; i++) {
         memset(env->tlb_table[i], -1, sizeof_tlb(env, i));
+        env->tlb_desc[i].n_used_entries = 0;
     }
     memset(env->tlb_v_table, -1, sizeof(env->tlb_v_table));
     qemu_spin_unlock(&env->tlb_lock);
@@ -213,6 +215,7 @@ static void tlb_flush_by_mmuidx_async_work(CPUState *cpu, run_on_cpu_data data)
 
             memset(env->tlb_table[mmu_idx], -1, sizeof_tlb(env, mmu_idx));
             memset(env->tlb_v_table[mmu_idx], -1, sizeof(env->tlb_v_table[0]));
+            env->tlb_desc[mmu_idx].n_used_entries = 0;
         }
     }
     qemu_spin_unlock(&env->tlb_lock);
@@ -273,12 +276,14 @@ static inline bool tlb_hit_page_anyprot(CPUTLBEntry *tlb_entry,
 }
 
 /* Called with tlb_lock held */
-static inline void tlb_flush_entry_locked(CPUTLBEntry *tlb_entry,
+static inline bool tlb_flush_entry_locked(CPUTLBEntry *tlb_entry,
                                           target_ulong page)
 {
     if (tlb_hit_page_anyprot(tlb_entry, page)) {
         memset(tlb_entry, -1, sizeof(*tlb_entry));
+        return true;
     }
+    return false;
 }
 
 /* Called with tlb_lock held */
@@ -316,7 +321,9 @@ static void tlb_flush_page_async_work(CPUState *cpu, run_on_cpu_data data)
     addr &= TARGET_PAGE_MASK;
     qemu_spin_lock(&env->tlb_lock);
     for (mmu_idx = 0; mmu_idx < NB_MMU_MODES; mmu_idx++) {
-        tlb_flush_entry_locked(tlb_entry(env, mmu_idx, addr), addr);
+        if (tlb_flush_entry_locked(tlb_entry(env, mmu_idx, addr), addr)) {
+            env->tlb_desc[mmu_idx].n_used_entries--;
+        }
         tlb_flush_vtlb_page_locked(env, mmu_idx, addr);
     }
     qemu_spin_unlock(&env->tlb_lock);
@@ -358,7 +365,9 @@ static void tlb_flush_page_by_mmuidx_async_work(CPUState *cpu,
     qemu_spin_lock(&env->tlb_lock);
     for (mmu_idx = 0; mmu_idx < NB_MMU_MODES; mmu_idx++) {
         if (test_bit(mmu_idx, &mmu_idx_bitmap)) {
-            tlb_flush_entry_locked(tlb_entry(env, mmu_idx, addr), addr);
+            if (tlb_flush_entry_locked(tlb_entry(env, mmu_idx, addr), addr)) {
+                env->tlb_desc[mmu_idx].n_used_entries--;
+            }
             tlb_flush_vtlb_page_locked(env, mmu_idx, addr);
         }
     }
@@ -696,6 +705,7 @@ void tlb_set_page_with_attrs(CPUState *cpu, target_ulong vaddr,
         /* Evict the old entry into the victim tlb.  */
         copy_tlb_helper_locked(tv, te);
         env->iotlb_v[mmu_idx][vidx] = env->iotlb[mmu_idx][index];
+        env->tlb_desc[mmu_idx].n_used_entries--;
     }
 
     /* refill the tlb */
@@ -747,6 +757,7 @@ void tlb_set_page_with_attrs(CPUState *cpu, target_ulong vaddr,
     }
 
     copy_tlb_helper_locked(te, &tn);
+    env->tlb_desc[mmu_idx].n_used_entries++;
     qemu_spin_unlock(&env->tlb_lock);
 }
 

@@ -141,10 +141,15 @@ typedef struct CPUIOTLBEntry {
     MemTxAttrs attrs;
 } CPUIOTLBEntry;
 
+typedef struct CPUTLBDesc {
+    size_t n_used_entries;
+} CPUTLBDesc;
+
 #define CPU_COMMON_TLB  \
     /* The meaning of the MMU modes is defined in the target code. */   \
     /* tlb_lock serializes updates to tlb_mask, tlb_table and tlb_v_table */ \
     QemuSpin tlb_lock;                                                  \
+    CPUTLBDesc tlb_desc[NB_MMU_MODES];                                  \
     /* tlb_mask[i] contains (n_entries - 1) << CPU_TLB_ENTRY_BITS */    \
     uintptr_t tlb_mask[NB_MMU_MODES];                                   \
     CPUTLBEntry *tlb_table[NB_MMU_MODES];                               \
