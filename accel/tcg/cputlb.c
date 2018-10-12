@@ -74,11 +74,128 @@ QEMU_BUILD_BUG_ON(sizeof(target_ulong) > sizeof(run_on_cpu_data));
 QEMU_BUILD_BUG_ON(NB_MMU_MODES > 16);
 #define ALL_MMUIDX_BITS ((1 << NB_MMU_MODES) - 1)
 
+#if TCG_TARGET_IMPLEMENTS_DYN_TLB
+static inline size_t sizeof_tlb(CPUArchState *env, uintptr_t mmu_idx)
+{
+    return env->tlb_mask[mmu_idx] + (1 << CPU_TLB_ENTRY_BITS);
+}
+
+static void tlb_dyn_init(CPUArchState *env)
+{
+    int i;
+
+    for (i = 0; i < NB_MMU_MODES; i++) {
+        size_t n_entries = 1 << CPU_TLB_DYN_DEFAULT_BITS;
+
+        env->tlb_desc[i].n_used_entries = 0;
+        env->tlb_desc[i].n_flushes_low_rate = 0;
+        env->tlb_mask[i] = (n_entries - 1) << CPU_TLB_ENTRY_BITS;
+        env->tlb_table[i] = g_new(CPUTLBEntry, n_entries);
+        env->iotlb[i] = g_new(CPUIOTLBEntry, n_entries);
+    }
+}
+
+/*
+ * Perform the resizing only on flushes, otherwise we'd have to take a perf
+ * hit by either rehashing the array or unnecessarily flushing it.
+ *
+ * We grow the array aggressively, and reduce the size more slowly. This
+ * accommodates mixed workloads, where some processes might be memory-heavy
+ * while others might not.
+ *
+ * Called with tlb_lock held.
+ */
+static void tlb_mmu_resize_locked(CPUArchState *env, int mmu_idx)
+{
+    CPUTLBDesc *desc = &env->tlb_desc[mmu_idx];
+    size_t old_size = tlb_n_entries(env, mmu_idx);
+    size_t rate = desc->n_used_entries * 100 / old_size;
+    size_t new_size = old_size;
+
+    if (rate == 100) {
+        new_size = MIN(old_size << 2, 1 << CPU_TLB_DYN_MAX_BITS);
+    } else if (rate > 70) {
+        new_size = MIN(old_size << 1, 1 << CPU_TLB_DYN_MAX_BITS);
+    } else if (rate < 30) {
+        desc->n_flushes_low_rate++;
+        if (desc->n_flushes_low_rate == 100) {
+            new_size = MAX(old_size >> 1, 1 << CPU_TLB_DYN_MIN_BITS);
+            desc->n_flushes_low_rate = 0;
+        }
+    }
+
+    if (new_size == old_size) {
+        return;
+    }
+    g_free(env->tlb_table[mmu_idx]);
+    g_free(env->iotlb[mmu_idx]);
+
+    /* desc->n_used_entries is cleared by the caller */
+    desc->n_flushes_low_rate = 0;
+    env->tlb_mask[mmu_idx] = (new_size - 1) << CPU_TLB_ENTRY_BITS;
+    env->tlb_table[mmu_idx] = g_new(CPUTLBEntry, new_size);
+    env->iotlb[mmu_idx] = g_new(CPUIOTLBEntry, new_size);
+}
+
+static inline void tlb_table_flush(CPUArchState *env)
+{
+    int i;
+
+    for (i = 0; i < NB_MMU_MODES; i++) {
+        tlb_mmu_resize_locked(env, i);
+        memset(env->tlb_table[i], -1, sizeof_tlb(env, i));
+        env->tlb_desc[i].n_used_entries = 0;
+    }
+}
+
+static inline void tlb_table_flush_by_mmuidx(CPUArchState *env, int mmu_idx)
+{
+    tlb_mmu_resize_locked(env, mmu_idx);
+    memset(env->tlb_table[mmu_idx], -1, sizeof_tlb(env, mmu_idx));
+    env->tlb_desc[mmu_idx].n_used_entries = 0;
+}
+
+static inline void tlb_n_used_entries_inc(CPUArchState *env, uintptr_t mmu_idx)
+{
+    env->tlb_desc[mmu_idx].n_used_entries++;
+}
+
+static inline void tlb_n_used_entries_dec(CPUArchState *env, uintptr_t mmu_idx)
+{
+    env->tlb_desc[mmu_idx].n_used_entries--;
+}
+
+#else /* !TCG_TARGET_IMPLEMENTS_DYN_TLB */
+
+static inline void tlb_dyn_init(CPUArchState *env)
+{
+}
+
+static inline void tlb_table_flush(CPUArchState *env)
+{
+    memset(env->tlb_table, -1, sizeof(env->tlb_table));
+}
+
+static inline void tlb_table_flush_by_mmuidx(CPUArchState *env, int mmu_idx)
+{
+    memset(env->tlb_table[mmu_idx], -1, sizeof(env->tlb_table[0]));
+}
+
+static inline void tlb_n_used_entries_inc(CPUArchState *env, uintptr_t mmu_idx)
+{
+}
+
+static inline void tlb_n_used_entries_dec(CPUArchState *env, uintptr_t mmu_idx)
+{
+}
+#endif /* TCG_TARGET_IMPLEMENTS_DYN_TLB */
+
 void tlb_init(CPUState *cpu)
 {
     CPUArchState *env = cpu->env_ptr;
 
     qemu_spin_init(&env->tlb_lock);
+    tlb_dyn_init(env);
 }
 
 /* flush_all_helper: run fn across all cpus
@@ -140,7 +257,7 @@ static void tlb_flush_nocheck(CPUState *cpu)
      * that do not hold the lock are performed by the same owner thread.
      */
     qemu_spin_lock(&env->tlb_lock);
-    memset(env->tlb_table, -1, sizeof(env->tlb_table));
+    tlb_table_flush(env);
     memset(env->tlb_v_table, -1, sizeof(env->tlb_v_table));
     qemu_spin_unlock(&env->tlb_lock);
 
@@ -201,7 +318,7 @@ static void tlb_flush_by_mmuidx_async_work(CPUState *cpu, run_on_cpu_data data)
         if (test_bit(mmu_idx, &mmu_idx_bitmask)) {
             tlb_debug("%d\n", mmu_idx);
 
-            memset(env->tlb_table[mmu_idx], -1, sizeof(env->tlb_table[0]));
+            tlb_table_flush_by_mmuidx(env, mmu_idx);
             memset(env->tlb_v_table[mmu_idx], -1, sizeof(env->tlb_v_table[0]));
         }
     }
@@ -263,12 +380,14 @@ static inline bool tlb_hit_page_anyprot(CPUTLBEntry *tlb_entry,
 }
 
 /* Called with tlb_lock held */
-static inline void tlb_flush_entry_locked(CPUTLBEntry *tlb_entry,
+static inline bool tlb_flush_entry_locked(CPUTLBEntry *tlb_entry,
                                           target_ulong page)
 {
     if (tlb_hit_page_anyprot(tlb_entry, page)) {
         memset(tlb_entry, -1, sizeof(*tlb_entry));
+        return true;
     }
+    return false;
 }
 
 /* Called with tlb_lock held */
@@ -279,7 +398,9 @@ static inline void tlb_flush_vtlb_page_locked(CPUArchState *env, int mmu_idx,
 
     assert_cpu_is_self(ENV_GET_CPU(env));
     for (k = 0; k < CPU_VTLB_SIZE; k++) {
-        tlb_flush_entry_locked(&env->tlb_v_table[mmu_idx][k], page);
+        if (tlb_flush_entry_locked(&env->tlb_v_table[mmu_idx][k], page)) {
+            tlb_n_used_entries_dec(env, mmu_idx);
+        }
     }
 }
 
@@ -306,7 +427,9 @@ static void tlb_flush_page_async_work(CPUState *cpu, run_on_cpu_data data)
     addr &= TARGET_PAGE_MASK;
     qemu_spin_lock(&env->tlb_lock);
     for (mmu_idx = 0; mmu_idx < NB_MMU_MODES; mmu_idx++) {
-        tlb_flush_entry_locked(tlb_entry(env, mmu_idx, addr), addr);
+        if (tlb_flush_entry_locked(tlb_entry(env, mmu_idx, addr), addr)) {
+            tlb_n_used_entries_dec(env, mmu_idx);
+        }
         tlb_flush_vtlb_page_locked(env, mmu_idx, addr);
     }
     qemu_spin_unlock(&env->tlb_lock);
@@ -524,8 +647,9 @@ void tlb_reset_dirty(CPUState *cpu, ram_addr_t start1, ram_addr_t length)
     qemu_spin_lock(&env->tlb_lock);
     for (mmu_idx = 0; mmu_idx < NB_MMU_MODES; mmu_idx++) {
         unsigned int i;
+        unsigned int n = tlb_n_entries(env, mmu_idx);
 
-        for (i = 0; i < CPU_TLB_SIZE; i++) {
+        for (i = 0; i < n; i++) {
             tlb_reset_dirty_range_locked(&env->tlb_table[mmu_idx][i], start1,
                                          length);
         }
@@ -685,6 +809,7 @@ void tlb_set_page_with_attrs(CPUState *cpu, target_ulong vaddr,
         /* Evict the old entry into the victim tlb.  */
         copy_tlb_helper_locked(tv, te);
         env->iotlb_v[mmu_idx][vidx] = env->iotlb[mmu_idx][index];
+        tlb_n_used_entries_dec(env, mmu_idx);
     }
 
     /* refill the tlb */
@@ -736,6 +861,7 @@ void tlb_set_page_with_attrs(CPUState *cpu, target_ulong vaddr,
     }
 
     copy_tlb_helper_locked(te, &tn);
+    tlb_n_used_entries_inc(env, mmu_idx);
     qemu_spin_unlock(&env->tlb_lock);
 }
 

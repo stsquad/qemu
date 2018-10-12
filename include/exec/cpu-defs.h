@@ -67,6 +67,19 @@ typedef uint64_t target_ulong;
 #define CPU_TLB_ENTRY_BITS 5
 #endif
 
+#if TCG_TARGET_IMPLEMENTS_DYN_TLB
+#define CPU_TLB_DYN_MIN_BITS 6
+#define CPU_TLB_DYN_DEFAULT_BITS 8
+/*
+ * Assuming TARGET_PAGE_BITS==12, with 2**22 entries we can cover 2**(22+12) ==
+ * 2**34 == 16G of address space. This is roughly what one would expect a
+ * TLB to cover in a modern (as of 2018) x86_64 CPU. For instance, Intel
+ * Skylake's Level-2 STLB has 16 1G entries.
+ */
+#define CPU_TLB_DYN_MAX_BITS 22
+
+#else /* !TCG_TARGET_IMPLEMENTS_DYN_TLB */
+
 /* TCG_TARGET_TLB_DISPLACEMENT_BITS is used in CPU_TLB_BITS to ensure that
  * the TLB is not unnecessarily small, but still small enough for the
  * TLB lookup instruction sequence used by the TCG target.
@@ -98,6 +111,7 @@ typedef uint64_t target_ulong;
          NB_MMU_MODES <= 8 ? 3 : 4))
 
 #define CPU_TLB_SIZE (1 << CPU_TLB_BITS)
+#endif /* TCG_TARGET_IMPLEMENTS_DYN_TLB */
 
 typedef struct CPUTLBEntry {
     /* bit TARGET_LONG_BITS to TARGET_PAGE_BITS : virtual address
@@ -141,13 +155,36 @@ typedef struct CPUIOTLBEntry {
     MemTxAttrs attrs;
 } CPUIOTLBEntry;
 
-#define CPU_COMMON_TLB \
+#if TCG_TARGET_IMPLEMENTS_DYN_TLB
+
+typedef struct CPUTLBDesc {
+    size_t n_used_entries;
+    size_t n_flushes_low_rate;
+} CPUTLBDesc;
+
+#define CPU_TLB                                                         \
+    CPUTLBDesc tlb_desc[NB_MMU_MODES];                                  \
+    /* tlb_mask[i] contains (n_entries - 1) << CPU_TLB_ENTRY_BITS */    \
+    uintptr_t tlb_mask[NB_MMU_MODES];                                   \
+    CPUTLBEntry *tlb_table[NB_MMU_MODES];
+
+#define CPU_IOTLB                               \
+    CPUIOTLBEntry *iotlb[NB_MMU_MODES];
+#else
+#define CPU_TLB                                         \
+    CPUTLBEntry tlb_table[NB_MMU_MODES][CPU_TLB_SIZE];
+
+#define CPU_IOTLB                                       \
+    CPUIOTLBEntry iotlb[NB_MMU_MODES][CPU_TLB_SIZE];
+#endif /* TCG_TARGET_IMPLEMENTS_DYN_TLB */
+
+#define CPU_COMMON_TLB                                                  \
     /* The meaning of the MMU modes is defined in the target code. */   \
     /* tlb_lock serializes updates to tlb_table and tlb_v_table */      \
     QemuSpin tlb_lock;                                                  \
-    CPUTLBEntry tlb_table[NB_MMU_MODES][CPU_TLB_SIZE];                  \
+    CPU_TLB                                                             \
     CPUTLBEntry tlb_v_table[NB_MMU_MODES][CPU_VTLB_SIZE];               \
-    CPUIOTLBEntry iotlb[NB_MMU_MODES][CPU_TLB_SIZE];                    \
+    CPU_IOTLB                                                           \
     CPUIOTLBEntry iotlb_v[NB_MMU_MODES][CPU_VTLB_SIZE];                 \
     size_t tlb_flush_count;                                             \
     target_ulong tlb_flush_addr;                                        \
