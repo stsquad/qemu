@@ -1700,6 +1700,8 @@ void helper_be_stq_mmu(CPUArchState *env, target_ulong addr, uint64_t val,
         }                                               \
     } while (0)
 
+#include "atomic_common.inc.c"
+
 #define DATA_SIZE 1
 #include "atomic_template.h"
 
