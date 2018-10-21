@@ -855,9 +855,18 @@ static inline ram_addr_t qemu_ram_addr_from_host_nofail(void *ptr)
     return ram_addr;
 }
 
+static inline void set_hostaddr(CPUArchState *env, TCGMemOp mo, void *haddr)
+{
+#ifdef CONFIG_PLUGIN
+    if (mo & MO_HADDR) {
+        env->hostaddr = haddr;
+    }
+#endif
+}
+
 static uint64_t io_readx(CPUArchState *env, CPUIOTLBEntry *iotlbentry,
                          int mmu_idx, target_ulong addr, uintptr_t retaddr,
-                         MMUAccessType access_type, int size)
+                         TCGMemOp mo, MMUAccessType access_type, int size)
 {
     CPUState *cpu = ENV_GET_CPU(env);
     hwaddr mr_offset;
@@ -866,6 +875,9 @@ static uint64_t io_readx(CPUArchState *env, CPUIOTLBEntry *iotlbentry,
     uint64_t val;
     bool locked = false;
     MemTxResult r;
+
+    /* XXX Any sensible choice other than NULL? */
+    set_hostaddr(env, mo, NULL);
 
     section = iotlb_to_section(cpu, iotlbentry->addr, iotlbentry->attrs);
     mr = section->mr;
@@ -901,7 +913,7 @@ static uint64_t io_readx(CPUArchState *env, CPUIOTLBEntry *iotlbentry,
 
 static void io_writex(CPUArchState *env, CPUIOTLBEntry *iotlbentry,
                       int mmu_idx, uint64_t val, target_ulong addr,
-                      uintptr_t retaddr, int size)
+                      uintptr_t retaddr, TCGMemOp mo, int size)
 {
     CPUState *cpu = ENV_GET_CPU(env);
     hwaddr mr_offset;
@@ -909,6 +921,8 @@ static void io_writex(CPUArchState *env, CPUIOTLBEntry *iotlbentry,
     MemoryRegion *mr;
     bool locked = false;
     MemTxResult r;
+
+    set_hostaddr(env, mo, NULL);
 
     section = iotlb_to_section(cpu, iotlbentry->addr, iotlbentry->attrs);
     mr = section->mr;
@@ -1180,7 +1194,8 @@ load_helper(CPUArchState *env, target_ulong addr, TCGMemOpIdx oi,
         offsetof(CPUTLBEntry, addr_code) : offsetof(CPUTLBEntry, addr_read);
     const MMUAccessType access_type =
         code_read ? MMU_INST_FETCH : MMU_DATA_LOAD;
-    unsigned a_bits = get_alignment_bits(get_memop(oi));
+    TCGMemOp mo = get_memop(oi);
+    unsigned a_bits = get_alignment_bits(mo);
     void *haddr;
     uint64_t res;
 
@@ -1229,7 +1244,7 @@ load_helper(CPUArchState *env, target_ulong addr, TCGMemOpIdx oi,
         }
 
         res = io_readx(env, &env->iotlb[mmu_idx][index], mmu_idx, addr,
-                       retaddr, access_type, size);
+                       retaddr, mo, access_type, size);
         return handle_bswap(res, size, big_endian);
     }
 
@@ -1247,6 +1262,12 @@ load_helper(CPUArchState *env, target_ulong addr, TCGMemOpIdx oi,
         r2 = full_load(env, addr2, oi, retaddr);
         shift = (addr & (size - 1)) * 8;
 
+        /*
+         * XXX cross-page accesses would have to be split into separate accesses
+         * for the host address to make sense. For now, just return NULL.
+         */
+        set_hostaddr(env, mo, NULL);
+
         if (big_endian) {
             /* Big-endian combine.  */
             res = (r1 << shift) | (r2 >> ((size * 8) - shift));
@@ -1259,6 +1280,7 @@ load_helper(CPUArchState *env, target_ulong addr, TCGMemOpIdx oi,
 
  do_aligned_access:
     haddr = (void *)((uintptr_t)addr + entry->addend);
+    set_hostaddr(env, mo, (void *)haddr);
     switch (size) {
     case 1:
         res = ldub_p(haddr);
@@ -1429,7 +1451,8 @@ store_helper(CPUArchState *env, target_ulong addr, uint64_t val,
     CPUTLBEntry *entry = tlb_entry(env, mmu_idx, addr);
     target_ulong tlb_addr = tlb_addr_write(entry);
     const size_t tlb_off = offsetof(CPUTLBEntry, addr_write);
-    unsigned a_bits = get_alignment_bits(get_memop(oi));
+    TCGMemOp mo = get_memop(oi);
+    unsigned a_bits = get_alignment_bits(mo);
     void *haddr;
 
     /* Handle CPU specific unaligned behaviour */
@@ -1478,7 +1501,7 @@ store_helper(CPUArchState *env, target_ulong addr, uint64_t val,
 
         io_writex(env, &env->iotlb[mmu_idx][index], mmu_idx,
                   handle_bswap(val, size, big_endian),
-                  addr, retaddr, size);
+                  addr, retaddr, mo, size);
         return;
     }
 
@@ -1523,11 +1546,13 @@ store_helper(CPUArchState *env, target_ulong addr, uint64_t val,
             }
             helper_ret_stb_mmu(env, addr + i, val8, oi, retaddr);
         }
+        set_hostaddr(env, mo, NULL);
         return;
     }
 
  do_aligned_access:
     haddr = (void *)((uintptr_t)addr + entry->addend);
+    set_hostaddr(env, mo, (void *)haddr);
     switch (size) {
     case 1:
         stb_p(haddr, val);

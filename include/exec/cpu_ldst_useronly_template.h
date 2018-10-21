@@ -64,12 +64,19 @@
 static inline RES_TYPE
 glue(glue(cpu_ld, USUFFIX), MEMSUFFIX)(CPUArchState *env, abi_ptr ptr)
 {
+    RES_TYPE ret;
 #if !defined(CODE_ACCESS)
-    trace_guest_mem_before_exec(
-        ENV_GET_CPU(env), ptr,
-        trace_mem_build_info(SHIFT, false, MO_TE, false));
+    uint8_t meminfo = trace_mem_build_info(SHIFT, false, MO_TE, false);
+
+    trace_guest_mem_before_exec(ENV_GET_CPU(env), ptr, meminfo);
 #endif
-    return glue(glue(ld, USUFFIX), _p)(g2h(ptr));
+
+    ret = glue(glue(ld, USUFFIX), _p)(g2h(ptr));
+
+#if !defined(CODE_ACCESS)
+    qemu_plugin_vcpu_mem_cb(ENV_GET_CPU(env), ptr, NULL, meminfo);
+#endif
+    return ret;
 }
 
 static inline RES_TYPE
@@ -88,12 +95,19 @@ glue(glue(glue(cpu_ld, USUFFIX), MEMSUFFIX), _ra)(CPUArchState *env,
 static inline int
 glue(glue(cpu_lds, SUFFIX), MEMSUFFIX)(CPUArchState *env, abi_ptr ptr)
 {
+    int ret;
 #if !defined(CODE_ACCESS)
-    trace_guest_mem_before_exec(
-        ENV_GET_CPU(env), ptr,
-        trace_mem_build_info(SHIFT, true, MO_TE, false));
+    uint8_t meminfo = trace_mem_build_info(SHIFT, true, MO_TE, false);
+
+    trace_guest_mem_before_exec(ENV_GET_CPU(env), ptr, meminfo);
 #endif
-    return glue(glue(lds, SUFFIX), _p)(g2h(ptr));
+
+    ret = glue(glue(lds, SUFFIX), _p)(g2h(ptr));
+
+#if !defined(CODE_ACCESS)
+    qemu_plugin_vcpu_mem_cb(ENV_GET_CPU(env), ptr, NULL, meminfo);
+#endif
+    return ret;
 }
 
 static inline int
@@ -114,10 +128,11 @@ static inline void
 glue(glue(cpu_st, SUFFIX), MEMSUFFIX)(CPUArchState *env, abi_ptr ptr,
                                       RES_TYPE v)
 {
-    trace_guest_mem_before_exec(
-        ENV_GET_CPU(env), ptr,
-        trace_mem_build_info(SHIFT, false, MO_TE, true));
+    uint8_t meminfo = trace_mem_build_info(SHIFT, false, MO_TE, true);
+
+    trace_guest_mem_before_exec(ENV_GET_CPU(env), ptr, meminfo);
     glue(glue(st, SUFFIX), _p)(g2h(ptr), v);
+    qemu_plugin_vcpu_mem_cb(ENV_GET_CPU(env), ptr, NULL, meminfo);
 }
 
 static inline void
