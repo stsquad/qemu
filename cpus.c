@@ -43,6 +43,7 @@
 #include "exec/exec-all.h"
 
 #include "qemu/thread.h"
+#include "qemu/plugin.h"
 #include "sysemu/cpus.h"
 #include "sysemu/qtest.h"
 #include "qemu/main-loop.h"
@@ -1375,11 +1376,20 @@ static void qemu_tcg_rr_wait_io_event(void)
 
 static void qemu_wait_io_event(CPUState *cpu)
 {
+    bool slept = false;
+
     g_assert(cpu_mutex_locked(cpu));
     g_assert(!qemu_mutex_iothread_locked());
 
     while (cpu_thread_is_idle(cpu)) {
+        if (!slept) {
+            slept = true;
+            qemu_plugin_vcpu_idle_cb(cpu);
+        }
         qemu_cond_wait(cpu->halt_cond, cpu->lock);
+    }
+    if (slept) {
+        qemu_plugin_vcpu_resume_cb(cpu);
     }
 
 #ifdef _WIN32
