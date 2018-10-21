@@ -11504,6 +11504,8 @@ abi_long do_syscall(void *cpu_env, int num, abi_long arg1,
 
     trace_guest_user_syscall(cpu, num, arg1, arg2, arg3, arg4,
                              arg5, arg6, arg7, arg8);
+    qemu_plugin_vcpu_syscall(cpu, num, arg1, arg2, arg3, arg4, arg5, arg6, arg7,
+                             arg8);
 
     if (unlikely(do_strace)) {
         print_syscall(num, arg1, arg2, arg3, arg4, arg5, arg6);
@@ -11516,5 +11518,6 @@ abi_long do_syscall(void *cpu_env, int num, abi_long arg1,
     }
 
     trace_guest_user_syscall_ret(cpu, num, ret);
+    qemu_plugin_vcpu_syscall_ret(cpu, num, ret);
     return ret;
 }
