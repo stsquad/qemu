@@ -114,6 +114,7 @@ static void do_gen_mem_cb(TCGv vaddr, uint8_t info, bool is_haddr)
     tcg_gen_extu_tl_i64(vaddr64, vaddr);
 
     if (is_haddr) {
+        /* cb or just a magic number for hwaddr? */
         TCGv_ptr cb_fn = tcg_const_ptr(NULL);
         gen_helper_plugin_vcpu_mem_haddr_cb(cpu_index, meminfo, vaddr64,
                                             cb_fn, udata);

@@ -270,7 +270,7 @@ typedef void
 (*qemu_plugin_vcpu_mem_cb_t)(unsigned int vcpu_index,
                              qemu_plugin_meminfo_t info, uint64_t vaddr,
                              void *userdata);
-
+/* drop this plugin type?  */
 typedef void
 (*qemu_plugin_vcpu_mem_haddr_cb_t)(unsigned int vcpu_index,
                                    qemu_plugin_meminfo_t info, uint64_t vaddr,
@@ -282,6 +282,7 @@ void qemu_plugin_register_vcpu_mem_cb(struct qemu_plugin_insn *insn,
                                       enum qemu_plugin_mem_rw rw,
                                       void *userdata);
 
+/* drop this plugin type?  */
 void qemu_plugin_register_vcpu_mem_haddr_cb(struct qemu_plugin_insn *insn,
                                             qemu_plugin_vcpu_mem_haddr_cb_t cb,
                                             enum qemu_plugin_cb_flags flags,
@@ -293,8 +294,27 @@ void qemu_plugin_register_vcpu_mem_inline(struct qemu_plugin_insn *insn,
                                           enum qemu_plugin_op op, void *ptr,
                                           uint64_t imm);
 
+
+/* not these */
 uint64_t qemu_plugin_hwaddr_page(const struct qemu_plugin_hwaddr *haddr, bool second_page);
 uint64_t qemu_plugin_ram_addr_from_host(const struct qemu_plugin_hwaddr *haddr);
+
+/*
+ * qemu_plugin_get_hwaddr():
+ * @vaddr: the virtual address of the memory operation
+ *
+ * Return a qemu_plugin_hwaddr handle to query details about the
+ * actual physical address backing the virtual address.
+ *
+ * This handle is *only* valid for the duration of the callback. Any
+ * information about the handle should be recovered before the
+ * callback returns.
+ */
+struct qemu_plugin_hwaddr *qemu_plugin_get_hwaddr(uint64_t vaddr);
+
+bool qemu_plugin_hwaddr_spans_pages(struct qemu_plugin_hwaddr *hwaddr);
+bool qemu_plugin_hwaddr_is_io(struct qemu_plugin_hwaddr *hwaddr);
+uint64_t qemu_plugin_raddr_from_hwaddr(const struct qemu_plugin_hwaddr *haddr);
 
 typedef void
 (*qemu_plugin_vcpu_syscall_cb_t)(qemu_plugin_id_t id, unsigned int vcpu_index,
