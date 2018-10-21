@@ -45,7 +45,6 @@
 #error unsupported data size
 #endif
 
-
 /* For the benefit of TCG generated code, we want to avoid the complication
    of ABI-specific return type promotion and always return a value extended
    to the register size of the host.  This is tcg_target_long, except in the
@@ -99,10 +98,15 @@ static inline DATA_TYPE glue(io_read, SUFFIX)(CPUArchState *env,
                                               size_t mmu_idx, size_t index,
                                               target_ulong addr,
                                               uintptr_t retaddr,
+                                              TCGMemOp mo,
                                               bool recheck,
                                               MMUAccessType access_type)
 {
     CPUIOTLBEntry *iotlbentry = &env->iotlb[mmu_idx][index];
+
+    /* XXX Any sensible choice other than NULL? */
+    set_hostaddr(env, mo, NULL);
+
     return io_readx(env, iotlbentry, mmu_idx, addr, retaddr, recheck,
                     access_type, DATA_SIZE);
 }
@@ -115,7 +119,8 @@ WORD_TYPE helper_le_ld_name(CPUArchState *env, target_ulong addr,
     uintptr_t index = tlb_index(env, mmu_idx, addr);
     CPUTLBEntry *entry = tlb_entry(env, mmu_idx, addr);
     target_ulong tlb_addr = entry->ADDR_READ;
-    unsigned a_bits = get_alignment_bits(get_memop(oi));
+    TCGMemOp mo = get_memop(oi);
+    unsigned a_bits = get_alignment_bits(mo);
     uintptr_t haddr;
     DATA_TYPE res;
 
@@ -141,7 +146,7 @@ WORD_TYPE helper_le_ld_name(CPUArchState *env, target_ulong addr,
 
         /* ??? Note that the io helpers always read data in the target
            byte ordering.  We should push the LE/BE request down into io.  */
-        res = glue(io_read, SUFFIX)(env, mmu_idx, index, addr, retaddr,
+        res = glue(io_read, SUFFIX)(env, mmu_idx, index, addr, retaddr, mo,
                                     tlb_addr & TLB_RECHECK,
                                     READ_ACCESS_TYPE);
         res = TGT_LE(res);
@@ -162,12 +167,19 @@ WORD_TYPE helper_le_ld_name(CPUArchState *env, target_ulong addr,
         res2 = helper_le_ld_name(env, addr2, oi, retaddr);
         shift = (addr & (DATA_SIZE - 1)) * 8;
 
+        /*
+         * XXX cross-page accesses would have to be split into separate accesses
+         * for the host address to make sense. For now, just return NULL.
+         */
+        set_hostaddr(env, mo, NULL);
+
         /* Little-endian combine.  */
         res = (res1 >> shift) | (res2 << ((DATA_SIZE * 8) - shift));
         return res;
     }
 
     haddr = addr + entry->addend;
+    set_hostaddr(env, mo, (void *)haddr);
 #if DATA_SIZE == 1
     res = glue(glue(ld, LSUFFIX), _p)((uint8_t *)haddr);
 #else
@@ -184,7 +196,8 @@ WORD_TYPE helper_be_ld_name(CPUArchState *env, target_ulong addr,
     uintptr_t index = tlb_index(env, mmu_idx, addr);
     CPUTLBEntry *entry = tlb_entry(env, mmu_idx, addr);
     target_ulong tlb_addr = entry->ADDR_READ;
-    unsigned a_bits = get_alignment_bits(get_memop(oi));
+    TCGMemOp mo = get_memop(oi);
+    unsigned a_bits = get_alignment_bits(mo);
     uintptr_t haddr;
     DATA_TYPE res;
 
@@ -210,7 +223,7 @@ WORD_TYPE helper_be_ld_name(CPUArchState *env, target_ulong addr,
 
         /* ??? Note that the io helpers always read data in the target
            byte ordering.  We should push the LE/BE request down into io.  */
-        res = glue(io_read, SUFFIX)(env, mmu_idx, index, addr, retaddr,
+        res = glue(io_read, SUFFIX)(env, mmu_idx, index, addr, retaddr, mo,
                                     tlb_addr & TLB_RECHECK,
                                     READ_ACCESS_TYPE);
         res = TGT_BE(res);
@@ -231,12 +244,15 @@ WORD_TYPE helper_be_ld_name(CPUArchState *env, target_ulong addr,
         res2 = helper_be_ld_name(env, addr2, oi, retaddr);
         shift = (addr & (DATA_SIZE - 1)) * 8;
 
+        set_hostaddr(env, mo, NULL);
+
         /* Big-endian combine.  */
         res = (res1 << shift) | (res2 >> ((DATA_SIZE * 8) - shift));
         return res;
     }
 
     haddr = addr + entry->addend;
+    set_hostaddr(env, mo, (void *)haddr);
     res = glue(glue(ld, LSUFFIX), _be_p)((uint8_t *)haddr);
     return res;
 }
@@ -267,9 +283,12 @@ static inline void glue(io_write, SUFFIX)(CPUArchState *env,
                                           DATA_TYPE val,
                                           target_ulong addr,
                                           uintptr_t retaddr,
+                                          TCGMemOp mo,
                                           bool recheck)
 {
     CPUIOTLBEntry *iotlbentry = &env->iotlb[mmu_idx][index];
+
+    set_hostaddr(env, mo, NULL);
     return io_writex(env, iotlbentry, mmu_idx, val, addr, retaddr,
                      recheck, DATA_SIZE);
 }
@@ -281,7 +300,8 @@ void helper_le_st_name(CPUArchState *env, target_ulong addr, DATA_TYPE val,
     uintptr_t index = tlb_index(env, mmu_idx, addr);
     CPUTLBEntry *entry = tlb_entry(env, mmu_idx, addr);
     target_ulong tlb_addr = tlb_addr_write(entry);
-    unsigned a_bits = get_alignment_bits(get_memop(oi));
+    TCGMemOp mo = get_memop(oi);
+    unsigned a_bits = get_alignment_bits(mo);
     uintptr_t haddr;
 
     if (addr & ((1 << a_bits) - 1)) {
@@ -308,7 +328,7 @@ void helper_le_st_name(CPUArchState *env, target_ulong addr, DATA_TYPE val,
            byte ordering.  We should push the LE/BE request down into io.  */
         val = TGT_LE(val);
         glue(io_write, SUFFIX)(env, mmu_idx, index, val, addr,
-                               retaddr, tlb_addr & TLB_RECHECK);
+                               retaddr, mo, tlb_addr & TLB_RECHECK);
         return;
     }
 
@@ -340,10 +360,12 @@ void helper_le_st_name(CPUArchState *env, target_ulong addr, DATA_TYPE val,
             glue(helper_ret_stb, MMUSUFFIX)(env, addr + i, val8,
                                             oi, retaddr);
         }
+        set_hostaddr(env, mo, NULL);
         return;
     }
 
     haddr = addr + entry->addend;
+    set_hostaddr(env, mo, (void *)haddr);
 #if DATA_SIZE == 1
     glue(glue(st, SUFFIX), _p)((uint8_t *)haddr, val);
 #else
@@ -359,7 +381,8 @@ void helper_be_st_name(CPUArchState *env, target_ulong addr, DATA_TYPE val,
     uintptr_t index = tlb_index(env, mmu_idx, addr);
     CPUTLBEntry *entry = tlb_entry(env, mmu_idx, addr);
     target_ulong tlb_addr = tlb_addr_write(entry);
-    unsigned a_bits = get_alignment_bits(get_memop(oi));
+    TCGMemOp mo = get_memop(oi);
+    unsigned a_bits = get_alignment_bits(mo);
     uintptr_t haddr;
 
     if (addr & ((1 << a_bits) - 1)) {
@@ -385,7 +408,7 @@ void helper_be_st_name(CPUArchState *env, target_ulong addr, DATA_TYPE val,
         /* ??? Note that the io helpers always read data in the target
            byte ordering.  We should push the LE/BE request down into io.  */
         val = TGT_BE(val);
-        glue(io_write, SUFFIX)(env, mmu_idx, index, val, addr, retaddr,
+        glue(io_write, SUFFIX)(env, mmu_idx, index, val, addr, retaddr, mo,
                                tlb_addr & TLB_RECHECK);
         return;
     }
@@ -418,10 +441,12 @@ void helper_be_st_name(CPUArchState *env, target_ulong addr, DATA_TYPE val,
             glue(helper_ret_stb, MMUSUFFIX)(env, addr + i, val8,
                                             oi, retaddr);
         }
+        set_hostaddr(env, mo, NULL);
         return;
     }
 
     haddr = addr + entry->addend;
+    set_hostaddr(env, mo, (void *)haddr);
     glue(glue(st, SUFFIX), _be_p)((uint8_t *)haddr, val);
 }
 #endif /* DATA_SIZE > 1 */

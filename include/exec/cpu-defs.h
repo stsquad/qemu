@@ -183,6 +183,14 @@ typedef struct CPUTLBCommon {
 # define CPU_IOTLB                              \
     CPUIOTLBEntry *iotlb[NB_MMU_MODES];
 
+#ifdef CONFIG_PLUGIN
+# define CPU_PLUGIN_HOSTADDR                            \
+    /* stores the host address of a guest access */     \
+    void *hostaddr;
+#else
+# define CPU_PLUGIN_HOSTADDR
+#endif
+
 /*
  * The meaning of each of the MMU modes is defined in the target code.
  * Note that NB_MMU_MODES is not yet defined; we can only reference it
@@ -194,7 +202,8 @@ typedef struct CPUTLBCommon {
     CPU_TLB                                                             \
     CPUTLBEntry tlb_v_table[NB_MMU_MODES][CPU_VTLB_SIZE];               \
     CPU_IOTLB                                                           \
-    CPUIOTLBEntry iotlb_v[NB_MMU_MODES][CPU_VTLB_SIZE];
+    CPUIOTLBEntry iotlb_v[NB_MMU_MODES][CPU_VTLB_SIZE];                 \
+    CPU_PLUGIN_HOSTADDR;
 
 #else
 
