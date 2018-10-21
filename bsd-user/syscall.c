@@ -323,6 +323,8 @@ abi_long do_freebsd_syscall(void *cpu_env, int num, abi_long arg1,
     gemu_log("freebsd syscall %d\n", num);
 #endif
     trace_guest_user_syscall(cpu, num, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8);
+    qemu_plugin_vcpu_syscall(cpu, num, arg1, arg2, arg3, arg4, arg5, arg6, arg7,
+                             arg8);
     if(do_strace)
         print_freebsd_syscall(num, arg1, arg2, arg3, arg4, arg5, arg6);
 
@@ -403,6 +405,7 @@ abi_long do_freebsd_syscall(void *cpu_env, int num, abi_long arg1,
     if (do_strace)
         print_freebsd_syscall_ret(num, ret);
     trace_guest_user_syscall_ret(cpu, num, ret);
+    qemu_plugin_vcpu_syscall_ret(cpu, num, ret);
     return ret;
  efault:
     ret = -TARGET_EFAULT;
@@ -421,6 +424,8 @@ abi_long do_netbsd_syscall(void *cpu_env, int num, abi_long arg1,
     gemu_log("netbsd syscall %d\n", num);
 #endif
     trace_guest_user_syscall(cpu, num, arg1, arg2, arg3, arg4, arg5, arg6, 0, 0);
+    qemu_plugin_vcpu_syscall(cpu, num, arg1, arg2, arg3, arg4, arg5, arg6, 0,
+                             0);
     if(do_strace)
         print_netbsd_syscall(num, arg1, arg2, arg3, arg4, arg5, arg6);
 
@@ -478,6 +483,7 @@ abi_long do_netbsd_syscall(void *cpu_env, int num, abi_long arg1,
     if (do_strace)
         print_netbsd_syscall_ret(num, ret);
     trace_guest_user_syscall_ret(cpu, num, ret);
+    qemu_plugin_vcpu_syscall_ret(cpu, num, ret);
     return ret;
  efault:
     ret = -TARGET_EFAULT;
@@ -496,6 +502,8 @@ abi_long do_openbsd_syscall(void *cpu_env, int num, abi_long arg1,
     gemu_log("openbsd syscall %d\n", num);
 #endif
     trace_guest_user_syscall(cpu, num, arg1, arg2, arg3, arg4, arg5, arg6, 0, 0);
+    qemu_plugin_vcpu_syscall(cpu, num, arg1, arg2, arg3, arg4, arg5, arg6, 0,
+                             0);
     if(do_strace)
         print_openbsd_syscall(num, arg1, arg2, arg3, arg4, arg5, arg6);
 
@@ -553,6 +561,7 @@ abi_long do_openbsd_syscall(void *cpu_env, int num, abi_long arg1,
     if (do_strace)
         print_openbsd_syscall_ret(num, ret);
     trace_guest_user_syscall_ret(cpu, num, ret);
+    qemu_plugin_vcpu_syscall_ret(cpu, num, ret);
     return ret;
  efault:
     ret = -TARGET_EFAULT;
