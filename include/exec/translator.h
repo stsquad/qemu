@@ -106,6 +106,8 @@ typedef struct DisasContextBase {
  *
  * @disas_log:
  *      Print instruction disassembly to log.
+ * @ctx_base_offset: offset of DisasContextBase within DisasContext.
+ * @ctx_size: size of DisasContext.
  */
 typedef struct TranslatorOps {
     void (*init_disas_context)(DisasContextBase *db, CPUState *cpu);
@@ -117,6 +119,8 @@ typedef struct TranslatorOps {
                            struct qemu_plugin_insn *plugin_insn);
     void (*tb_stop)(DisasContextBase *db, CPUState *cpu);
     void (*disas_log)(const DisasContextBase *db, CPUState *cpu);
+    size_t ctx_base_offset;
+    size_t ctx_size;
 } TranslatorOps;
 
 /**
