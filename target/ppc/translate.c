@@ -7730,6 +7730,9 @@ static void ppc_tr_translate_insn(DisasContextBase *dcbase, CPUState *cs,
               ctx->opcode, opc1(ctx->opcode), opc2(ctx->opcode),
               opc3(ctx->opcode), opc4(ctx->opcode),
               ctx->le_mode ? "little" : "big");
+
+    qemu_plugin_insn_append(plugin_insn, &ctx->opcode, sizeof(ctx->opcode));
+
     ctx->base.pc_next += 4;
     table = env->opcodes;
     handler = table[opc1(ctx->opcode)];
@@ -7829,6 +7832,8 @@ static const TranslatorOps ppc_tr_ops = {
     .translate_insn     = ppc_tr_translate_insn,
     .tb_stop            = ppc_tr_tb_stop,
     .disas_log          = ppc_tr_disas_log,
+    .ctx_base_offset    = offsetof(DisasContext, base),
+    .ctx_size           = sizeof(DisasContext),
 };
 
 void gen_intermediate_code(CPUState *cs, struct TranslationBlock *tb)
