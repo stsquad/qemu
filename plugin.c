@@ -71,6 +71,13 @@ struct qemu_plugin_state {
      * the code cache is flushed.
      */
     struct qht dyn_cb_arr_ht;
+    /*
+     * We support a single clock reference from plugins. We keep a pointer
+     * to the context of the plugin that provides the reference,
+     * so that we can remove the reference when the plugin is uninstalled.
+     */
+    qemu_plugin_clock_func_t clock_ref;
+    struct qemu_plugin_ctx *clock_ctx;
 };
 
 /*
@@ -104,6 +111,8 @@ QemuOptsList qemu_plugin_opts = {
 typedef int (*qemu_plugin_install_func_t)(qemu_plugin_id_t, int, char **);
 
 static struct qemu_plugin_state plugin;
+bool use_plugin_clock;
+static bool plugin_installing;
 
 static bool plugin_dyn_cb_arr_cmp(const void *ap, const void *bp)
 {
@@ -251,7 +260,9 @@ static int plugin_load(struct qemu_plugin_desc *desc)
     QTAILQ_INSERT_TAIL(&plugin.ctxs, ctx, entry);
     qemu_rec_mutex_unlock(&plugin.lock);
 
+    plugin_installing = true;
     rc = install(ctx->id, desc->argc, desc->argv);
+    plugin_installing = false;
     if (rc) {
         error_report("%s: qemu_plugin_install returned error code %d",
                      __func__, rc);
@@ -417,6 +428,10 @@ void qemu_plugin_uninstall(qemu_plugin_id_t id, qemu_plugin_uninstall_cb_t cb)
      */
     for (ev = 0; ev < QEMU_PLUGIN_EV_MAX; ev++) {
         plugin_unregister_cb__locked(ctx, ev);
+    }
+    if (ctx == plugin.clock_ctx) {
+        atomic_set(&plugin.clock_ref, NULL);
+        plugin.clock_ctx = NULL;
     }
     qemu_rec_mutex_unlock(&plugin.lock);
 
@@ -963,6 +978,70 @@ uint64_t qemu_plugin_ram_addr_from_host(void *haddr)
     return 0;
 #endif
 }
+
+#ifndef CONFIG_USER_ONLY
+static bool
+qemu_plugin_register_virtual_clock__locked(qemu_plugin_id_t id,
+                                           qemu_plugin_clock_func_t clock)
+{
+    struct qemu_plugin_ctx *ctx = id_to_ctx__locked(id);
+
+    if (!plugin_installing) {
+        error_report("plugin: can only call %s during plugin installation",
+                     __func__);
+        return false;
+    }
+    if (use_plugin_clock) {
+        error_report("plugin: clock reference already registered");
+        return false;
+    }
+    if (clock == NULL) {
+        error_report("%s: cannot pass NULL clock", __func__);
+        return false;
+    }
+    plugin.clock_ctx = ctx;
+    use_plugin_clock = true;
+    atomic_set(&plugin.clock_ref, clock);
+    return true;
+}
+#endif /* !CONFIG_USER_ONLY */
+
+bool qemu_plugin_register_virtual_clock(qemu_plugin_id_t id,
+                                        qemu_plugin_clock_func_t clock)
+{
+#ifdef CONFIG_USER_ONLY
+    return false;
+#else
+    bool ret;
+
+    qemu_rec_mutex_lock(&plugin.lock);
+    ret = qemu_plugin_register_virtual_clock__locked(id, clock);
+    qemu_rec_mutex_unlock(&plugin.lock);
+    return ret;
+#endif
+}
+
+#ifdef CONFIG_USER_ONLY
+int64_t plugin_get_clock(void)
+{
+    abort();
+    return 0;
+}
+#else
+/*
+ * Note: use_plugin_clock might be set, but the plugin providing the clock
+ * might have been uninstalled.
+ */
+int64_t plugin_get_clock(void)
+{
+    qemu_plugin_clock_func_t clock_ref = atomic_read(&plugin.clock_ref);
+
+    if (clock_ref) {
+        return clock_ref();
+    }
+    return cpu_get_clock();
+}
+#endif
 
 static void __attribute__((__constructor__)) plugin_init(void)
 {

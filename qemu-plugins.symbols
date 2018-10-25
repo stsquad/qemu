@@ -16,6 +16,7 @@
   qemu_plugin_register_vcpu_syscall_cb;
   qemu_plugin_register_vcpu_syscall_ret_cb;
   qemu_plugin_register_atexit_cb;
+  qemu_plugin_register_virtual_clock;
   qemu_plugin_tb_n_insns;
   qemu_plugin_tb_get_insn;
   qemu_plugin_tb_vaddr;

@@ -24,6 +24,7 @@
 
 #include "qemu/osdep.h"
 #include "qemu/main-loop.h"
+#include "qemu/plugin.h"
 #include "qemu/timer.h"
 #include "sysemu/replay.h"
 #include "sysemu/sysemu.h"
@@ -640,6 +641,8 @@ int64_t qemu_clock_get_ns(QEMUClockType type)
     case QEMU_CLOCK_VIRTUAL:
         if (use_icount) {
             return cpu_get_icount();
+        } else if (use_plugin_clock) {
+            return plugin_get_clock();
         } else {
             return cpu_get_clock();
         }

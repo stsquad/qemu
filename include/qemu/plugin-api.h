@@ -218,6 +218,15 @@ void qemu_plugin_register_flush_cb(qemu_plugin_id_t id,
 void qemu_plugin_register_atexit_cb(qemu_plugin_id_t id,
                                     qemu_plugin_udata_cb_t cb, void *userdata);
 
+typedef int64_t (*qemu_plugin_clock_func_t)(void);
+
+/*
+ * Can only be called from plugin_init.
+ * Returns true on success
+ */
+bool qemu_plugin_register_virtual_clock(qemu_plugin_id_t id,
+                                        qemu_plugin_clock_func_t clock);
+
 /* returns -1 in user-mode */
 int qemu_plugin_n_vcpus(void);
 
