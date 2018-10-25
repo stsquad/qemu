@@ -101,10 +101,10 @@ void translator_loop(const TranslatorOps *ops, DisasContextBase *db,
             && (tb_cflags(db->tb) & CF_LAST_IO)) {
             /* Accept I/O on the last instruction.  */
             gen_io_start();
-            ops->translate_insn(db, cpu);
+            ops->translate_insn(db, cpu, NULL);
             gen_io_end();
         } else {
-            ops->translate_insn(db, cpu);
+            ops->translate_insn(db, cpu, NULL);
         }
 
         /* Stop translation if translate_insn so indicated.  */

@@ -1843,7 +1843,8 @@ static bool riscv_tr_breakpoint_check(DisasContextBase *dcbase, CPUState *cpu,
 }
 
 
-static void riscv_tr_translate_insn(DisasContextBase *dcbase, CPUState *cpu)
+static void riscv_tr_translate_insn(DisasContextBase *dcbase, CPUState *cpu,
+                                    struct qemu_plugin_insn *plugin_insn)
 {
     DisasContext *ctx = container_of(dcbase, DisasContext, base);
     CPURISCVState *env = cpu->env_ptr;

@@ -13468,7 +13468,8 @@ static bool aarch64_tr_breakpoint_check(DisasContextBase *dcbase, CPUState *cpu,
     return true;
 }
 
-static void aarch64_tr_translate_insn(DisasContextBase *dcbase, CPUState *cpu)
+static void aarch64_tr_translate_insn(DisasContextBase *dcbase, CPUState *cpu,
+                                      struct qemu_plugin_insn *plugin_insn)
 {
     DisasContext *dc = container_of(dcbase, DisasContext, base);
     CPUARMState *env = cpu->env_ptr;

@@ -20,6 +20,7 @@
 
 
 #include "exec/exec-all.h"
+#include "qemu/plugin.h"
 #include "tcg/tcg.h"
 
 
@@ -112,7 +113,8 @@ typedef struct TranslatorOps {
     void (*insn_start)(DisasContextBase *db, CPUState *cpu);
     bool (*breakpoint_check)(DisasContextBase *db, CPUState *cpu,
                              const CPUBreakpoint *bp);
-    void (*translate_insn)(DisasContextBase *db, CPUState *cpu);
+    void (*translate_insn)(DisasContextBase *db, CPUState *cpu,
+                           struct qemu_plugin_insn *plugin_insn);
     void (*tb_stop)(DisasContextBase *db, CPUState *cpu);
     void (*disas_log)(const DisasContextBase *db, CPUState *cpu);
 } TranslatorOps;

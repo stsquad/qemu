@@ -2313,7 +2313,8 @@ static bool sh4_tr_breakpoint_check(DisasContextBase *dcbase, CPUState *cs,
     return true;
 }
 
-static void sh4_tr_translate_insn(DisasContextBase *dcbase, CPUState *cs)
+static void sh4_tr_translate_insn(DisasContextBase *dcbase, CPUState *cs,
+                                  struct qemu_plugin_insn *plugin_insn)
 {
     CPUSH4State *env = cs->env_ptr;
     DisasContext *ctx = container_of(dcbase, DisasContext, base);

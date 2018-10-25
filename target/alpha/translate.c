@@ -2983,7 +2983,8 @@ static bool alpha_tr_breakpoint_check(DisasContextBase *dcbase, CPUState *cpu,
     return true;
 }
 
-static void alpha_tr_translate_insn(DisasContextBase *dcbase, CPUState *cpu)
+static void alpha_tr_translate_insn(DisasContextBase *dcbase, CPUState *cpu,
+                                    struct qemu_plugin_insn *plugin_insn)
 {
     DisasContext *ctx = container_of(dcbase, DisasContext, base);
     CPUAlphaState *env = cpu->env_ptr;

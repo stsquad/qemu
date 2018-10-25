@@ -7710,7 +7710,8 @@ static bool ppc_tr_breakpoint_check(DisasContextBase *dcbase, CPUState *cs,
     return true;
 }
 
-static void ppc_tr_translate_insn(DisasContextBase *dcbase, CPUState *cs)
+static void ppc_tr_translate_insn(DisasContextBase *dcbase, CPUState *cs,
+                                  struct qemu_plugin_insn *plugin_insn)
 {
     DisasContext *ctx = container_of(dcbase, DisasContext, base);
     CPUPPCState *env = cs->env_ptr;

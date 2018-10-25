@@ -6087,7 +6087,8 @@ static bool m68k_tr_breakpoint_check(DisasContextBase *dcbase, CPUState *cpu,
     return true;
 }
 
-static void m68k_tr_translate_insn(DisasContextBase *dcbase, CPUState *cpu)
+static void m68k_tr_translate_insn(DisasContextBase *dcbase, CPUState *cpu,
+                                   struct qemu_plugin_insn *plugin_insn)
 {
     DisasContext *dc = container_of(dcbase, DisasContext, base);
     CPUM68KState *env = cpu->env_ptr;

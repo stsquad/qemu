@@ -6228,7 +6228,8 @@ static bool s390x_tr_breakpoint_check(DisasContextBase *dcbase, CPUState *cs,
     return true;
 }
 
-static void s390x_tr_translate_insn(DisasContextBase *dcbase, CPUState *cs)
+static void s390x_tr_translate_insn(DisasContextBase *dcbase, CPUState *cs,
+                                    struct qemu_plugin_insn *plugin_insn)
 {
     CPUS390XState *env = cs->env_ptr;
     DisasContext *dc = container_of(dcbase, DisasContext, base);

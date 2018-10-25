@@ -4737,7 +4737,8 @@ static bool hppa_tr_breakpoint_check(DisasContextBase *dcbase, CPUState *cs,
     return true;
 }
 
-static void hppa_tr_translate_insn(DisasContextBase *dcbase, CPUState *cs)
+static void hppa_tr_translate_insn(DisasContextBase *dcbase, CPUState *cs,
+                                   struct qemu_plugin_insn *plugin_insn)
 {
     DisasContext *ctx = container_of(dcbase, DisasContext, base);
     CPUHPPAState *env = cs->env_ptr;

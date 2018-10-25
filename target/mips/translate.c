@@ -28650,7 +28650,8 @@ static bool mips_tr_breakpoint_check(DisasContextBase *dcbase, CPUState *cs,
     return true;
 }
 
-static void mips_tr_translate_insn(DisasContextBase *dcbase, CPUState *cs)
+static void mips_tr_translate_insn(DisasContextBase *dcbase, CPUState *cs,
+                                   struct qemu_plugin_insn *plugin_insn)
 {
     CPUMIPSState *env = cs->env_ptr;
     DisasContext *ctx = container_of(dcbase, DisasContext, base);

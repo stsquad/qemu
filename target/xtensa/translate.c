@@ -1146,7 +1146,8 @@ static bool xtensa_tr_breakpoint_check(DisasContextBase *dcbase, CPUState *cpu,
     return true;
 }
 
-static void xtensa_tr_translate_insn(DisasContextBase *dcbase, CPUState *cpu)
+static void xtensa_tr_translate_insn(DisasContextBase *dcbase, CPUState *cpu,
+                                     struct qemu_plugin_insn *plugin_insn)
 {
     DisasContext *dc = container_of(dcbase, DisasContext, base);
     CPUXtensaState *env = cpu->env_ptr;
