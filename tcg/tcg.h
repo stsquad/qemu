@@ -480,6 +480,13 @@ typedef TCGv_ptr TCGv_env;
 /* Used to align parameters.  See the comment before tcgv_i32_temp.  */
 #define TCG_CALL_DUMMY_ARG      ((TCGArg)0)
 
+typedef struct TCGHelperInfo {
+    void *func;
+    const char *name;
+    unsigned flags;
+    unsigned sizemask;
+} TCGHelperInfo;
+
 /* Conditions.  Note that these are laid out for easy manipulation by
    the functions below:
      bit 0 is used for inverting;
