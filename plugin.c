@@ -1078,8 +1078,21 @@ void plugin_lockstep_cb(void)
     plugin_cb__simple(QEMU_PLUGIN_EV_LOCKSTEP);
 }
 
+void qemu_plugin_register_hook_cb(qemu_plugin_id_t id, qemu_plugin_hook_cb_t cb)
+{
+    plugin_register_cb(id, QEMU_PLUGIN_EV_HOOK, cb);
+}
+
 void plugin_chan_xmit(uint32_t cmd, const void *data, size_t size)
 {
+    struct qemu_plugin_cb *cb, *next;
+    enum qemu_plugin_event ev = QEMU_PLUGIN_EV_HOOK;
+
+    QLIST_FOREACH_SAFE_RCU(cb, &plugin.cb_lists[ev], entry, next) {
+        qemu_plugin_hook_cb_t func = cb->f.hook;
+
+        func(cmd, data, size);
+    }
 }
 
 static void __attribute__((__constructor__)) plugin_init(void)

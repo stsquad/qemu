@@ -61,12 +61,14 @@ enum qemu_plugin_event {
     QEMU_PLUGIN_EV_LOCKSTEP,
     QEMU_PLUGIN_EV_FLUSH,
     QEMU_PLUGIN_EV_ATEXIT,
+    QEMU_PLUGIN_EV_HOOK,
     QEMU_PLUGIN_EV_MAX,
 };
 
 union qemu_plugin_cb_sig {
     qemu_plugin_simple_cb_t          simple;
     qemu_plugin_udata_cb_t           udata;
+    qemu_plugin_hook_cb_t            hook;
     qemu_plugin_vcpu_simple_cb_t     vcpu_simple;
     qemu_plugin_vcpu_udata_cb_t      vcpu_udata;
     qemu_plugin_vcpu_tb_trans_cb_t   vcpu_tb_trans;

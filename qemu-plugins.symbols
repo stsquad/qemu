@@ -31,6 +31,7 @@
   qemu_plugin_mem_is_big_endian;
   qemu_plugin_mem_is_store;
   qemu_plugin_vcpu_for_each;
+  qemu_plugin_register_hook_cb;
   qemu_plugin_n_vcpus;
   qemu_plugin_n_max_vcpus;
 };

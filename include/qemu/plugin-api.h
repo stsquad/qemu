@@ -234,6 +234,12 @@ void qemu_plugin_register_lockstep_cb(qemu_plugin_id_t id,
 
 void qemu_plugin_end_time_slice(void);
 
+typedef void (*qemu_plugin_hook_cb_t)(uint32_t cmd, const void *data,
+                                      size_t size);
+
+void qemu_plugin_register_hook_cb(qemu_plugin_id_t id,
+                                  qemu_plugin_hook_cb_t cb);
+
 /* returns -1 in user-mode */
 int qemu_plugin_n_vcpus(void);
 
