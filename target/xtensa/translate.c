@@ -879,7 +879,8 @@ static inline unsigned xtensa_op0_insn_len(DisasContext *dc, uint8_t op0)
     return xtensa_isa_length_from_chars(dc->config->isa, &op0);
 }
 
-static void disas_xtensa_insn(CPUXtensaState *env, DisasContext *dc)
+static void disas_xtensa_insn(CPUXtensaState *env, DisasContext *dc,
+                              struct qemu_plugin_insn *plugin_insn)
 {
     xtensa_isa isa = dc->config->isa;
     unsigned char b[MAX_INSN_LENGTH] = {cpu_ldub_code(env, dc->pc)};
@@ -916,6 +917,7 @@ static void disas_xtensa_insn(CPUXtensaState *env, DisasContext *dc)
     for (i = 1; i < len; ++i) {
         b[i] = cpu_ldub_code(env, dc->pc + i);
     }
+    qemu_plugin_insn_append(plugin_insn, b, len);
     xtensa_insnbuf_from_chars(isa, dc->insnbuf, b, len);
     fmt = xtensa_format_decode(isa, dc->insnbuf);
     if (fmt == XTENSA_UNDEFINED) {
@@ -1183,7 +1185,7 @@ static void xtensa_tr_translate_insn(DisasContextBase *dcbase, CPUState *cpu,
         gen_ibreak_check(env, dc);
     }
 
-    disas_xtensa_insn(env, dc);
+    disas_xtensa_insn(env, dc, plugin_insn);
 
     if (dc->icount) {
         tcg_gen_mov_i32(cpu_SR[ICOUNT], dc->next_icount);
@@ -1241,6 +1243,8 @@ static const TranslatorOps xtensa_translator_ops = {
     .translate_insn     = xtensa_tr_translate_insn,
     .tb_stop            = xtensa_tr_tb_stop,
     .disas_log          = xtensa_tr_disas_log,
+    .ctx_base_offset    = offsetof(DisasContext, base),
+    .ctx_size           = sizeof(DisasContext),
 };
 
 void gen_intermediate_code(CPUState *cpu, TranslationBlock *tb)
