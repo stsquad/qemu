@@ -1851,6 +1851,7 @@ static void riscv_tr_translate_insn(DisasContextBase *dcbase, CPUState *cpu,
 
     ctx->opcode = cpu_ldl_code(env, ctx->base.pc_next);
     decode_opc(env, ctx);
+    qemu_plugin_insn_append(plugin_insn, &ctx->opcode, sizeof(ctx->opcode));
     ctx->base.pc_next = ctx->pc_succ_insn;
 
     if (ctx->base.is_jmp == DISAS_NEXT) {
@@ -1892,6 +1893,8 @@ static const TranslatorOps riscv_tr_ops = {
     .translate_insn     = riscv_tr_translate_insn,
     .tb_stop            = riscv_tr_tb_stop,
     .disas_log          = riscv_tr_disas_log,
+    .ctx_base_offset    = offsetof(DisasContext, base),
+    .ctx_size           = sizeof(DisasContext),
 };
 
 void gen_intermediate_code(CPUState *cs, TranslationBlock *tb)
