@@ -13314,11 +13314,13 @@ static void disas_data_proc_simd_fp(DisasContext *s, uint32_t insn)
 }
 
 /* C3.1 A64 instruction index by encoding */
-static void disas_a64_insn(CPUARMState *env, DisasContext *s)
+static void disas_a64_insn(CPUARMState *env, DisasContext *s,
+                           struct qemu_plugin_insn *plugin_insn)
 {
     uint32_t insn;
 
     insn = arm_ldl_code(env, s->pc, s->sctlr_b);
+    qemu_plugin_insn_append(plugin_insn, &insn, sizeof(insn));
     s->insn = insn;
     s->pc += 4;
 
@@ -13490,7 +13492,7 @@ static void aarch64_tr_translate_insn(DisasContextBase *dcbase, CPUState *cpu,
                       default_exception_el(dc));
         dc->base.is_jmp = DISAS_NORETURN;
     } else {
-        disas_a64_insn(env, dc);
+        disas_a64_insn(env, dc, plugin_insn);
     }
 
     dc->base.pc_next = dc->pc;
@@ -13589,4 +13591,6 @@ const TranslatorOps aarch64_translator_ops = {
     .translate_insn     = aarch64_tr_translate_insn,
     .tb_stop            = aarch64_tr_tb_stop,
     .disas_log          = aarch64_tr_disas_log,
+    .ctx_base_offset    = offsetof(DisasContext, base),
+    .ctx_size           = sizeof(DisasContext),
 };

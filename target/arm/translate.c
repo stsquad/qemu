@@ -10634,7 +10634,8 @@ gen_thumb2_data_op(DisasContext *s, int op, int conds, uint32_t shifter_out,
 }
 
 /* Translate a 32-bit thumb instruction. */
-static void disas_thumb2_insn(DisasContext *s, uint32_t insn)
+static void disas_thumb2_insn(DisasContext *s, uint32_t insn,
+                              struct qemu_plugin_insn *plugin_insn)
 {
     uint32_t imm, shift, offset;
     uint32_t rd, rn, rm, rs;
@@ -12172,7 +12173,8 @@ illegal_op:
                        default_exception_el(s));
 }
 
-static void disas_thumb_insn(DisasContext *s, uint32_t insn)
+static void disas_thumb_insn(DisasContext *s, uint32_t insn,
+                             struct qemu_plugin_insn *plugin_insn)
 {
     uint32_t val, op, rm, rn, rd, shift, cond;
     int32_t offset;
@@ -13236,6 +13238,7 @@ static void arm_tr_translate_insn(DisasContextBase *dcbase, CPUState *cpu,
 
     insn = arm_ldl_code(env, dc->pc, dc->sctlr_b);
     dc->insn = insn;
+    qemu_plugin_insn_append(plugin_insn, &insn, sizeof(insn));
     dc->pc += 4;
     disas_arm_insn(dc, insn);
 
@@ -13306,11 +13309,21 @@ static void thumb_tr_translate_insn(DisasContextBase *dcbase, CPUState *cpu,
     insn = arm_lduw_code(env, dc->pc, dc->sctlr_b);
     is_16bit = thumb_insn_is_16bit(dc, insn);
     dc->pc += 2;
+    if (plugin_insn) {
+        uint16_t insn16 = insn;
+
+        qemu_plugin_insn_append(plugin_insn, &insn16, sizeof(insn16));
+    }
     if (!is_16bit) {
         uint32_t insn2 = arm_lduw_code(env, dc->pc, dc->sctlr_b);
 
         insn = insn << 16 | insn2;
         dc->pc += 2;
+        if (plugin_insn) {
+            uint16_t insn16 = insn2;
+
+            qemu_plugin_insn_append(plugin_insn, &insn16, sizeof(insn16));
+        }
     }
     dc->insn = insn;
 
@@ -13323,9 +13336,9 @@ static void thumb_tr_translate_insn(DisasContextBase *dcbase, CPUState *cpu,
     }
 
     if (is_16bit) {
-        disas_thumb_insn(dc, insn);
+        disas_thumb_insn(dc, insn, plugin_insn);
     } else {
-        disas_thumb2_insn(dc, insn);
+        disas_thumb2_insn(dc, insn, plugin_insn);
     }
 
     /* Advance the Thumb condexec condition.  */
@@ -13500,6 +13513,8 @@ static const TranslatorOps arm_translator_ops = {
     .translate_insn     = arm_tr_translate_insn,
     .tb_stop            = arm_tr_tb_stop,
     .disas_log          = arm_tr_disas_log,
+    .ctx_base_offset    = offsetof(DisasContext, base),
+    .ctx_size           = sizeof(DisasContext),
 };
 
 static const TranslatorOps thumb_translator_ops = {
@@ -13510,6 +13525,8 @@ static const TranslatorOps thumb_translator_ops = {
     .translate_insn     = thumb_tr_translate_insn,
     .tb_stop            = arm_tr_tb_stop,
     .disas_log          = arm_tr_disas_log,
+    .ctx_base_offset    = offsetof(DisasContext, base),
+    .ctx_size           = sizeof(DisasContext),
 };
 
 /* generate intermediate code for basic block 'tb'.  */
