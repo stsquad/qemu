@@ -720,6 +720,14 @@ struct TCGContext {
 
     TCGLabel *exitreq_label;
 
+    /*
+     * We keep one plugin_tb struct per TCGContext. Note that on every TB
+     * translation we clear but do not free its contents; this way we
+     * avoid a lot of malloc/free churn, since after a few TB's it's
+     * unlikely that we'll need to allocate either more instructions or more
+     * space for instructions (for variable-instruction-length ISAs).
+     */
+    struct qemu_plugin_tb plugin_tb;
     struct qemu_plugin_dyn_cb_arr *plugin_mem_cb;
     struct qemu_plugin_insn *plugin_insn;
 
