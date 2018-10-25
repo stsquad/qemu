@@ -2990,6 +2990,7 @@ static void alpha_tr_translate_insn(DisasContextBase *dcbase, CPUState *cpu,
     CPUAlphaState *env = cpu->env_ptr;
     uint32_t insn = cpu_ldl_code(env, ctx->base.pc_next);
 
+    qemu_plugin_insn_append(plugin_insn, &insn, sizeof(insn));
     ctx->base.pc_next += 4;
     ctx->base.is_jmp = translate_one(ctx, insn);
 
@@ -3046,6 +3047,8 @@ static const TranslatorOps alpha_tr_ops = {
     .translate_insn     = alpha_tr_translate_insn,
     .tb_stop            = alpha_tr_tb_stop,
     .disas_log          = alpha_tr_disas_log,
+    .ctx_base_offset    = offsetof(DisasContext, base),
+    .ctx_size           = sizeof(DisasContext),
 };
 
 void gen_intermediate_code(CPUState *cpu, TranslationBlock *tb)
