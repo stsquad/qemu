@@ -5902,6 +5902,7 @@ static void sparc_tr_translate_insn(DisasContextBase *dcbase, CPUState *cs,
     unsigned int insn;
 
     insn = cpu_ldl_code(env, dc->pc);
+    qemu_plugin_insn_append(plugin_insn, &insn, sizeof(insn));
     dc->base.pc_next += 4;
     disas_sparc_insn(dc, insn);
 
@@ -5961,6 +5962,8 @@ static const TranslatorOps sparc_tr_ops = {
     .translate_insn     = sparc_tr_translate_insn,
     .tb_stop            = sparc_tr_tb_stop,
     .disas_log          = sparc_tr_disas_log,
+    .ctx_base_offset    = offsetof(DisasContext, base),
+    .ctx_size           = sizeof(DisasContext),
 };
 
 void gen_intermediate_code(CPUState *cs, TranslationBlock *tb)
