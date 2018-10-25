@@ -1642,15 +1642,13 @@ bool tcg_op_supported(TCGOpcode op)
 /* Note: we convert the 64 bit args to 32 bit and do some alignment
    and endian swap. Maybe it would be better to do the alignment
    and endian swap in tcg_reg_alloc_call(). */
-void tcg_gen_callN(void *func, TCGTemp *ret, int nargs, TCGTemp **args)
+static void do_tcg_gen_callN(TCGHelperInfo *info, TCGTemp *ret, int nargs,
+                             TCGTemp **args)
 {
     int i, real_args, nb_rets, pi;
     unsigned sizemask, flags;
-    TCGHelperInfo *info;
-    uint32_t hash = tcg_helper_func_hash(func);
     TCGOp *op;
 
-    info = qht_lookup_custom(&helper_table, func, hash, tcg_helper_lookup_cmp);
     flags = info->flags;
     sizemask = info->sizemask;
 
@@ -1774,7 +1772,7 @@ void tcg_gen_callN(void *func, TCGTemp *ret, int nargs, TCGTemp **args)
         op->args[pi++] = temp_arg(args[i]);
         real_args++;
     }
-    op->args[pi++] = (uintptr_t)func;
+    op->args[pi++] = (uintptr_t)info->func;
     op->args[pi++] = flags;
     TCGOP_CALLI(op) = real_args;
 
@@ -1810,6 +1808,48 @@ void tcg_gen_callN(void *func, TCGTemp *ret, int nargs, TCGTemp **args)
         }
     }
 #endif /* TCG_TARGET_EXTEND_ARGS */
+}
+
+void tcg_gen_callN(void *func, TCGTemp *ret, int nargs, TCGTemp **args)
+{
+    TCGHelperInfo *info;
+    uint32_t hash = tcg_helper_func_hash(func);
+
+    /*
+     * Here we can get away with tcg_helper_lookup_cmp, which only looks
+     * at the function pointer, since we have the compile-time guarantee
+     * that @func can only be in one TCGHelperInfo.
+     */
+    info = qht_lookup_custom(&helper_table, func, hash, tcg_helper_lookup_cmp);
+    do_tcg_gen_callN(info, ret, nargs, args);
+}
+
+void tcg_gen_runtime_helper(const TCGHelperInfo *orig, TCGTemp *ret, int nargs,
+                            TCGTemp **args)
+{
+    TCGHelperInfo *info;
+    uint32_t hash = tcg_helper_func_hash(orig->func);
+
+    /*
+     * Use the full TCGHelperInfo lookup, since there is no guarantee that func
+     * will be unique to each TCGHelperInfo. For instance, we could have the
+     * same helper function registered in several TCGHelperInfo's, each of them
+     * with different flags.
+     */
+    info = qht_lookup(&helper_table, orig, hash);
+    if (info == NULL) {
+        void *existing = NULL;
+
+        /* @orig might be in the stack, so we need to allocate a new struct */
+        info = g_new(TCGHelperInfo, 1);
+        memcpy(info, orig, sizeof(TCGHelperInfo));
+        qht_insert(&helper_table, info, hash, &existing);
+        if (unlikely(existing)) {
+            g_free(info);
+            info = existing;
+        }
+    }
+    do_tcg_gen_callN(info, ret, nargs, args);
 }
 
 static void tcg_reg_alloc_start(TCGContext *s)
