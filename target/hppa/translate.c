@@ -4757,6 +4757,8 @@ static void hppa_tr_translate_insn(DisasContextBase *dcbase, CPUState *cs,
            the page permissions for execute.  */
         uint32_t insn = cpu_ldl_code(env, ctx->base.pc_next);
 
+        qemu_plugin_insn_append(plugin_insn, &insn, sizeof(insn));
+
         /* Set up the IA queue for the next insn.
            This will be overwritten by a branch.  */
         if (ctx->iaoq_b == -1) {
@@ -4887,6 +4889,8 @@ static const TranslatorOps hppa_tr_ops = {
     .translate_insn     = hppa_tr_translate_insn,
     .tb_stop            = hppa_tr_tb_stop,
     .disas_log          = hppa_tr_disas_log,
+    .ctx_base_offset    = offsetof(DisasContext, base),
+    .ctx_size           = sizeof(DisasContext),
 };
 
 void gen_intermediate_code(CPUState *cs, struct TranslationBlock *tb)
