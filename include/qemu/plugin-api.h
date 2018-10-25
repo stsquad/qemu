@@ -227,6 +227,13 @@ typedef int64_t (*qemu_plugin_clock_func_t)(void);
 bool qemu_plugin_register_virtual_clock(qemu_plugin_id_t id,
                                         qemu_plugin_clock_func_t clock);
 
+void qemu_plugin_enable_lockstep_execution(void);
+
+void qemu_plugin_register_lockstep_cb(qemu_plugin_id_t id,
+                                      qemu_plugin_simple_cb_t cb);
+
+void qemu_plugin_end_time_slice(void);
+
 /* returns -1 in user-mode */
 int qemu_plugin_n_vcpus(void);
 

@@ -472,6 +472,7 @@ static void plugin_cb__simple(enum qemu_plugin_event ev)
 
     switch (ev) {
     case QEMU_PLUGIN_EV_FLUSH:
+    case QEMU_PLUGIN_EV_LOCKSTEP:
         QLIST_FOREACH_SAFE_RCU(cb, &plugin.cb_lists[ev], entry, next) {
             qemu_plugin_simple_cb_t func = cb->f.simple;
 
@@ -1042,6 +1043,40 @@ int64_t plugin_get_clock(void)
     return cpu_get_clock();
 }
 #endif
+
+/*
+ * We manage the CPU state changes; the plugin will control the length of the
+ * execution windows.
+ */
+void qemu_plugin_enable_lockstep_execution(void)
+{
+#ifdef CONFIG_USER_ONLY
+    abort();
+#else
+    cpu_lockstep_enable();
+#endif
+}
+
+void qemu_plugin_end_time_slice(void)
+{
+#ifdef CONFIG_USER_ONLY
+    abort();
+#else
+    g_assert(current_cpu);
+    cpu_lockstep_request_stop(current_cpu);
+#endif
+}
+
+void qemu_plugin_register_lockstep_cb(qemu_plugin_id_t id,
+                                      qemu_plugin_simple_cb_t cb)
+{
+    plugin_register_cb(id, QEMU_PLUGIN_EV_LOCKSTEP, cb);
+}
+
+void plugin_lockstep_cb(void)
+{
+    plugin_cb__simple(QEMU_PLUGIN_EV_LOCKSTEP);
+}
 
 static void __attribute__((__constructor__)) plugin_init(void)
 {

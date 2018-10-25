@@ -58,6 +58,7 @@ enum qemu_plugin_event {
     QEMU_PLUGIN_EV_VCPU_RESUME,
     QEMU_PLUGIN_EV_VCPU_SYSCALL,
     QEMU_PLUGIN_EV_VCPU_SYSCALL_RET,
+    QEMU_PLUGIN_EV_LOCKSTEP,
     QEMU_PLUGIN_EV_FLUSH,
     QEMU_PLUGIN_EV_ATEXIT,
     QEMU_PLUGIN_EV_MAX,
@@ -194,6 +195,7 @@ void qemu_plugin_atexit_cb(void);
 
 void qemu_plugin_add_dyn_cb_arr(struct qemu_plugin_dyn_cb_arr *arr);
 int64_t plugin_get_clock(void);
+void plugin_lockstep_cb(void);
 
 #else /* !CONFIG_PLUGINS */
 
@@ -235,6 +237,9 @@ static inline void qemu_plugin_atexit_cb(void)
 
 static inline
 void qemu_plugin_add_dyn_cb_arr(struct qemu_plugin_dyn_cb_arr *arr)
+{ }
+
+static inline void plugin_lockstep_cb(void)
 { }
 
 int64_t plugin_get_clock(void);

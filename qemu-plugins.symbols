@@ -1,5 +1,8 @@
 {
   qemu_plugin_uninstall;
+  qemu_plugin_enable_lockstep_execution;
+  qemu_plugin_end_time_slice;
+  qemu_plugin_register_lockstep_cb;
   qemu_plugin_register_vcpu_init_cb;
   qemu_plugin_register_vcpu_exit_cb;
   qemu_plugin_register_vcpu_idle_cb;

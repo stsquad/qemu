@@ -1359,6 +1359,7 @@ static void lockstep_check_stop(CPUState *cpu)
             /* wake up all waiting cpus */
             lockstep_ongoing_wakeup = true;
             n_lockstep_running_cpus = n_lockstep_cpus;
+            plugin_lockstep_cb();
             qemu_mutex_unlock(&lockstep_lock);
             cpu_mutex_unlock(cpu);
             for (i = 0; i < n_lockstep_cpus; i++) {
