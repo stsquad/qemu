@@ -1308,6 +1308,8 @@ static void openrisc_tr_translate_insn(DisasContextBase *dcbase, CPUState *cs,
     OpenRISCCPU *cpu = OPENRISC_CPU(cs);
     uint32_t insn = cpu_ldl_code(&cpu->env, dc->base.pc_next);
 
+    qemu_plugin_insn_append(plugin_insn, &insn, sizeof(insn));
+
     if (!decode(dc, insn)) {
         gen_illegal_exception(dc);
     }
@@ -1407,6 +1409,8 @@ static const TranslatorOps openrisc_tr_ops = {
     .translate_insn     = openrisc_tr_translate_insn,
     .tb_stop            = openrisc_tr_tb_stop,
     .disas_log          = openrisc_tr_disas_log,
+    .ctx_base_offset    = offsetof(DisasContext, base),
+    .ctx_size           = sizeof(DisasContext),
 };
 
 void gen_intermediate_code(CPUState *cs, struct TranslationBlock *tb)
