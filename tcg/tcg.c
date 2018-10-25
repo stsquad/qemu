@@ -33,6 +33,7 @@
 #include "qemu/error-report.h"
 #include "qemu/cutils.h"
 #include "qemu/host-utils.h"
+#include "qemu/xxhash.h"
 #include "qemu/timer.h"
 
 /* Note: the long term plan is to reduce the dependencies on the QEMU
@@ -879,12 +880,45 @@ typedef struct TCGHelperInfo {
 static const TCGHelperInfo all_helpers[] = {
 #include "exec/helper-tcg.h"
 };
-static GHashTable *helper_table;
+static struct qht helper_table;
+static bool helper_table_inited;
 
 static int indirect_reg_alloc_order[ARRAY_SIZE(tcg_target_reg_alloc_order)];
 static void process_op_defs(TCGContext *s);
 static TCGTemp *tcg_global_reg_new_internal(TCGContext *s, TCGType type,
                                             TCGReg reg, const char *name);
+
+static inline uint32_t tcg_helper_func_hash(const void *func)
+{
+    return qemu_xxhash2((uint64_t)func);
+}
+
+static bool tcg_helper_cmp(const void *ap, const void *bp)
+{
+    const TCGHelperInfo *a = ap;
+    const TCGHelperInfo *b = bp;
+
+    return a->func == b->func &&
+        a->flags == b->flags &&
+        a->sizemask == b->sizemask &&
+        !strcmp(a->name, b->name);
+}
+
+static bool tcg_helper_lookup_cmp(const void *obj, const void *func)
+{
+    const TCGHelperInfo *info = obj;
+
+    return info->func == func;
+}
+
+static void tcg_helper_insert(const TCGHelperInfo *info)
+{
+    uint32_t hash = tcg_helper_func_hash(info->func);
+    bool inserted;
+
+    inserted = qht_insert(&helper_table, (void *)info, hash, NULL);
+    g_assert(inserted);
+}
 
 void tcg_context_init(TCGContext *s)
 {
@@ -919,13 +953,13 @@ void tcg_context_init(TCGContext *s)
     }
 
     /* Register helpers.  */
-    /* Use g_direct_hash/equal for direct pointer comparisons on func.  */
-    helper_table = g_hash_table_new(NULL, NULL);
+    qht_init(&helper_table, tcg_helper_cmp, ARRAY_SIZE(all_helpers),
+             QHT_MODE_AUTO_RESIZE);
 
     for (i = 0; i < ARRAY_SIZE(all_helpers); ++i) {
-        g_hash_table_insert(helper_table, (gpointer)all_helpers[i].func,
-                            (gpointer)&all_helpers[i]);
+        tcg_helper_insert(&all_helpers[i]);
     }
+    helper_table_inited = true;
 
     tcg_target_init(s);
     process_op_defs(s);
@@ -1620,9 +1654,10 @@ void tcg_gen_callN(void *func, TCGTemp *ret, int nargs, TCGTemp **args)
     int i, real_args, nb_rets, pi;
     unsigned sizemask, flags;
     TCGHelperInfo *info;
+    uint32_t hash = tcg_helper_func_hash(func);
     TCGOp *op;
 
-    info = g_hash_table_lookup(helper_table, (gpointer)func);
+    info = qht_lookup_custom(&helper_table, func, hash, tcg_helper_lookup_cmp);
     flags = info->flags;
     sizemask = info->sizemask;
 
@@ -1825,11 +1860,15 @@ static char *tcg_get_arg_str(TCGContext *s, char *buf,
 }
 
 /* Find helper name.  */
-static inline const char *tcg_find_helper(TCGContext *s, uintptr_t val)
+static inline const char *tcg_helper_find(TCGContext *s, uintptr_t val)
 {
     const char *ret = NULL;
-    if (helper_table) {
-        TCGHelperInfo *info = g_hash_table_lookup(helper_table, (gpointer)val);
+    if (helper_table_inited) {
+        uint32_t hash = tcg_helper_func_hash((void *)val);
+        TCGHelperInfo *info;
+
+        info = qht_lookup_custom(&helper_table, (void *)val, hash,
+                                 tcg_helper_lookup_cmp);
         if (info) {
             ret = info->name;
         }
@@ -1919,7 +1958,7 @@ void tcg_dump_ops(TCGContext *s)
 
             /* function name, flags, out args */
             col += qemu_log(" %s %s,$0x%" TCG_PRIlx ",$%d", def->name,
-                            tcg_find_helper(s, op->args[nb_oargs + nb_iargs]),
+                            tcg_helper_find(s, op->args[nb_oargs + nb_iargs]),
                             op->args[nb_oargs + nb_iargs + 1], nb_oargs);
             for (i = 0; i < nb_oargs; i++) {
                 col += qemu_log(",%s", tcg_get_arg_str(s, buf, sizeof(buf),
