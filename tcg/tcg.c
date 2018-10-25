@@ -1839,6 +1839,9 @@ void tcg_gen_callN(void *func, TCGTemp *ret, int nargs, TCGTemp **args)
      * that @func can only be in one TCGHelperInfo.
      */
     info = qht_lookup_custom(&helper_table, func, hash, tcg_helper_lookup_cmp);
+    if (unlikely(tcg_ctx->plugin_insn)) {
+        tcg_ctx->plugin_insn->calls_helpers = true;
+    }
     do_tcg_gen_callN(info, ret, nargs, args);
 }
 

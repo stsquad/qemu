@@ -187,7 +187,13 @@ typedef struct CPUTLBCommon {
     CPUTLBEntry tlb_table[NB_MMU_MODES][CPU_TLB_SIZE];                  \
     CPUTLBEntry tlb_v_table[NB_MMU_MODES][CPU_VTLB_SIZE];               \
     CPUIOTLBEntry iotlb[NB_MMU_MODES][CPU_TLB_SIZE];                    \
-    CPUIOTLBEntry iotlb_v[NB_MMU_MODES][CPU_VTLB_SIZE];
+    CPUIOTLBEntry iotlb_v[NB_MMU_MODES][CPU_VTLB_SIZE];                 \
+    /* stores the host address of a guest access, if needed for plugins */ \
+    void *hostaddr;                                                     \
+    size_t tlb_flush_count;                                             \
+    target_ulong tlb_flush_addr;                                        \
+    target_ulong tlb_flush_mask;                                        \
+    target_ulong vtlb_index;                                            \
 
 #else
 

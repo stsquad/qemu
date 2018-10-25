@@ -18,6 +18,7 @@
  * License along with this library; if not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "qemu/plugin.h"
 #include "trace/mem.h"
 
 #if DATA_SIZE == 16
@@ -66,17 +67,22 @@
     trace_guest_mem_before_exec(ENV_GET_CPU(env), addr, info | TRACE_MEM_ST); \
 } while (0)
 
-# define ATOMIC_TRACE_RMW_POST                                          \
+# define ATOMIC_TRACE_RMW_POST do {                                            \
+  qemu_plugin_vcpu_mem_cb(ENV_GET_CPU(env), addr, haddr, info);                \
+  qemu_plugin_vcpu_mem_cb(ENV_GET_CPU(env), addr, haddr, info | TRACE_MEM_ST); \
+} while (0)
 
 # define ATOMIC_TRACE_LD_PRE                                    \
     trace_guest_mem_before_exec(ENV_GET_CPU(env), addr, info)
 
 # define ATOMIC_TRACE_LD_POST                                           \
+    qemu_plugin_vcpu_mem_cb(ENV_GET_CPU(env), addr, haddr, info)
 
 # define ATOMIC_TRACE_ST_PRE                                    \
     trace_guest_mem_before_exec(ENV_GET_CPU(env), addr, info)
 
 # define ATOMIC_TRACE_ST_POST                                           \
+    qemu_plugin_vcpu_mem_cb(ENV_GET_CPU(env), addr, haddr, info)
 
 #endif /* ATOMIC_TRACE_RMW_PRE */
 

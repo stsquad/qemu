@@ -29,6 +29,7 @@
 #include "cpu.h"
 #include "exec/tb-context.h"
 #include "qemu/bitops.h"
+#include "qemu/plugin.h"
 #include "qemu/queue.h"
 #include "tcg-mo.h"
 #include "tcg-target.h"
@@ -718,6 +719,9 @@ struct TCGContext {
 #endif
 
     TCGLabel *exitreq_label;
+
+    struct qemu_plugin_dyn_cb_arr *plugin_mem_cb;
+    struct qemu_plugin_insn *plugin_insn;
 
     TCGTempSet free_temps[TCG_TYPE_COUNT * 2];
     TCGTemp temps[TCG_MAX_TEMPS]; /* globals first, temps after */

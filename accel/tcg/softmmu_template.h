@@ -103,6 +103,11 @@ static inline DATA_TYPE glue(io_read, SUFFIX)(CPUArchState *env,
                                               MMUAccessType access_type)
 {
     CPUIOTLBEntry *iotlbentry = &env->iotlb[mmu_idx][index];
+
+    /* XXX Any sensible choice other than NULL? */
+    if (tcg_ctx->plugin_mem_cb) {
+        env->hostaddr = NULL;
+    }
     return io_readx(env, iotlbentry, mmu_idx, addr, retaddr, recheck,
                     access_type, DATA_SIZE);
 }
@@ -162,12 +167,23 @@ WORD_TYPE helper_le_ld_name(CPUArchState *env, target_ulong addr,
         res2 = helper_le_ld_name(env, addr2, oi, retaddr);
         shift = (addr & (DATA_SIZE - 1)) * 8;
 
+        /*
+         * XXX cross-page accesses would have to be split into separate accesses
+         * for the host address to make sense. For now, just return NULL.
+         */
+        if (tcg_ctx->plugin_mem_cb) {
+            env->hostaddr = NULL;
+        }
+
         /* Little-endian combine.  */
         res = (res1 >> shift) | (res2 << ((DATA_SIZE * 8) - shift));
         return res;
     }
 
     haddr = addr + entry->addend;
+    if (tcg_ctx->plugin_mem_cb) {
+        env->hostaddr = (void *)haddr;
+    }
 #if DATA_SIZE == 1
     res = glue(glue(ld, LSUFFIX), _p)((uint8_t *)haddr);
 #else
@@ -231,12 +247,19 @@ WORD_TYPE helper_be_ld_name(CPUArchState *env, target_ulong addr,
         res2 = helper_be_ld_name(env, addr2, oi, retaddr);
         shift = (addr & (DATA_SIZE - 1)) * 8;
 
+        if (tcg_ctx->plugin_mem_cb) {
+            env->hostaddr = NULL;
+        }
+
         /* Big-endian combine.  */
         res = (res1 << shift) | (res2 >> ((DATA_SIZE * 8) - shift));
         return res;
     }
 
     haddr = addr + entry->addend;
+    if (tcg_ctx->plugin_mem_cb) {
+        env->hostaddr = (void *)haddr;
+    }
     res = glue(glue(ld, LSUFFIX), _be_p)((uint8_t *)haddr);
     return res;
 }
@@ -270,6 +293,10 @@ static inline void glue(io_write, SUFFIX)(CPUArchState *env,
                                           bool recheck)
 {
     CPUIOTLBEntry *iotlbentry = &env->iotlb[mmu_idx][index];
+
+    if (tcg_ctx->plugin_mem_cb) {
+        env->hostaddr = NULL;
+    }
     return io_writex(env, iotlbentry, mmu_idx, val, addr, retaddr,
                      recheck, DATA_SIZE);
 }
@@ -340,10 +367,16 @@ void helper_le_st_name(CPUArchState *env, target_ulong addr, DATA_TYPE val,
             glue(helper_ret_stb, MMUSUFFIX)(env, addr + i, val8,
                                             oi, retaddr);
         }
+        if (tcg_ctx->plugin_mem_cb) {
+            env->hostaddr = NULL;
+        }
         return;
     }
 
     haddr = addr + entry->addend;
+    if (tcg_ctx->plugin_mem_cb) {
+        env->hostaddr = (void *)haddr;
+    }
 #if DATA_SIZE == 1
     glue(glue(st, SUFFIX), _p)((uint8_t *)haddr, val);
 #else
@@ -418,10 +451,16 @@ void helper_be_st_name(CPUArchState *env, target_ulong addr, DATA_TYPE val,
             glue(helper_ret_stb, MMUSUFFIX)(env, addr + i, val8,
                                             oi, retaddr);
         }
+        if (tcg_ctx->plugin_mem_cb) {
+            env->hostaddr = NULL;
+        }
         return;
     }
 
     haddr = addr + entry->addend;
+    if (tcg_ctx->plugin_mem_cb) {
+        env->hostaddr = (void *)haddr;
+    }
     glue(glue(st, SUFFIX), _be_p)((uint8_t *)haddr, val);
 }
 #endif /* DATA_SIZE > 1 */
