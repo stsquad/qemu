@@ -345,7 +345,6 @@ struct CPUState {
     HANDLE hThread;
 #endif
     int thread_id;
-    bool running, has_waiter;
     bool thread_kicked;
     bool crash_occurred;
     bool exit_request;
@@ -367,6 +366,9 @@ struct CPUState {
     bool stop;
     bool stopped;
     bool unplug;
+    bool running;
+    bool exclusive_waiter;
+    bool exclusive_ongoing;
 
     CPUAddressSpace *cpu_ases;
     int num_ases;
