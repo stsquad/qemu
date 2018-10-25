@@ -80,6 +80,14 @@ int64_t max_advance;
 static QEMUTimer *throttle_timer;
 static unsigned int throttle_percentage;
 
+/* lockstep execution */
+static bool lockstep_enabled;
+static bool lockstep_ongoing_wakeup;
+static QemuMutex lockstep_lock;
+static int n_lockstep_running_cpus;
+static int n_lockstep_cpus;
+static CPUState **lockstep_cpus;
+
 #define CPU_THROTTLE_PCT_MIN 1
 #define CPU_THROTTLE_PCT_MAX 99
 #define CPU_THROTTLE_TIMESLICE_NS 10000000
@@ -1174,6 +1182,11 @@ static bool cpu_can_run(CPUState *cpu)
     if (cpu_is_stopped(cpu)) {
         return false;
     }
+    if (lockstep_enabled &&
+        (cpu->lockstep == CPU_LOCKSTEP_STOP_REQUEST ||
+         cpu->lockstep == CPU_LOCKSTEP_WAIT)) {
+        return false;
+    }
     return true;
 }
 
@@ -1246,6 +1259,7 @@ void qemu_init_cpu_loop(void)
 {
     qemu_init_sigbus();
     qemu_mutex_init(&qemu_global_mutex);
+    qemu_mutex_init(&lockstep_lock);
 
     qemu_thread_get_self(&io_thread);
 }
@@ -1298,6 +1312,90 @@ static void qemu_wait_io_event_common(CPUState *cpu)
     cpu_mutex_lock(cpu);
 }
 
+void cpu_lockstep_enable(void)
+{
+    atomic_xchg(&lockstep_enabled, true);
+}
+
+void cpu_lockstep_request_stop(CPUState *cpu)
+{
+    bool locked = cpu_mutex_locked(cpu);
+
+    g_assert(lockstep_enabled);
+    if (!locked) {
+        cpu_mutex_lock(cpu);
+    }
+    g_assert(cpu->lockstep == CPU_LOCKSTEP_RUN ||
+             cpu->lockstep == CPU_LOCKSTEP_STOP_REQUEST);
+    cpu->lockstep = CPU_LOCKSTEP_STOP_REQUEST;
+    if (!locked) {
+        cpu_mutex_unlock(cpu);
+    }
+    cpu_exit(cpu);
+}
+
+static void lockstep_resume(CPUState *cpu, run_on_cpu_data ignored)
+{
+    g_assert(lockstep_enabled);
+    cpu_mutex_lock(cpu);
+    g_assert(cpu->lockstep == CPU_LOCKSTEP_WAIT);
+    cpu->lockstep = CPU_LOCKSTEP_RUN;
+    cpu_mutex_unlock(cpu);
+}
+
+static void lockstep_check_stop(CPUState *cpu)
+{
+    if (!lockstep_enabled) {
+        return;
+    }
+    if (cpu->lockstep == CPU_LOCKSTEP_STOP_REQUEST ||
+        (cpu->lockstep == CPU_LOCKSTEP_RUN && cpu_thread_is_idle(cpu))) {
+        qemu_mutex_lock(&lockstep_lock);
+        cpu->lockstep = CPU_LOCKSTEP_WAIT;
+        n_lockstep_running_cpus--;
+        if (n_lockstep_running_cpus == 0) {
+            int i;
+
+            /* wake up all waiting cpus */
+            lockstep_ongoing_wakeup = true;
+            n_lockstep_running_cpus = n_lockstep_cpus;
+            qemu_mutex_unlock(&lockstep_lock);
+            cpu_mutex_unlock(cpu);
+            for (i = 0; i < n_lockstep_cpus; i++) {
+                run_on_cpu_no_bql(lockstep_cpus[i], lockstep_resume,
+                                  RUN_ON_CPU_NULL);
+            }
+            cpu_mutex_lock(cpu);
+            qemu_mutex_lock(&lockstep_lock);
+            lockstep_ongoing_wakeup = false;
+        }
+        qemu_mutex_unlock(&lockstep_lock);
+    }
+}
+
+static void cpu_lockstep_init(CPUState *cpu)
+{
+    if (!lockstep_enabled) {
+        return;
+    }
+    qemu_mutex_lock(&lockstep_lock);
+    /*
+     * HACK: avoid racing with a wakeup, which would miss the addition
+     * of this CPU; just wait until no wakeup is ongoing.
+     */
+    while (unlikely(lockstep_ongoing_wakeup)) {
+        qemu_mutex_unlock(&lockstep_lock);
+        sched_yield();
+        qemu_mutex_lock(&lockstep_lock);
+    }
+    lockstep_cpus = g_realloc(lockstep_cpus,
+                              (n_lockstep_cpus + 1) * sizeof(CPUState *));
+    lockstep_cpus[n_lockstep_cpus++] = cpu;
+    n_lockstep_running_cpus++;
+    qemu_mutex_unlock(&lockstep_lock);
+    cpu->lockstep = CPU_LOCKSTEP_RUN;
+}
+
 static void qemu_tcg_rr_wait_io_event(CPUState *cpu)
 {
     g_assert(qemu_mutex_iothread_locked());
@@ -1321,6 +1419,15 @@ static void qemu_tcg_rr_wait_io_event(CPUState *cpu)
     cpu_mutex_unlock(cpu);
 }
 
+static inline bool lockstep_is_waiting(CPUState *cpu)
+{
+    if (!lockstep_enabled) {
+        return true;
+    }
+    g_assert(cpu_mutex_locked(cpu));
+    return cpu->lockstep == CPU_LOCKSTEP_WAIT;
+}
+
 static void qemu_wait_io_event(CPUState *cpu)
 {
     bool asleep = false;
@@ -1328,7 +1435,9 @@ static void qemu_wait_io_event(CPUState *cpu)
     g_assert(cpu_mutex_locked(cpu));
     g_assert(!qemu_mutex_iothread_locked());
 
-    while (cpu_thread_is_idle(cpu)) {
+    lockstep_check_stop(cpu);
+
+    while (cpu_thread_is_idle(cpu) && lockstep_is_waiting(cpu)) {
         if (!asleep) {
             asleep = true;
             qemu_plugin_vcpu_idle_cb(cpu);
@@ -1892,6 +2001,8 @@ static void *qemu_tcg_cpu_thread_fn(void *arg)
     cpu->can_do_io = 1;
     current_cpu = cpu;
     qemu_cond_signal(&cpu->cond);
+    /* init lockstep */
+    cpu_lockstep_init(cpu);
 
     /* process any pending work */
     cpu->exit_request = 1;

@@ -279,6 +279,12 @@ typedef void (*run_on_cpu_func)(CPUState *cpu, run_on_cpu_data data);
 
 struct qemu_work_item;
 
+enum cpu_lockstep {
+    CPU_LOCKSTEP_RUN,
+    CPU_LOCKSTEP_STOP_REQUEST,
+    CPU_LOCKSTEP_WAIT,
+};
+
 #define CPU_UNSET_NUMA_NODE_ID -1
 #define CPU_TRACE_DSTATE_MAX_EVENTS 32
 
@@ -365,6 +371,7 @@ struct CPUState {
     QemuCond halt_cond;
     QSIMPLEQ_HEAD(, qemu_work_item) work_list;
     uint32_t halted;
+    enum cpu_lockstep lockstep;
     bool created;
     bool stop;
     bool stopped;
@@ -1010,6 +1017,26 @@ static inline void cpu_interrupt(CPUState *cpu, int mask)
 {
     cpu_interrupt_handler(cpu, mask);
 }
+
+/**
+ * cpu_lockstep_enable - Enable execution of CPUs in lockstep
+ *
+ * Note: this feature is MTTCG-only.
+ * Lockstep execution allows CPUs to partition their execution into windows
+ * whose start is synchronized with that of other CPUs. This can have many
+ * uses, e.g. limiting execution skew in the guest.
+ *
+ * See also: cpu_lockstep_request_stop()
+ */
+void cpu_lockstep_enable(void);
+
+/**
+ * cpu_lockstep_request_stop - Finish the CPU's execution window
+ * @cpu: the CPU of interest
+ *
+ * See also: cpu_lockstep_enable()
+ */
+void cpu_lockstep_request_stop(CPUState *cpu);
 
 #else /* USER_ONLY */
 
