@@ -2333,6 +2333,7 @@ static void sh4_tr_translate_insn(DisasContextBase *dcbase, CPUState *cs,
 #endif
 
     ctx->opcode = cpu_lduw_code(env, ctx->base.pc_next);
+    qemu_plugin_insn_append(plugin_insn, &ctx->opcode, sizeof(ctx->opcode));
     decode_opc(ctx);
     ctx->base.pc_next += 2;
 }
@@ -2381,6 +2382,8 @@ static const TranslatorOps sh4_tr_ops = {
     .translate_insn     = sh4_tr_translate_insn,
     .tb_stop            = sh4_tr_tb_stop,
     .disas_log          = sh4_tr_disas_log,
+    .ctx_base_offset    = offsetof(DisasContext, base),
+    .ctx_size           = sizeof(DisasContext),
 };
 
 void gen_intermediate_code(CPUState *cs, TranslationBlock *tb)
