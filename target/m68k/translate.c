@@ -116,6 +116,7 @@ typedef struct DisasContext {
     int done_mac;
     int writeback_mask;
     TCGv writeback[8];
+    struct qemu_plugin_insn *plugin_insn;
 #define MAX_TO_RELEASE 8
     int release_count;
     TCGv release[MAX_TO_RELEASE];
@@ -375,6 +376,7 @@ static inline uint16_t read_im16(CPUM68KState *env, DisasContext *s)
     uint16_t im;
     im = cpu_lduw_code(env, s->pc);
     s->pc += 2;
+    qemu_plugin_insn_append(s->plugin_insn, &im, sizeof(im));
     return im;
 }
 
@@ -6092,7 +6094,10 @@ static void m68k_tr_translate_insn(DisasContextBase *dcbase, CPUState *cpu,
 {
     DisasContext *dc = container_of(dcbase, DisasContext, base);
     CPUM68KState *env = cpu->env_ptr;
-    uint16_t insn = read_im16(env, dc);
+    uint16_t insn;
+
+    dc->plugin_insn = plugin_insn;
+    insn = read_im16(env, dc);
 
     opcode_table[insn](env, dc, insn);
     do_writebacks(dc);
@@ -6167,6 +6172,8 @@ static const TranslatorOps m68k_tr_ops = {
     .translate_insn     = m68k_tr_translate_insn,
     .tb_stop            = m68k_tr_tb_stop,
     .disas_log          = m68k_tr_disas_log,
+    .ctx_base_offset    = offsetof(DisasContext, base),
+    .ctx_size           = sizeof(DisasContext),
 };
 
 void gen_intermediate_code(CPUState *cpu, TranslationBlock *tb)
