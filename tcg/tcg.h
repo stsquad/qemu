@@ -1079,6 +1079,7 @@ bool tcg_op_supported(TCGOpcode op);
 void tcg_gen_callN(void *func, TCGTemp *ret, int nargs, TCGTemp **args);
 void tcg_gen_runtime_helper(const TCGHelperInfo *orig, TCGTemp *ret, int nargs,
                             TCGTemp **args);
+void tcg_reset_runtime_helpers(void);
 
 TCGOp *tcg_emit_op(TCGOpcode opc);
 void tcg_op_remove(TCGContext *s, TCGOp *op);

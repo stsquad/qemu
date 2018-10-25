@@ -874,6 +874,7 @@ static const TCGHelperInfo all_helpers[] = {
 #include "exec/helper-tcg.h"
 };
 static struct qht helper_table;
+static struct qht runtime_helper_table;
 static bool helper_table_inited;
 
 static int indirect_reg_alloc_order[ARRAY_SIZE(tcg_target_reg_alloc_order)];
@@ -913,6 +914,22 @@ static void tcg_helper_insert(const TCGHelperInfo *info)
     g_assert(inserted);
 }
 
+static void
+rm_from_helper_table_and_free(void *p, uint32_t h, void *userp)
+{
+    bool success;
+
+    success = qht_remove(&helper_table, p, h);
+    g_assert(success);
+    g_free(p);
+}
+
+void tcg_reset_runtime_helpers(void)
+{
+    qht_iter(&runtime_helper_table, rm_from_helper_table_and_free, NULL);
+    qht_reset(&runtime_helper_table);
+}
+
 void tcg_context_init(TCGContext *s)
 {
     int op, total_args, n, i;
@@ -948,6 +965,7 @@ void tcg_context_init(TCGContext *s)
     /* Register helpers.  */
     qht_init(&helper_table, tcg_helper_cmp, ARRAY_SIZE(all_helpers),
              QHT_MODE_AUTO_RESIZE);
+    qht_init(&runtime_helper_table, tcg_helper_cmp, 1, QHT_MODE_AUTO_RESIZE);
 
     for (i = 0; i < ARRAY_SIZE(all_helpers); ++i) {
         tcg_helper_insert(&all_helpers[i]);
@@ -1847,6 +1865,9 @@ void tcg_gen_runtime_helper(const TCGHelperInfo *orig, TCGTemp *ret, int nargs,
         if (unlikely(existing)) {
             g_free(info);
             info = existing;
+        } else {
+            qht_insert(&runtime_helper_table, info, hash, &existing);
+            g_assert(existing == NULL);
         }
     }
     do_tcg_gen_callN(info, ret, nargs, args);

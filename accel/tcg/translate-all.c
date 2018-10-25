@@ -1255,6 +1255,7 @@ static void do_tb_flush(CPUState *cpu, run_on_cpu_data tb_flush_count)
 
     qht_reset_size(&tb_ctx.htable, CODE_GEN_HTABLE_SIZE);
     page_flush_tb();
+    tcg_reset_runtime_helpers();
 
     tcg_region_reset_all();
     /* XXX: flush processor icache at this point if cache flush is
