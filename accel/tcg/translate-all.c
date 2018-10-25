@@ -1230,7 +1230,7 @@ static gboolean tb_host_size_iter(gpointer key, gpointer value, gpointer data)
 }
 
 /* flush all the translation blocks */
-static void do_tb_flush(CPUState *cpu, run_on_cpu_data tb_flush_count)
+void do_tb_flush(CPUState *cpu, run_on_cpu_data tb_flush_count)
 {
     mmap_lock();
     /* If it is already been done on request of another CPU,
