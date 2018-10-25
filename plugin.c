@@ -1078,6 +1078,10 @@ void plugin_lockstep_cb(void)
     plugin_cb__simple(QEMU_PLUGIN_EV_LOCKSTEP);
 }
 
+void plugin_chan_xmit(uint32_t cmd, const void *data, size_t size)
+{
+}
+
 static void __attribute__((__constructor__)) plugin_init(void)
 {
     int i;

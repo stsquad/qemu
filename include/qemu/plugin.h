@@ -196,6 +196,7 @@ void qemu_plugin_atexit_cb(void);
 void qemu_plugin_add_dyn_cb_arr(struct qemu_plugin_dyn_cb_arr *arr);
 int64_t plugin_get_clock(void);
 void plugin_lockstep_cb(void);
+void plugin_chan_xmit(uint32_t cmd, const void *data, size_t size);
 
 #else /* !CONFIG_PLUGINS */
 

@@ -156,6 +156,8 @@ else
 obj-y += hw/$(TARGET_BASE_ARCH)/
 endif
 
+obj-$(CONFIG_PLUGINS) += hw/plugin/plugin-chan.o
+
 GENERATED_FILES += hmp-commands.h hmp-commands-info.h
 
 endif # CONFIG_SOFTMMU
