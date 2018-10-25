@@ -73,6 +73,15 @@ static void finish_safe_work(CPUState *cpu)
     cpu_exec_end(cpu);
 }
 
+/* Wait for pending exclusive operations to complete.  The CPU list lock
+   must be held.  */
+static inline void exclusive_idle(void)
+{
+    while (pending_cpus) {
+        qemu_cond_wait(&exclusive_resume, &qemu_cpu_list_lock);
+    }
+}
+
 void cpu_list_add(CPUState *cpu)
 {
     qemu_mutex_lock(&qemu_cpu_list_lock);
@@ -198,15 +207,6 @@ void async_run_on_cpu_no_bql(CPUState *cpu, run_on_cpu_func func,
     /* wi->bql initialized to false */
 
     queue_work_on_cpu(cpu, wi);
-}
-
-/* Wait for pending exclusive operations to complete.  The CPU list lock
-   must be held.  */
-static inline void exclusive_idle(void)
-{
-    while (pending_cpus) {
-        qemu_cond_wait(&exclusive_resume, &qemu_cpu_list_lock);
-    }
 }
 
 /* Start an exclusive operation.
