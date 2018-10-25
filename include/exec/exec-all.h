@@ -358,6 +358,8 @@ struct TranslationBlock {
     /* Per-vCPU dynamic tracing state used to generate this TB */
     uint32_t trace_vcpu_dstate;
 
+    uint32_t plugin_mask;
+
     struct tb_tc tc;
 
     /* original tb when cflags has CF_NOCACHE */

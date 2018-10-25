@@ -1129,6 +1129,7 @@ static bool tb_cmp(const void *ap, const void *bp)
         a->flags == b->flags &&
         (tb_cflags(a) & CF_HASH_MASK) == (tb_cflags(b) & CF_HASH_MASK) &&
         a->trace_vcpu_dstate == b->trace_vcpu_dstate &&
+        a->plugin_mask == b->plugin_mask &&
         a->page_addr[0] == b->page_addr[0] &&
         a->page_addr[1] == b->page_addr[1];
 }
@@ -1444,7 +1445,7 @@ static void do_tb_phys_invalidate(TranslationBlock *tb, bool rm_from_page_list)
     /* remove the TB from the hash list */
     phys_pc = tb->page_addr[0] + (tb->pc & ~TARGET_PAGE_MASK);
     h = tb_hash_func(phys_pc, tb->pc, tb->flags, tb_cflags(tb) & CF_HASH_MASK,
-                     tb->trace_vcpu_dstate);
+                     tb->trace_vcpu_dstate, tb->plugin_mask);
     if (!(tb->cflags & CF_NOCACHE) &&
         !qht_remove(&tb_ctx.htable, tb, h)) {
         return;
@@ -1640,7 +1641,7 @@ tb_link_page(TranslationBlock *tb, tb_page_addr_t phys_pc,
 
         /* add in the hash table */
         h = tb_hash_func(phys_pc, tb->pc, tb->flags, tb->cflags & CF_HASH_MASK,
-                         tb->trace_vcpu_dstate);
+                         tb->trace_vcpu_dstate, tb->plugin_mask);
         qht_insert(&tb_ctx.htable, tb, h, &existing_tb);
 
         /* remove TB from the page(s) if we couldn't insert it */
@@ -1712,6 +1713,7 @@ TranslationBlock *tb_gen_code(CPUState *cpu,
     tb->cflags = cflags;
     tb->trace_vcpu_dstate = *cpu->trace_dstate;
     tcg_ctx->tb_cflags = cflags;
+    tb->plugin_mask = *cpu->plugin_mask;
 
 #ifdef CONFIG_PROFILER
     /* includes aborted translations because of exceptions */
