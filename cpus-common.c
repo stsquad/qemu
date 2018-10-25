@@ -137,7 +137,8 @@ static void queue_work_on_cpu(CPUState *cpu, struct qemu_work_item *wi)
     cpu_mutex_unlock(cpu);
 }
 
-void run_on_cpu(CPUState *cpu, run_on_cpu_func func, run_on_cpu_data data)
+static void do_run_on_cpu(CPUState *cpu, run_on_cpu_func func,
+                          run_on_cpu_data data, bool bql)
 {
     struct qemu_work_item wi;
     bool has_bql = qemu_mutex_iothread_locked();
@@ -145,12 +146,16 @@ void run_on_cpu(CPUState *cpu, run_on_cpu_func func, run_on_cpu_data data)
     g_assert(no_cpu_mutex_locked());
 
     if (qemu_cpu_is_self(cpu)) {
-        if (has_bql) {
-            func(cpu, data);
+        if (bql) {
+            if (has_bql) {
+                func(cpu, data);
+            } else {
+                qemu_mutex_lock_iothread();
+                func(cpu, data);
+                qemu_mutex_unlock_iothread();
+            }
         } else {
-            qemu_mutex_lock_iothread();
             func(cpu, data);
-            qemu_mutex_unlock_iothread();
         }
         return;
     }
@@ -165,7 +170,7 @@ void run_on_cpu(CPUState *cpu, run_on_cpu_func func, run_on_cpu_data data)
     wi.done = false;
     wi.free = false;
     wi.exclusive = false;
-    wi.bql = true;
+    wi.bql = bql;
 
     cpu_mutex_lock(cpu);
     queue_work_on_cpu_locked(cpu, &wi);
@@ -180,6 +185,17 @@ void run_on_cpu(CPUState *cpu, run_on_cpu_func func, run_on_cpu_data data)
     if (has_bql) {
         qemu_mutex_lock_iothread();
     }
+}
+
+void run_on_cpu(CPUState *cpu, run_on_cpu_func func, run_on_cpu_data data)
+{
+    do_run_on_cpu(cpu, func, data, true);
+}
+
+void
+run_on_cpu_no_bql(CPUState *cpu, run_on_cpu_func func, run_on_cpu_data data)
+{
+    do_run_on_cpu(cpu, func, data, false);
 }
 
 void async_run_on_cpu(CPUState *cpu, run_on_cpu_func func, run_on_cpu_data data)

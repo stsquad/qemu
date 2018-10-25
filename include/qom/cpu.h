@@ -870,6 +870,19 @@ bool cpu_is_stopped(CPUState *cpu);
 void run_on_cpu(CPUState *cpu, run_on_cpu_func func, run_on_cpu_data data);
 
 /**
+ * run_on_cpu_no_bql
+ * @cpu: The vCPU to run on.
+ * @func: The function to be executed.
+ * @data: Data to pass to the function.
+ *
+ * Schedules the function @func for execution on the vCPU @cpu.
+ * This function is run outside the BQL.
+ * See also: run_on_cpu()
+ */
+void run_on_cpu_no_bql(CPUState *cpu, run_on_cpu_func func,
+                       run_on_cpu_data data);
+
+/**
  * async_run_on_cpu:
  * @cpu: The vCPU to run on.
  * @func: The function to be executed.
