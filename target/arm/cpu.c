@@ -863,7 +863,10 @@ static void arm_cpu_realizefn(DeviceState *dev, Error **errp)
     if (arm_feature(env, ARM_FEATURE_V6)) {
         set_feature(env, ARM_FEATURE_V5);
         if (!arm_feature(env, ARM_FEATURE_M)) {
-            assert(cpu_isar_feature(jazelle, cpu));
+            if (arm_feature(&cpu->env, ARM_FEATURE_AARCH64)
+                && cpu_isar_feature(aa64_a32, cpu)) {
+               assert(cpu_isar_feature(jazelle, cpu));
+            }
             set_feature(env, ARM_FEATURE_AUXCR);
         }
     }
