@@ -884,7 +884,7 @@ static TCGTemp *tcg_global_reg_new_internal(TCGContext *s, TCGType type,
 
 static inline uint32_t tcg_helper_func_hash(const void *func)
 {
-    return qemu_xxhash2((uint64_t)func);
+    return qemu_xxhash2((uint64_t)(uintptr_t)func);
 }
 
 static bool tcg_helper_cmp(const void *ap, const void *bp)
