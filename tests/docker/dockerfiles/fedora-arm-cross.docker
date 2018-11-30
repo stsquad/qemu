@@ -1,0 +1,7 @@
+# Fedora system cross-compiler (can't build linux binaries)
+
+FROM fedora:latest
+ENV PACKAGES gcc-c++-arm-linux-gnu
+
+RUN dnf install -y $PACKAGES
+RUN rpm -q $PACKAGES | sort > /packages.txt
