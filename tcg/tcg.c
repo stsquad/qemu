@@ -751,6 +751,12 @@ void tcg_register_thread(void)
     g_assert(n < max_cpus);
     atomic_set(&tcg_ctxs[n], s);
 
+#ifdef CONFIG_PLUGIN
+    if (n > 0) {
+        s->plugin_tb = g_new0(struct qemu_plugin_tb, 1);
+    }
+#endif
+
     tcg_ctx = s;
     qemu_mutex_lock(&region.lock);
     err = tcg_region_initial_alloc__locked(tcg_ctx);
@@ -946,6 +952,10 @@ void tcg_context_init(TCGContext *s)
     for (; i < ARRAY_SIZE(tcg_target_reg_alloc_order); ++i) {
         indirect_reg_alloc_order[i] = tcg_target_reg_alloc_order[i];
     }
+
+#ifdef CONFIG_PLUGIN
+    s->plugin_tb = g_new0(struct qemu_plugin_tb, 1);
+#endif
 
     tcg_ctx = s;
     /*
@@ -1637,6 +1647,13 @@ void tcg_gen_callN(void *func, TCGTemp *ret, int nargs, TCGTemp **args)
     info = g_hash_table_lookup(helper_table, (gpointer)func);
     flags = info->flags;
     sizemask = info->sizemask;
+
+#ifdef CONFIG_PLUGIN
+    /* detect non-plugin helpers */
+    if (tcg_ctx->plugin_insn && unlikely(strncmp(info->name, "plugin_", 7))) {
+        tcg_ctx->plugin_insn->calls_helpers = true;
+    }
+#endif
 
 #if defined(__sparc__) && !defined(__arch64__) \
     && !defined(CONFIG_TCG_INTERPRETER)
