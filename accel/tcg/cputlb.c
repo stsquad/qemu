@@ -1178,6 +1178,15 @@ static void *atomic_mmu_lookup(CPUArchState *env, target_ulong addr,
     cpu_loop_exit_atomic(ENV_GET_CPU(env), retaddr);
 }
 
+static inline void set_hostaddr(CPUArchState *env, TCGMemOp mo, void *haddr)
+{
+#ifdef CONFIG_PLUGIN
+    if (mo & MO_HADDR) {
+        env->hostaddr = haddr;
+    }
+#endif
+}
+
 #ifdef TARGET_WORDS_BIGENDIAN
 # define TGT_BE(X)  (X)
 # define TGT_LE(X)  BSWAP(X)

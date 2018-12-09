@@ -270,6 +270,7 @@ void cpu_exec_step_atomic(CPUState *cpu)
             qemu_mutex_unlock_iothread();
         }
         assert_no_pages_locked();
+        qemu_plugin_disable_mem_helpers(cpu);
     }
 
     if (in_exclusive_region) {
@@ -277,6 +278,7 @@ void cpu_exec_step_atomic(CPUState *cpu)
          * execution, so must make sure we only end the exclusive
          * region if we started it.
          */
+        qemu_plugin_disable_mem_helpers(cpu);
         parallel_cpus = true;
         end_exclusive();
     }
