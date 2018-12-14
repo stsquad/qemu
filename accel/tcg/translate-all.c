@@ -103,7 +103,7 @@
 
 typedef struct PageDesc {
     /* list of TBs intersecting this ram page */
-    uintptr_t first_tb;
+    TranslationBlock *first_tb;
 #ifdef CONFIG_SOFTMMU
     /* in order to optimize self modifying code, we count the number
        of lookups we do to a given page to use a bitmap */
@@ -113,15 +113,6 @@ typedef struct PageDesc {
     unsigned long flags;
 #endif
 } PageDesc;
-
-/* list iterators for lists of tagged pointers in TranslationBlock */
-#define TB_FOR_EACH_TAGGED(head, tb, n, field)                          \
-    for (n = (head) & 1, tb = (TranslationBlock *)((head) & ~1);        \
-         tb; tb = (TranslationBlock *)tb->field[n], n = (uintptr_t)tb & 1, \
-             tb = (TranslationBlock *)((uintptr_t)tb & ~1))
-
-#define PAGE_FOR_EACH_TB(pagedesc, tb, n)                       \
-    TB_FOR_EACH_TAGGED((pagedesc)->first_tb, tb, n, page_next)
 
 /* In system mode we want L1_MAP to be based on ram offsets,
    while in user mode we want it to be based on virtual addresses.  */
@@ -824,7 +815,7 @@ static void page_flush_tb_1(int level, void **lp)
         PageDesc *pd = *lp;
 
         for (i = 0; i < V_L2_SIZE; ++i) {
-            pd[i].first_tb = (uintptr_t)NULL;
+            pd[i].first_tb = NULL;
             invalidate_page_bitmap(pd + i);
         }
     } else {
@@ -950,21 +941,21 @@ static void tb_page_check(void)
 
 #endif /* CONFIG_USER_ONLY */
 
-static inline void tb_page_remove(PageDesc *pd, TranslationBlock *tb)
+static inline void tb_page_remove(TranslationBlock **ptb, TranslationBlock *tb)
 {
     TranslationBlock *tb1;
-    uintptr_t *pprev;
     unsigned int n1;
 
-    pprev = &pd->first_tb;
-    PAGE_FOR_EACH_TB(pd, tb1, n1) {
+    for (;;) {
+        tb1 = *ptb;
+        n1 = (uintptr_t)tb1 & 3;
+        tb1 = (TranslationBlock *)((uintptr_t)tb1 & ~3);
         if (tb1 == tb) {
-            *pprev = tb1->page_next[n1];
-            return;
+            *ptb = tb1->page_next[n1];
+            break;
         }
-        pprev = &tb1->page_next[n1];
+        ptb = &tb1->page_next[n1];
     }
-    g_assert_not_reached();
 }
 
 /* remove the TB from a list of TBs jumping to the n-th jump target of the TB */
@@ -1052,12 +1043,12 @@ void tb_phys_invalidate(TranslationBlock *tb, tb_page_addr_t page_addr)
     /* remove the TB from the page list */
     if (tb->page_addr[0] != page_addr) {
         p = page_find(tb->page_addr[0] >> TARGET_PAGE_BITS);
-        tb_page_remove(p, tb);
+        tb_page_remove(&p->first_tb, tb);
         invalidate_page_bitmap(p);
     }
     if (tb->page_addr[1] != -1 && tb->page_addr[1] != page_addr) {
         p = page_find(tb->page_addr[1] >> TARGET_PAGE_BITS);
-        tb_page_remove(p, tb);
+        tb_page_remove(&p->first_tb, tb);
         invalidate_page_bitmap(p);
     }
 
@@ -1088,7 +1079,10 @@ static void build_page_bitmap(PageDesc *p)
 
     p->code_bitmap = bitmap_new(TARGET_PAGE_SIZE);
 
-    PAGE_FOR_EACH_TB(p, tb, n) {
+    tb = p->first_tb;
+    while (tb != NULL) {
+        n = (uintptr_t)tb & 3;
+        tb = (TranslationBlock *)((uintptr_t)tb & ~3);
         /* NOTE: this is subtle as a TB may span two physical pages */
         if (n == 0) {
             /* NOTE: tb_end may be after the end of the page, but
@@ -1103,6 +1097,7 @@ static void build_page_bitmap(PageDesc *p)
             tb_end = ((tb->pc + tb->size) & ~TARGET_PAGE_MASK);
         }
         bitmap_set(p->code_bitmap, tb_start, tb_end - tb_start);
+        tb = tb->page_next[n];
     }
 }
 #endif
@@ -1125,9 +1120,9 @@ static inline void tb_alloc_page(TranslationBlock *tb,
     p = page_find_alloc(page_addr >> TARGET_PAGE_BITS, 1);
     tb->page_next[n] = p->first_tb;
 #ifndef CONFIG_USER_ONLY
-    page_already_protected = p->first_tb != (uintptr_t)NULL;
+    page_already_protected = p->first_tb != NULL;
 #endif
-    p->first_tb = (uintptr_t)tb | n;
+    p->first_tb = (TranslationBlock *)((uintptr_t)tb | n);
     invalidate_page_bitmap(p);
 
 #if defined(CONFIG_USER_ONLY)
@@ -1410,7 +1405,7 @@ void tb_invalidate_phys_range(tb_page_addr_t start, tb_page_addr_t end)
 void tb_invalidate_phys_page_range(tb_page_addr_t start, tb_page_addr_t end,
                                    int is_cpu_write_access)
 {
-    TranslationBlock *tb;
+    TranslationBlock *tb, *tb_next;
     tb_page_addr_t tb_start, tb_end;
     PageDesc *p;
     int n;
@@ -1441,7 +1436,11 @@ void tb_invalidate_phys_page_range(tb_page_addr_t start, tb_page_addr_t end,
     /* we remove all the TBs in the range [start, end[ */
     /* XXX: see if in some cases it could be faster to invalidate all
        the code */
-    PAGE_FOR_EACH_TB(p, tb, n) {
+    tb = p->first_tb;
+    while (tb != NULL) {
+        n = (uintptr_t)tb & 3;
+        tb = (TranslationBlock *)((uintptr_t)tb & ~3);
+        tb_next = tb->page_next[n];
         /* NOTE: this is subtle as a TB may span two physical pages */
         if (n == 0) {
             /* NOTE: tb_end may be after the end of the page, but
@@ -1479,6 +1478,7 @@ void tb_invalidate_phys_page_range(tb_page_addr_t start, tb_page_addr_t end,
 #endif /* TARGET_HAS_PRECISE_SMC */
             tb_phys_invalidate(tb, -1);
         }
+        tb = tb_next;
     }
 #if !defined(CONFIG_USER_ONLY)
     /* if no code remaining, no need to continue to use slow writes */
@@ -1563,15 +1563,18 @@ static bool tb_invalidate_phys_page(tb_page_addr_t addr, uintptr_t pc)
     }
 
     tb_lock();
+    tb = p->first_tb;
 #ifdef TARGET_HAS_PRECISE_SMC
-    if (p->first_tb && pc != 0) {
+    if (tb && pc != 0) {
         current_tb = tcg_tb_lookup(pc);
     }
     if (cpu != NULL) {
         env = cpu->env_ptr;
     }
 #endif
-    PAGE_FOR_EACH_TB(p, tb, n) {
+    while (tb != NULL) {
+        n = (uintptr_t)tb & 3;
+        tb = (TranslationBlock *)((uintptr_t)tb & ~3);
 #ifdef TARGET_HAS_PRECISE_SMC
         if (current_tb == tb &&
             (current_tb->cflags & CF_COUNT_MASK) != 1) {
@@ -1588,8 +1591,9 @@ static bool tb_invalidate_phys_page(tb_page_addr_t addr, uintptr_t pc)
         }
 #endif /* TARGET_HAS_PRECISE_SMC */
         tb_phys_invalidate(tb, addr);
+        tb = tb->page_next[n];
     }
-    p->first_tb = (uintptr_t)NULL;
+    p->first_tb = NULL;
 #ifdef TARGET_HAS_PRECISE_SMC
     if (current_tb_modified) {
         /* Force execution of one insn next time.  */
