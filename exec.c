@@ -48,8 +48,6 @@
 #include "sysemu/xen-mapcache.h"
 #include "trace-root.h"
 
-#include "exec/exec-all.h"
-
 #ifdef CONFIG_FALLOCATE_PUNCH_HOLE
 #include <linux/falloc.h>
 #endif
