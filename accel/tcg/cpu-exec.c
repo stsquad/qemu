@@ -245,7 +245,10 @@ void cpu_exec_step_atomic(CPUState *cpu)
         if (tb == NULL) {
             mmap_lock();
             tb_lock();
-            tb = tb_gen_code(cpu, pc, cs_base, flags, cflags);
+            tb = tb_htable_lookup(cpu, pc, cs_base, flags, cf_mask);
+            if (likely(tb == NULL)) {
+                tb = tb_gen_code(cpu, pc, cs_base, flags, cflags);
+            }
             tb_unlock();
             mmap_unlock();
         }
@@ -395,7 +398,14 @@ static inline TranslationBlock *tb_find(CPUState *cpu,
         tb_lock();
         acquired_tb_lock = true;
 
-        tb = tb_gen_code(cpu, pc, cs_base, flags, cf_mask);
+        /* There's a chance that our desired tb has been translated while
+         * taking the locks so we check again inside the lock.
+         */
+        tb = tb_htable_lookup(cpu, pc, cs_base, flags, cf_mask);
+        if (likely(tb == NULL)) {
+            /* if no translated code available, then translate it now */
+            tb = tb_gen_code(cpu, pc, cs_base, flags, cf_mask);
+        }
 
         mmap_unlock();
         /* We add the TB in the virtual pc hash table for the fast lookup */
