@@ -11,6 +11,7 @@
 #include "cpu.h"
 #include "trace-root.h"
 #include "trace/control.h"
+#include "translate-all.h"
 
 
 void trace_event_set_state_dynamic_init(TraceEvent *ev, bool state)
