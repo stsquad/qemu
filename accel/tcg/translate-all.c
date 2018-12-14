@@ -1067,8 +1067,7 @@ void tb_phys_invalidate(TranslationBlock *tb, tb_page_addr_t page_addr)
     /* suppress any remaining jumps to this TB */
     tb_jmp_unlink(tb);
 
-    atomic_set(&tcg_ctx->tb_phys_invalidate_count,
-               tcg_ctx->tb_phys_invalidate_count + 1);
+    tb_ctx.tb_phys_invalidate_count++;
 }
 
 #ifdef CONFIG_SOFTMMU
@@ -1818,7 +1817,7 @@ void dump_exec_info(FILE *f, fprintf_function cpu_fprintf)
 {
     struct tb_tree_stats tst = {};
     struct qht_stats hst;
-    size_t nb_tbs, flush_full, flush_part, flush_elide;
+    size_t nb_tbs;
 
     tcg_tb_foreach(tb_tree_stats_iter, &tst);
     nb_tbs = tst.nb_tbs;
@@ -1853,12 +1852,7 @@ void dump_exec_info(FILE *f, fprintf_function cpu_fprintf)
     cpu_fprintf(f, "\nStatistics:\n");
     cpu_fprintf(f, "TB flush count      %u\n",
                 atomic_read(&tb_ctx.tb_flush_count));
-    cpu_fprintf(f, "TB invalidate count %zu\n", tcg_tb_phys_invalidate_count());
-
-    tlb_flush_counts(&flush_full, &flush_part, &flush_elide);
-    cpu_fprintf(f, "TLB full flushes    %zu\n", flush_full);
-    cpu_fprintf(f, "TLB partial flushes %zu\n", flush_part);
-    cpu_fprintf(f, "TLB elided flushes  %zu\n", flush_elide);
+    cpu_fprintf(f, "TB invalidate count %d\n", tb_ctx.tb_phys_invalidate_count);
     tcg_dump_info(f, cpu_fprintf);
 }
 
