@@ -61,7 +61,6 @@ have their block-to-block jumps patched.
 Global TCG State
 ----------------
 
-### User-mode emulation
 We need to protect the entire code generation cycle including any post
 generation patching of the translated code. This also implies a shared
 translation buffer which contains code running on all cores. Any
@@ -76,11 +75,9 @@ patching.
 
 (Current solution)
 
-Code generation is serialised with mmap_lock().
-
-### !User-mode emulation
-Each vCPU has its own TCG context and associated TCG region, thereby
-requiring no locking.
+Mainly as part of the linux-user work all code generation is
+serialised with a tb_lock(). For the SoftMMU tb_lock() also takes the
+place of mmap_lock() in linux-user.
 
 Translation Blocks
 ------------------
@@ -198,7 +195,7 @@ work as "safe work" and exiting the cpu run loop. This ensure by the
 time execution restarts all flush operations have completed.
 
 TLB flag updates are all done atomically and are also protected by the
-corresponding page lock.
+tb_lock() which is used by the functions that update the TLB in bulk.
 
 (Known limitation)
 
