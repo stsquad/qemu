@@ -362,8 +362,7 @@ struct TranslationBlock {
     /* original tb when cflags has CF_NOCACHE */
     struct TranslationBlock *orig_tb;
     /* first and second physical page containing code. The lower bit
-       of the pointer tells the index in page_next[].
-       The list is protected by the TB's page('s) lock(s) */
+       of the pointer tells the index in page_next[] */
     uintptr_t page_next[2];
     tb_page_addr_t page_addr[2];
 
@@ -415,6 +414,7 @@ void tb_invalidate_phys_addr(target_ulong addr);
 void tb_invalidate_phys_range(target_ulong start, target_ulong end);
 #else
 void tb_invalidate_phys_addr(AddressSpace *as, hwaddr addr, MemTxAttrs attrs);
+void tb_invalidate_phys_range(tb_page_addr_t start, tb_page_addr_t end);
 #endif
 void tb_flush(CPUState *cpu);
 void tb_phys_invalidate(TranslationBlock *tb, tb_page_addr_t page_addr);
