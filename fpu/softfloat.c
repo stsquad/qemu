@@ -359,6 +359,9 @@ float32_gen2(float32 xa, float32 xb, float_status *s,
     if (unlikely(!pre(ua, ub))) {
         goto soft;
     }
+    if (fast_test && fast_test(ua, ub)) {
+        return fast_op(ua.s, ub.s, s);
+    }
 
     ur.h = hard(ua.h, ub.h);
     if (unlikely(f32_is_inf(ur))) {
@@ -392,6 +395,9 @@ float64_gen2(float64 xa, float64 xb, float_status *s,
     float64_input_flush2(&ua.s, &ub.s, s);
     if (unlikely(!pre(ua, ub))) {
         goto soft;
+    }
+    if (fast_test && fast_test(ua, ub)) {
+        return fast_op(ua.s, ub.s, s);
     }
 
     ur.h = hard(ua.h, ub.h);
@@ -1556,7 +1562,23 @@ float32_muladd(float32 xa, float32 xb, float32 xc, int flags, float_status *s)
     if (unlikely(!f32_is_zon3(ua, ub, uc))) {
         goto soft;
     }
-    if (1) {
+    /*
+     * When (a || b) == 0, there's no need to check for under/over flow,
+     * since we know the addend is (normal || 0) and the product is 0.
+     */
+    if (float32_is_zero(ua.s) || float32_is_zero(ub.s)) {
+        union_float32 up;
+        bool prod_sign;
+
+        prod_sign = float32_is_neg(ua.s) ^ float32_is_neg(ub.s);
+        prod_sign ^= !!(flags & float_muladd_negate_product);
+        up.s = float32_set_sign(float32_zero, prod_sign);
+
+        if (flags & float_muladd_negate_c) {
+            uc.h = -uc.h;
+        }
+        ur.h = up.h + uc.h;
+    } else {
         if (flags & float_muladd_negate_product) {
             ua.h = -ua.h;
         }
@@ -1601,7 +1623,23 @@ float64_muladd(float64 xa, float64 xb, float64 xc, int flags, float_status *s)
     if (unlikely(!f64_is_zon3(ua, ub, uc))) {
         goto soft;
     }
-    if (1) {
+    /*
+     * When (a || b) == 0, there's no need to check for under/over flow,
+     * since we know the addend is (normal || 0) and the product is 0.
+     */
+    if (float64_is_zero(ua.s) || float64_is_zero(ub.s)) {
+        union_float64 up;
+        bool prod_sign;
+
+        prod_sign = float64_is_neg(ua.s) ^ float64_is_neg(ub.s);
+        prod_sign ^= !!(flags & float_muladd_negate_product);
+        up.s = float64_set_sign(float64_zero, prod_sign);
+
+        if (flags & float_muladd_negate_c) {
+            uc.h = -uc.h;
+        }
+        ur.h = up.h + uc.h;
+    } else {
         if (flags & float_muladd_negate_product) {
             ua.h = -ua.h;
         }
