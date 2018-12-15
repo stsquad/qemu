@@ -206,7 +206,7 @@ static inline void powerpc_excp(PowerPCCPU *cpu, int excp_model, int excp)
                 qemu_log("Machine check while not allowed. "
                         "Entering checkstop state\n");
             }
-            cs->halted = 1;
+            cpu_halted_set(cs, 1);
             cpu_interrupt_exittb(cs);
         }
         if (env->msr_mask & MSR_HVB) {
@@ -753,7 +753,7 @@ static void ppc_hw_interrupt(CPUPPCState *env)
 
     qemu_log_mask(CPU_LOG_INT, "%s: %p pending %08x req %08x me %d ee %d\n",
                   __func__, env, env->pending_interrupts,
-                  cs->interrupt_request, (int)msr_me, (int)msr_ee);
+                  cpu_interrupt_request(cs), (int)msr_me, (int)msr_ee);
 #endif
     /* External reset */
     if (env->pending_interrupts & (1 << PPC_INTERRUPT_RESET)) {
@@ -880,7 +880,7 @@ bool ppc_cpu_exec_interrupt(CPUState *cs, int interrupt_request)
     if (interrupt_request & CPU_INTERRUPT_HARD) {
         ppc_hw_interrupt(env);
         if (env->pending_interrupts == 0) {
-            cs->interrupt_request &= ~CPU_INTERRUPT_HARD;
+            cpu_reset_interrupt(cs, CPU_INTERRUPT_HARD);
         }
         return true;
     }
@@ -954,7 +954,7 @@ void helper_pminsn(CPUPPCState *env, powerpc_pm_insn_t insn)
     CPUState *cs;
 
     cs = CPU(ppc_env_get_cpu(env));
-    cs->halted = 1;
+    cpu_halted_set(cs, 1);
     env->in_pm_state = true;
 
     /* The architecture specifies that HDEC interrupts are
