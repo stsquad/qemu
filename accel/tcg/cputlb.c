@@ -159,9 +159,7 @@ static void tlb_mmu_resize_locked(CPUArchState *env, int mmu_idx)
     }
     rate = desc->window.max_entries * 100 / old_size;
 
-    if (rate == 100) {
-        new_size = MIN(old_size << 2, 1 << CPU_TLB_DYN_MAX_BITS);
-    } else if (rate > 70) {
+    if (rate > 70) {
         new_size = MIN(old_size << 1, 1 << CPU_TLB_DYN_MAX_BITS);
     } else if (rate < 30 && window_expired) {
         size_t ceil = pow2ceil(desc->window.max_entries);
