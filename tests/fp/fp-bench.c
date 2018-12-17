@@ -189,6 +189,33 @@ static void fill_random(union fp *ops, int n_ops, enum precision prec,
     }
 }
 
+static int host_exceptions_translate(int host_flags)
+{
+    int flags = 0;
+
+    if (host_flags & FE_INEXACT) {
+        flags |= float_flag_inexact;
+    }
+    if (host_flags & FE_UNDERFLOW) {
+        flags |= float_flag_underflow;
+    }
+    if (host_flags & FE_OVERFLOW) {
+        flags |= float_flag_overflow;
+    }
+    if (host_flags & FE_DIVBYZERO) {
+        flags |= float_flag_divbyzero;
+    }
+    if (host_flags & FE_INVALID) {
+        flags |= float_flag_invalid;
+    }
+    return flags;
+}
+
+static inline uint8_t host_get_exceptions(void)
+{
+    return host_exceptions_translate(fetestexcept(FE_ALL_EXCEPT));
+}
+
 /*
  * The main benchmark function. Instead of (ab)using macros, we rely
  * on the compiler to unfold this at compile-time.
@@ -282,6 +309,8 @@ static void bench(enum precision prec, enum op op, int n_ops, bool no_neg)
                 float32 b = ops[1].f32;
                 float32 c = ops[2].f32;
 
+                feclearexcept(FE_ALL_EXCEPT);
+                soft_status.float_exception_flags = 0;
                 switch (op) {
                 case OP_ADD:
                     res.f32 = float32_add(a, b, &soft_status);
@@ -307,6 +336,7 @@ static void bench(enum precision prec, enum op op, int n_ops, bool no_neg)
                 default:
                     g_assert_not_reached();
                 }
+                soft_status.float_exception_flags = host_get_exceptions();
             }
             break;
         case PREC_FLOAT64:
@@ -317,6 +347,8 @@ static void bench(enum precision prec, enum op op, int n_ops, bool no_neg)
                 float64 b = ops[1].f64;
                 float64 c = ops[2].f64;
 
+                feclearexcept(FE_ALL_EXCEPT);
+                soft_status.float_exception_flags = 0;
                 switch (op) {
                 case OP_ADD:
                     res.f64 = float64_add(a, b, &soft_status);
@@ -342,6 +374,7 @@ static void bench(enum precision prec, enum op op, int n_ops, bool no_neg)
                 default:
                     g_assert_not_reached();
                 }
+                soft_status.float_exception_flags = host_get_exceptions();
             }
             break;
         default:
