@@ -80,6 +80,13 @@ static inline size_t sizeof_tlb(CPUArchState *env, uintptr_t mmu_idx)
     return env->tlb_mask[mmu_idx] + (1 << CPU_TLB_ENTRY_BITS);
 }
 
+static void tlb_window_reset(CPUTLBWindow *window, int64_t ns,
+                             size_t max_entries)
+{
+    window->begin_ns = ns;
+    window->max_entries = max_entries;
+}
+
 static void tlb_dyn_init(CPUArchState *env)
 {
     int i;
@@ -88,6 +95,7 @@ static void tlb_dyn_init(CPUArchState *env)
         CPUTLBDesc *desc = &env->tlb_d[i];
         size_t n_entries = 1 << CPU_TLB_DYN_DEFAULT_BITS;
 
+        tlb_window_reset(&desc->window, get_clock_realtime(), 0);
         desc->n_used_entries = 0;
         env->tlb_mask[i] = (n_entries - 1) << CPU_TLB_ENTRY_BITS;
         env->tlb_table[i] = g_new(CPUTLBEntry, n_entries);
@@ -123,7 +131,13 @@ static void tlb_dyn_init(CPUArchState *env)
  * memory-hungry process will execute again, and its memory hungriness will
  * probably be similar.
  *
- * 2. Try to keep the use rate in the 30-70% range,
+ * 2. Slowly reduce the size of the TLB as the use rate declines over a
+ * reasonably large time window. The rationale is that if in such a time window
+ * we have not observed a high TLB use rate, it is likely that we won't observe
+ * it in the near future. In that case, once a time window expires we downsize
+ * the TLB to match the maximum use rate observed in the window.
+ *
+ * 3. Try to keep the maximum use rate in a time window in the 30-70% range,
  * since in that range performance is likely near-optimal. Recall that the TLB
  * is direct mapped, so we want the use rate to be low (or at least not too
  * high), since otherwise we are likely to have a significant amount of
@@ -135,22 +149,51 @@ static void tlb_mmu_resize_locked(CPUArchState *env, int mmu_idx)
     size_t old_size = tlb_n_entries(env, mmu_idx);
     size_t rate;
     size_t new_size = old_size;
+    int64_t now = get_clock_realtime();
+    int64_t window_len_ms = 100;
+    int64_t window_len_ns = window_len_ms * 1000 * 1000;
+    bool window_expired = now > desc->window.begin_ns + window_len_ns;
 
-    rate = desc->n_used_entries * 100 / old_size;
+    if (desc->n_used_entries > desc->window.max_entries) {
+        desc->window.max_entries = desc->n_used_entries;
+    }
+    rate = desc->window.max_entries * 100 / old_size;
 
-    if (rate > 70) {
+    if (rate == 100) {
+        new_size = MIN(old_size << 2, 1 << CPU_TLB_DYN_MAX_BITS);
+    } else if (rate > 70) {
         new_size = MIN(old_size << 1, 1 << CPU_TLB_DYN_MAX_BITS);
-    } else if (rate < 30) {
-        new_size = MAX(old_size >> 1, 1 << CPU_TLB_DYN_MIN_BITS);
+    } else if (rate < 30 && window_expired) {
+        size_t ceil = pow2ceil(desc->window.max_entries);
+        size_t expected_rate = desc->window.max_entries * 100 / ceil;
+
+        /*
+         * Avoid undersizing when the max number of entries seen is just below
+         * a pow2. For instance, if max_entries == 1025, the expected use rate
+         * would be 1025/2048==50%. However, if max_entries == 1023, we'd get
+         * 1023/1024==99.9% use rate, so we'd likely end up doubling the size
+         * later. Thus, make sure that the expected use rate remains below 70%.
+         * (and since we double the size, that means the lowest rate we'd
+         * expect to get is 35%, which is still in the 30-70% range where
+         * we consider that the size is appropriate.)
+         */
+        if (expected_rate > 70) {
+            ceil *= 2;
+        }
+        new_size = MAX(ceil, 1 << CPU_TLB_DYN_MIN_BITS);
     }
 
     if (new_size == old_size) {
+        if (window_expired) {
+            tlb_window_reset(&desc->window, now, desc->n_used_entries);
+        }
         return;
     }
 
     g_free(env->tlb_table[mmu_idx]);
     g_free(env->iotlb[mmu_idx]);
 
+    tlb_window_reset(&desc->window, now, 0);
     /* desc->n_used_entries is cleared by the caller */
     env->tlb_mask[mmu_idx] = (new_size - 1) << CPU_TLB_ENTRY_BITS;
     env->tlb_table[mmu_idx] = g_new(CPUTLBEntry, new_size);
