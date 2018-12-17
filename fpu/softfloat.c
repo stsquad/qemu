@@ -226,10 +226,10 @@ GEN_INPUT_FLUSH3(float64_input_flush3, float64)
     IEEE implementation
 # endif
 # define QEMU_NO_HARDFLOAT 1
-# define QEMU_SOFTFLOAT_ATTR QEMU_FLATTEN
+# define QEMU_SOFTFLOAT_ATTR QEMU_FLATTEN __attribute__((unused))
 #else
 # define QEMU_NO_HARDFLOAT 0
-# define QEMU_SOFTFLOAT_ATTR QEMU_FLATTEN __attribute__((noinline))
+# define QEMU_SOFTFLOAT_ATTR QEMU_FLATTEN __attribute__((unused))
 #endif
 
 static inline bool can_use_fpu(const float_status *s)
@@ -350,31 +350,8 @@ float32_gen2(float32 xa, float32 xb, float_status *s,
 
     ua.s = xa;
     ub.s = xb;
-
-    if (unlikely(!can_use_fpu(s))) {
-        goto soft;
-    }
-
-    float32_input_flush2(&ua.s, &ub.s, s);
-    if (unlikely(!pre(ua, ub))) {
-        goto soft;
-    }
-    if (fast_test && fast_test(ua, ub)) {
-        return fast_op(ua.s, ub.s, s);
-    }
-
     ur.h = hard(ua.h, ub.h);
-    if (unlikely(f32_is_inf(ur))) {
-        s->float_exception_flags |= float_flag_overflow;
-    } else if (unlikely(fabsf(ur.h) <= FLT_MIN)) {
-        if (post == NULL || post(ua, ub)) {
-            goto soft;
-        }
-    }
     return ur.s;
-
- soft:
-    return soft(ua.s, ub.s, s);
 }
 
 static inline float64
@@ -387,31 +364,8 @@ float64_gen2(float64 xa, float64 xb, float_status *s,
 
     ua.s = xa;
     ub.s = xb;
-
-    if (unlikely(!can_use_fpu(s))) {
-        goto soft;
-    }
-
-    float64_input_flush2(&ua.s, &ub.s, s);
-    if (unlikely(!pre(ua, ub))) {
-        goto soft;
-    }
-    if (fast_test && fast_test(ua, ub)) {
-        return fast_op(ua.s, ub.s, s);
-    }
-
     ur.h = hard(ua.h, ub.h);
-    if (unlikely(f64_is_inf(ur))) {
-        s->float_exception_flags |= float_flag_overflow;
-    } else if (unlikely(fabs(ur.h) <= DBL_MIN)) {
-        if (post == NULL || post(ua, ub)) {
-            goto soft;
-        }
-    }
     return ur.s;
-
- soft:
-    return soft(ua.s, ub.s, s);
 }
 
 /*----------------------------------------------------------------------------
@@ -1550,50 +1504,18 @@ float32_muladd(float32 xa, float32 xb, float32 xc, int flags, float_status *s)
     ua.s = xa;
     ub.s = xb;
     uc.s = xc;
-
-    if (unlikely(!can_use_fpu(s))) {
-        goto soft;
-    }
     if (unlikely(flags & float_muladd_halve_result)) {
         goto soft;
     }
-
-    float32_input_flush3(&ua.s, &ub.s, &uc.s, s);
-    if (unlikely(!f32_is_zon3(ua, ub, uc))) {
-        goto soft;
+    if (flags & float_muladd_negate_product) {
+        ua.h = -ua.h;
     }
-    /*
-     * When (a || b) == 0, there's no need to check for under/over flow,
-     * since we know the addend is (normal || 0) and the product is 0.
-     */
-    if (float32_is_zero(ua.s) || float32_is_zero(ub.s)) {
-        union_float32 up;
-        bool prod_sign;
-
-        prod_sign = float32_is_neg(ua.s) ^ float32_is_neg(ub.s);
-        prod_sign ^= !!(flags & float_muladd_negate_product);
-        up.s = float32_set_sign(float32_zero, prod_sign);
-
-        if (flags & float_muladd_negate_c) {
-            uc.h = -uc.h;
-        }
-        ur.h = up.h + uc.h;
-    } else {
-        if (flags & float_muladd_negate_product) {
-            ua.h = -ua.h;
-        }
-        if (flags & float_muladd_negate_c) {
-            uc.h = -uc.h;
-        }
-
-        ur.h = fmaf(ua.h, ub.h, uc.h);
-
-        if (unlikely(f32_is_inf(ur))) {
-            s->float_exception_flags |= float_flag_overflow;
-        } else if (unlikely(fabsf(ur.h) <= FLT_MIN)) {
-            goto soft;
-        }
+    if (flags & float_muladd_negate_c) {
+        uc.h = -uc.h;
     }
+
+    ur.h = fmaf(ua.h, ub.h, uc.h);
+
     if (flags & float_muladd_negate_result) {
         return float32_chs(ur.s);
     }
@@ -1611,50 +1533,18 @@ float64_muladd(float64 xa, float64 xb, float64 xc, int flags, float_status *s)
     ua.s = xa;
     ub.s = xb;
     uc.s = xc;
-
-    if (unlikely(!can_use_fpu(s))) {
-        goto soft;
-    }
     if (unlikely(flags & float_muladd_halve_result)) {
         goto soft;
     }
-
-    float64_input_flush3(&ua.s, &ub.s, &uc.s, s);
-    if (unlikely(!f64_is_zon3(ua, ub, uc))) {
-        goto soft;
+    if (flags & float_muladd_negate_product) {
+        ua.h = -ua.h;
     }
-    /*
-     * When (a || b) == 0, there's no need to check for under/over flow,
-     * since we know the addend is (normal || 0) and the product is 0.
-     */
-    if (float64_is_zero(ua.s) || float64_is_zero(ub.s)) {
-        union_float64 up;
-        bool prod_sign;
-
-        prod_sign = float64_is_neg(ua.s) ^ float64_is_neg(ub.s);
-        prod_sign ^= !!(flags & float_muladd_negate_product);
-        up.s = float64_set_sign(float64_zero, prod_sign);
-
-        if (flags & float_muladd_negate_c) {
-            uc.h = -uc.h;
-        }
-        ur.h = up.h + uc.h;
-    } else {
-        if (flags & float_muladd_negate_product) {
-            ua.h = -ua.h;
-        }
-        if (flags & float_muladd_negate_c) {
-            uc.h = -uc.h;
-        }
-
-        ur.h = fma(ua.h, ub.h, uc.h);
-
-        if (unlikely(f64_is_inf(ur))) {
-            s->float_exception_flags |= float_flag_overflow;
-        } else if (unlikely(fabs(ur.h) <= FLT_MIN)) {
-            goto soft;
-        }
+    if (flags & float_muladd_negate_c) {
+        uc.h = -uc.h;
     }
+
+    ur.h = fma(ua.h, ub.h, uc.h);
+
     if (flags & float_muladd_negate_result) {
         return float64_chs(ur.s);
     }
@@ -2936,11 +2826,6 @@ f32_compare(float32 xa, float32 xb, bool is_quiet, float_status *s)
     ua.s = xa;
     ub.s = xb;
 
-    if (QEMU_NO_HARDFLOAT) {
-        goto soft;
-    }
-
-    float32_input_flush2(&ua.s, &ub.s, s);
     if (isgreaterequal(ua.h, ub.h)) {
         if (isgreater(ua.h, ub.h)) {
             return float_relation_greater;
@@ -2950,11 +2835,7 @@ f32_compare(float32 xa, float32 xb, bool is_quiet, float_status *s)
     if (likely(isless(ua.h, ub.h))) {
         return float_relation_less;
     }
-    /* The only condition remaining is unordered.
-     * Fall through to set flags.
-     */
- soft:
-    return soft_f32_compare(ua.s, ub.s, is_quiet, s);
+    return float_relation_unordered;
 }
 
 int float32_compare(float32 a, float32 b, float_status *s)
@@ -2975,11 +2856,6 @@ f64_compare(float64 xa, float64 xb, bool is_quiet, float_status *s)
     ua.s = xa;
     ub.s = xb;
 
-    if (QEMU_NO_HARDFLOAT) {
-        goto soft;
-    }
-
-    float64_input_flush2(&ua.s, &ub.s, s);
     if (isgreaterequal(ua.h, ub.h)) {
         if (isgreater(ua.h, ub.h)) {
             return float_relation_greater;
@@ -2989,11 +2865,7 @@ f64_compare(float64 xa, float64 xb, bool is_quiet, float_status *s)
     if (likely(isless(ua.h, ub.h))) {
         return float_relation_less;
     }
-    /* The only condition remaining is unordered.
-     * Fall through to set flags.
-     */
- soft:
-    return soft_f64_compare(ua.s, ub.s, is_quiet, s);
+    return float_relation_unordered;
 }
 
 int float64_compare(float64 a, float64 b, float_status *s)
@@ -3146,26 +3018,20 @@ float32 QEMU_FLATTEN float32_sqrt(float32 xa, float_status *s)
     union_float32 ua, ur;
 
     ua.s = xa;
-    if (unlikely(!can_use_fpu(s))) {
-        goto soft;
-    }
 
-    float32_input_flush1(&ua.s, s);
     if (QEMU_HARDFLOAT_1F32_USE_FP) {
         if (unlikely(!(fpclassify(ua.h) == FP_NORMAL ||
                        fpclassify(ua.h) == FP_ZERO) ||
                      signbit(ua.h))) {
-            goto soft;
+            return ua.s;
         }
     } else if (unlikely(!float32_is_zero_or_normal(ua.s) ||
                         float32_is_neg(ua.s))) {
-        goto soft;
+        return ua.s;
     }
+
     ur.h = sqrtf(ua.h);
     return ur.s;
-
- soft:
-    return soft_f32_sqrt(ua.s, s);
 }
 
 float64 QEMU_FLATTEN float64_sqrt(float64 xa, float_status *s)
@@ -3173,26 +3039,19 @@ float64 QEMU_FLATTEN float64_sqrt(float64 xa, float_status *s)
     union_float64 ua, ur;
 
     ua.s = xa;
-    if (unlikely(!can_use_fpu(s))) {
-        goto soft;
-    }
 
-    float64_input_flush1(&ua.s, s);
     if (QEMU_HARDFLOAT_1F64_USE_FP) {
         if (unlikely(!(fpclassify(ua.h) == FP_NORMAL ||
                        fpclassify(ua.h) == FP_ZERO) ||
                      signbit(ua.h))) {
-            goto soft;
+            return ua.s;
         }
     } else if (unlikely(!float64_is_zero_or_normal(ua.s) ||
                         float64_is_neg(ua.s))) {
-        goto soft;
+        return ua.s;
     }
     ur.h = sqrt(ua.h);
     return ur.s;
-
- soft:
-    return soft_f64_sqrt(ua.s, s);
 }
 
 /*----------------------------------------------------------------------------
