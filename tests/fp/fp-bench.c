@@ -143,11 +143,11 @@ static void update_random_ops(int n_ops, enum precision prec)
     for (i = 0; i < n_ops; i++) {
         uint64_t r = random_ops[i];
 
-        if (prec == PREC_SINGLE || PREC_FLOAT32) {
+        if (prec == PREC_SINGLE || prec == PREC_FLOAT32) {
             do {
                 r = xorshift64star(r);
             } while (!float32_is_normal(r));
-        } else if (prec == PREC_DOUBLE || PREC_FLOAT64) {
+        } else if (prec == PREC_DOUBLE || prec == PREC_FLOAT64) {
             do {
                 r = xorshift64star(r);
             } while (!float64_is_normal(r));
