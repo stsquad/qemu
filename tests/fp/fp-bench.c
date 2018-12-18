@@ -146,11 +146,11 @@ static void update_random_ops(int n_ops, enum precision prec)
         if (prec == PREC_SINGLE || prec == PREC_FLOAT32) {
             do {
                 r = xorshift64star(r);
-            } while (!float32_is_normal(r));
+            } while (!float32_is_normal(make_float32(r)));
         } else if (prec == PREC_DOUBLE || prec == PREC_FLOAT64) {
             do {
                 r = xorshift64star(r);
-            } while (!float64_is_normal(r));
+            } while (!float64_is_normal(make_float64(r)));
         } else {
             g_assert_not_reached();
         }
