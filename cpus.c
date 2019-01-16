@@ -49,10 +49,13 @@
 #include "qemu/option.h"
 #include "qemu/bitmap.h"
 #include "qemu/seqlock.h"
-#include "tcg.h"
 #include "hw/nmi.h"
 #include "sysemu/replay.h"
 #include "hw/boards.h"
+
+#ifdef CONFIG_TCG
+#include "tcg.h"
+#endif
 
 #ifdef CONFIG_LINUX
 
@@ -156,8 +159,8 @@ typedef struct TimersState {
 } TimersState;
 
 static TimersState timers_state;
-bool mttcg_enabled;
 
+#ifdef CONFIG_TCG
 /*
  * We default to false if we know other options have been enabled
  * which are currently incompatible with MTTCG. Otherwise when each
@@ -177,6 +180,7 @@ bool mttcg_enabled;
  * implicit memory order requirements which would likely slow things
  * down a lot.
  */
+bool mttcg_enabled;
 
 static bool check_tcg_memory_orders_compatible(void)
 {
@@ -323,6 +327,8 @@ int64_t cpu_icount_to_ns(int64_t icount)
     return icount << atomic_read(&timers_state.icount_time_shift);
 }
 
+#endif /* CONFIG_TCG */
+
 static int64_t cpu_get_ticks_locked(void)
 {
     int64_t ticks = timers_state.cpu_ticks_offset;
@@ -419,6 +425,7 @@ void cpu_disable_ticks(void)
                          &timers_state.vm_clock_lock);
 }
 
+#ifdef CONFIG_TCG
 /* Correlation between real and virtual time is always going to be
    fairly approximate, so ignore small variation.
    When the guest is idle real and virtual time will be aligned in
@@ -542,6 +549,7 @@ static void icount_timer_cb(void *opaque)
      */
     icount_warp_rt();
 }
+#endif /* CONFIG_TCG */
 
 void qtest_clock_warp(int64_t dest)
 {
@@ -668,6 +676,8 @@ void qemu_start_warp_timer(void)
     }
 }
 
+#ifdef CONFIG_TCG
+
 static void qemu_account_warp_timer(void)
 {
     if (!use_icount || !icount_sleep) {
@@ -753,6 +763,7 @@ static const VMStateDescription icount_vmstate_timers = {
         NULL
     }
 };
+#endif /* CONFIG_TCG */
 
 static const VMStateDescription vmstate_timers = {
     .name = "timer",
@@ -764,10 +775,12 @@ static const VMStateDescription vmstate_timers = {
         VMSTATE_INT64_V(cpu_clock_offset, TimersState, 2),
         VMSTATE_END_OF_LIST()
     },
+#ifdef CONFIG_TCG
     .subsections = (const VMStateDescription*[]) {
         &icount_vmstate_timers,
         NULL
     }
+#endif
 };
 
 static void cpu_throttle_thread(CPUState *cpu, run_on_cpu_data opaque)
@@ -847,6 +860,7 @@ void cpu_ticks_init(void)
                                            cpu_throttle_timer_tick, NULL);
 }
 
+#ifdef CONFIG_TCG
 void configure_icount(QemuOpts *opts, Error **errp)
 {
     const char *option;
@@ -996,6 +1010,7 @@ static void stop_tcg_kick_timer(void)
         timer_del(tcg_kick_vcpu_timer);
     }
 }
+#endif /* CONFIG_TCG */
 
 /***********************************************************/
 void hw_error(const char *fmt, ...)
@@ -1196,10 +1211,6 @@ static void qemu_kvm_destroy_vcpu(CPUState *cpu)
     }
 }
 
-static void qemu_tcg_destroy_vcpu(CPUState *cpu)
-{
-}
-
 static void qemu_cpu_stop(CPUState *cpu, bool exit)
 {
     g_assert(qemu_cpu_is_self(cpu));
@@ -1220,6 +1231,7 @@ static void qemu_wait_io_event_common(CPUState *cpu)
     process_queued_cpu_work(cpu);
 }
 
+#ifdef CONFIG_TCG
 static void qemu_tcg_rr_wait_io_event(void)
 {
     CPUState *cpu;
@@ -1235,6 +1247,7 @@ static void qemu_tcg_rr_wait_io_event(void)
         qemu_wait_io_event_common(cpu);
     }
 }
+#endif
 
 static void qemu_wait_io_event(CPUState *cpu)
 {
@@ -1338,6 +1351,7 @@ static void *qemu_dummy_cpu_thread_fn(void *arg)
 #endif
 }
 
+#ifdef CONFIG_TCG
 static int64_t tcg_get_icount_limit(void)
 {
     int64_t deadline;
@@ -1444,7 +1458,6 @@ static void deal_with_unplugged_cpus(void)
 
     CPU_FOREACH(cpu) {
         if (cpu->unplug && !cpu_can_run(cpu)) {
-            qemu_tcg_destroy_vcpu(cpu);
             cpu->created = false;
             qemu_cond_signal(&qemu_cpu_cond);
             break;
@@ -1574,6 +1587,8 @@ static void *qemu_tcg_rr_cpu_thread_fn(void *arg)
     return NULL;
 }
 
+#endif /* CONFIG_TCG */
+
 static void *qemu_hax_cpu_thread_fn(void *arg)
 {
     CPUState *cpu = arg;
@@ -1697,6 +1712,7 @@ static void CALLBACK dummy_apc_func(ULONG_PTR unused)
 }
 #endif
 
+#ifdef CONFIG_TCG
 /* Multi-threaded TCG
  *
  * In the multi-threaded case each vCPU has its own thread. The TLS
@@ -1760,13 +1776,13 @@ static void *qemu_tcg_cpu_thread_fn(void *arg)
         qemu_wait_io_event(cpu);
     } while (!cpu->unplug || cpu_can_run(cpu));
 
-    qemu_tcg_destroy_vcpu(cpu);
     cpu->created = false;
     qemu_cond_signal(&qemu_cpu_cond);
     qemu_mutex_unlock_iothread();
     rcu_unregister_thread();
     return NULL;
 }
+#endif /* CONFIG_TCG */
 
 static void qemu_cpu_kick_thread(CPUState *cpu)
 {
@@ -1799,9 +1815,11 @@ void qemu_cpu_kick(CPUState *cpu)
 {
     qemu_cond_broadcast(cpu->halt_cond);
     if (tcg_enabled()) {
+#ifdef CONFIG_TCG
         cpu_exit(cpu);
         /* NOP unless doing single-thread RR */
         qemu_cpu_kick_rr_cpu();
+#endif
     } else {
         if (hax_enabled()) {
             /*
@@ -1931,6 +1949,7 @@ void cpu_remove_sync(CPUState *cpu)
 /* For temporary buffers for forming a name */
 #define VCPU_THREAD_NAME_SIZE 16
 
+#ifdef CONFIG_TCG
 static void qemu_tcg_init_vcpu(CPUState *cpu)
 {
     char thread_name[VCPU_THREAD_NAME_SIZE];
@@ -1986,6 +2005,7 @@ static void qemu_tcg_init_vcpu(CPUState *cpu)
         cpu->created = true;
     }
 }
+#endif
 
 static void qemu_hax_start_vcpu(CPUState *cpu)
 {
@@ -2084,8 +2104,10 @@ void qemu_init_vcpu(CPUState *cpu)
         qemu_hax_start_vcpu(cpu);
     } else if (hvf_enabled()) {
         qemu_hvf_start_vcpu(cpu);
+#ifdef CONFIG_TCG
     } else if (tcg_enabled()) {
         qemu_tcg_init_vcpu(cpu);
+#endif
     } else if (whpx_enabled()) {
         qemu_whpx_start_vcpu(cpu);
     } else {

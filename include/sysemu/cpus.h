@@ -10,8 +10,11 @@ void resume_all_vcpus(void);
 void pause_all_vcpus(void);
 void cpu_stop_current(void);
 void cpu_ticks_init(void);
-
+#ifdef CONFIG_TCG
 void configure_icount(QemuOpts *opts, Error **errp);
+#else
+static inline void configure_icount(QemuOpts *opts, Error **errp) {}
+#endif
 extern int use_icount;
 extern int icount_align_option;
 

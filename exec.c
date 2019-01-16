@@ -101,7 +101,9 @@ __thread CPUState *current_cpu;
 /* 0 = Do not count executed instructions.
    1 = Precise instruction counting.
    2 = Adaptive rate instruction counting.  */
+#ifdef CONFIG_TCG
 int use_icount;
+#endif
 
 uintptr_t qemu_host_page_size;
 intptr_t qemu_host_page_mask;
