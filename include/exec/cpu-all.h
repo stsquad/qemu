@@ -316,7 +316,7 @@ CPUArchState *cpu_copy(CPUArchState *env);
      | CPU_INTERRUPT_TGT_EXT_3   \
      | CPU_INTERRUPT_TGT_EXT_4)
 
-#if !defined(CONFIG_USER_ONLY)
+#if !defined(CONFIG_USER_ONLY) && defined(CONFIG_TCG)
 
 /* Flags stored in the low bits of the TLB virtual address.  These are
  * defined so that fast path ram access is all zeros.
