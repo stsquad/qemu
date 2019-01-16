@@ -12,5 +12,5 @@ freebsd_12_task:
     - mkdir build
     - cd build
     - ../configure || { cat config.log; exit 1; }
-    - gmake -j8
-    - gmake -j8 check
+    - gmake -j8 V=1
+    - gmake -j8 check V=1
