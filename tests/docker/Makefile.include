@@ -175,6 +175,9 @@ else
 DOCKER_PARTIAL_IMAGES += debian-mips64el-user-cross debian-ppc64el-user-cross debian-s390x-user-cross
 endif
 
+# Expand a rule to build all binfmt powered linux-user images
+DOCKER_USER_TARGETS := $(patsubst %,docker-image-%,$(DOCKER_USER_IMAGES))
+docker-user-images: $(DOCKER_USER_TARGETS)
 
 # Expand all the pre-requistes for each docker image and test combination
 $(foreach i,$(filter-out $(DOCKER_PARTIAL_IMAGES),$(DOCKER_IMAGES) $(DOCKER_DEPRECATED_IMAGES)), \
@@ -206,6 +209,7 @@ docker:
 	@echo '                         or a script name under $$QEMU_SRC/tests/docker/;'
 	@echo '                         "IMAGE" is one of the listed container name."'
 	@echo '    docker-all-images:   Build all images.'
+	@echo '    docker-user-images:  Build all linux-user images.'
 	@echo '    docker-image-IMAGE:  Build image "IMAGE".'
 	@echo '    docker-run:          For manually running a "TEST" with "IMAGE"'
 	@echo
@@ -213,7 +217,7 @@ docker:
 	@echo '    $(DOCKER_IMAGES)'
 ifneq ($(DOCKER_USER_IMAGES),)
 	@echo
-	@echo 'Available linux-user images (docker-binfmt-image-debian-%):'
+	@echo 'Available linux-user images (docker-binfmt-image-%):'
 	@echo '    $(DOCKER_USER_IMAGES)'
 endif
 	@echo
