@@ -125,7 +125,7 @@ docker-binfmt-image-debian-powerpc-user: DEB_ARCH = powerpc
 docker-binfmt-image-debian-powerpc-user: DEB_TYPE = jessie
 docker-binfmt-image-debian-powerpc-user: EXECUTABLE = ${BUILD_DIR}/ppc-linux-user/qemu-ppc
 docker-image-debian-powerpc-user-cross: docker-binfmt-image-debian-powerpc-user
-DOCKER_USER_IMAGES += debian-powerpc-user
+DOCKER_USER_IMAGES += debian-powerpc-user-cross
 
 # Modifications for non-x86 hosts
 #
