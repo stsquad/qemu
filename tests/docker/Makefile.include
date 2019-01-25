@@ -180,7 +180,7 @@ DOCKER_USER_TARGETS := $(patsubst %,docker-image-%,$(DOCKER_USER_IMAGES))
 docker-user-images: $(DOCKER_USER_TARGETS)
 
 # Expand all the pre-requistes for each docker image and test combination
-$(foreach i,$(filter-out $(DOCKER_PARTIAL_IMAGES),$(DOCKER_IMAGES) $(DOCKER_DEPRECATED_IMAGES)), \
+$(foreach i,$(filter-out $(DOCKER_PARTIAL_IMAGES),$(DOCKER_IMAGES) $(DOCKER_USER_IMAGES) $(DOCKER_DEPRECATED_IMAGES)), \
 	$(foreach t,$(DOCKER_TESTS) $(DOCKER_TOOLS), \
 		$(eval .PHONY: docker-$t@$i) \
 		$(eval docker-$t@$i: docker-image-$i docker-run-$t@$i) \
@@ -188,6 +188,7 @@ $(foreach i,$(filter-out $(DOCKER_PARTIAL_IMAGES),$(DOCKER_IMAGES) $(DOCKER_DEPR
 	$(foreach t,$(DOCKER_TESTS), \
 		$(eval docker-all-tests: docker-$t@$i) \
 		$(eval docker-$t: docker-$t@$i) \
+		$(eval docker-$t@user-images: $(patsubst %,docker-$t@%,$(DOCKER_USER_IMAGES))) \
 	) \
 )
 
@@ -203,6 +204,7 @@ docker:
 	@echo '    docker:              Print this help.'
 	@echo '    docker-all-tests:    Run all image/test combinations.'
 	@echo '    docker-TEST:         Run TEST on all image combinations.'
+	@echo '    docker-TEST@user-images: Run TEST on all linux-user image combinations.'
 	@echo '    docker-clean:        Kill and remove residual docker testing containers.'
 	@echo '    docker-TEST@IMAGE:   Run "TEST" in container "IMAGE".'
 	@echo '                         Note: "TEST" is one of the listed test name,'
