@@ -11,6 +11,10 @@
 #include <string.h>
 #include <stdbool.h>
 
+#ifndef HWCAP_CPUID
+#define HWCAP_CPUID (1 << 11)
+#endif
+
 int failed_mask_count;
 
 #define get_cpu_reg(id) ({                                      \
