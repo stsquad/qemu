@@ -35,7 +35,7 @@ ADDITIONAL_ARCHES = {
 def kvm_available(target_arch=None):
     host_arch = os.uname()[4]
     if target_arch and target_arch != host_arch:
-        if target_arch != ADDITIONAL_ARCHES[host_arch]:
+        if target_arch != ADDITIONAL_ARCHES.get(host_arch):
             return False
     return os.access("/dev/kvm", os.R_OK | os.W_OK)
 
