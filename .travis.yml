@@ -97,12 +97,13 @@ matrix:
         - CONFIG="--enable-modules --disable-linux-user"
 
 
+    # Alternate coroutines implementations are only really of interest to KVM users
     - env:
-        - CONFIG="--with-coroutine=ucontext --disable-linux-user"
+        - CONFIG="--with-coroutine=ucontext --disable-tcg"
 
 
     - env:
-        - CONFIG="--with-coroutine=sigaltstack --disable-linux-user"
+        - CONFIG="--with-coroutine=sigaltstack --disable-tcg"
 
 
     # Check we can build docs and tools
@@ -157,11 +158,6 @@ matrix:
 
     - env:
         - CONFIG="--enable-trace-backends=ust --target-list=x86_64-softmmu"
-        - TEST_CMD=""
-
-
-    - env:
-        - CONFIG="--disable-tcg"
         - TEST_CMD=""
 
 
