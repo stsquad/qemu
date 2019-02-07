@@ -265,7 +265,7 @@ static int plugin_load(struct qemu_plugin_desc *desc)
                      __func__, rc);
         /*
          * we cannot rely on the plugin doing its own cleanup, so
-         * call a full uninstall if the plugin did not already call it.
+         * call a full uninstall if the plugin did not yet call it.
          */
         qemu_rec_mutex_lock(&plugin.lock);
         if (!ctx->uninstalling) {
@@ -373,17 +373,14 @@ static void plugin_unregister_cb__locked(struct qemu_plugin_ctx *ctx,
 }
 
 struct qemu_plugin_uninstall_data {
+    struct rcu_head rcu;
     struct qemu_plugin_ctx *ctx;
-    unsigned tb_flush_count;
 };
 
-static void plugin_destroy(CPUState *cpu, run_on_cpu_data arg)
+static void plugin_destroy(struct qemu_plugin_uninstall_data *data)
 {
-    struct qemu_plugin_uninstall_data *data = arg.host_ptr;
     struct qemu_plugin_ctx *ctx = data->ctx;
     bool success;
-
-    tb_flush(cpu);
 
     qemu_rec_mutex_lock(&plugin.lock);
     g_assert(ctx->uninstalling);
@@ -402,6 +399,15 @@ static void plugin_destroy(CPUState *cpu, run_on_cpu_data arg)
     plugin_desc_free(ctx->desc);
     qemu_vfree(ctx);
     g_free(data);
+}
+
+static void plugin_flush_destroy(CPUState *cpu, run_on_cpu_data arg)
+{
+    struct qemu_plugin_uninstall_data *data = arg.host_ptr;
+
+    g_assert(cpu_in_exclusive_work_context(cpu));
+    tb_flush(cpu);
+    plugin_destroy(data);
 }
 
 void qemu_plugin_uninstall(qemu_plugin_id_t id, qemu_plugin_simple_cb_t cb)
@@ -428,13 +434,17 @@ void qemu_plugin_uninstall(qemu_plugin_id_t id, qemu_plugin_simple_cb_t cb)
     }
     qemu_rec_mutex_unlock(&plugin.lock);
 
-    /* XXX how to flush when we're not in a vCPU thread? */
+    /*
+     * If current_cpu isn't set, then we don't flush the code cache because
+     * there are no vCPUs yet.
+     */
+    data = g_new(struct qemu_plugin_uninstall_data, 1);
+    data->ctx = ctx;
     if (current_cpu) {
-        data = g_new(struct qemu_plugin_uninstall_data, 1);
-        data->ctx = ctx;
-        data->tb_flush_count = atomic_mb_read(&tb_ctx.tb_flush_count);
-        async_safe_run_on_cpu(current_cpu, plugin_destroy,
+        async_safe_run_on_cpu(current_cpu, plugin_flush_destroy,
                               RUN_ON_CPU_HOST_PTR(data));
+    } else {
+        call_rcu(data, plugin_destroy, rcu);
     }
 }
 
