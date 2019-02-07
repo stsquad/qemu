@@ -40,13 +40,14 @@ struct qemu_plugin_ctx {
     qemu_plugin_id_t id;
     struct qemu_plugin_cb *callbacks[QEMU_PLUGIN_EV_MAX];
     QTAILQ_ENTRY(qemu_plugin_ctx) entry;
-    qemu_plugin_simple_cb_t uninstall_cb;
     /*
      * keep a reference to @desc until uninstall, so that plugins do not have
      * to strdup plugin args.
      */
     struct qemu_plugin_desc *desc;
-    bool uninstalling; /* protected by plugin.lock */
+    bool installing;
+    bool uninstalling;
+    bool resetting;
 };
 
 /* global state */
@@ -257,9 +258,9 @@ static int plugin_load(struct qemu_plugin_desc *desc)
         }
     }
     QTAILQ_INSERT_TAIL(&plugin.ctxs, ctx, entry);
-    qemu_rec_mutex_unlock(&plugin.lock);
-
+    ctx->installing = true;
     rc = install(ctx->id, desc->argc, desc->argv);
+    ctx->installing = false;
     if (rc) {
         error_report("%s: qemu_plugin_install returned error code %d",
                      __func__, rc);
@@ -267,14 +268,13 @@ static int plugin_load(struct qemu_plugin_desc *desc)
          * we cannot rely on the plugin doing its own cleanup, so
          * call a full uninstall if the plugin did not yet call it.
          */
-        qemu_rec_mutex_lock(&plugin.lock);
         if (!ctx->uninstalling) {
             qemu_plugin_uninstall(ctx->id, NULL);
         }
-        qemu_rec_mutex_unlock(&plugin.lock);
-        return 1;
     }
-    return 0;
+
+    qemu_rec_mutex_unlock(&plugin.lock);
+    return rc;
 
  err_symbol:
     if (dlclose(ctx->handle)) {
@@ -372,26 +372,51 @@ static void plugin_unregister_cb__locked(struct qemu_plugin_ctx *ctx,
     }
 }
 
-struct qemu_plugin_uninstall_data {
-    struct rcu_head rcu;
+struct qemu_plugin_reset_data {
     struct qemu_plugin_ctx *ctx;
+    qemu_plugin_simple_cb_t cb;
+    bool reset;
 };
 
-static void plugin_destroy(struct qemu_plugin_uninstall_data *data)
+static void plugin_reset_destroy__locked(struct qemu_plugin_reset_data *data)
 {
     struct qemu_plugin_ctx *ctx = data->ctx;
+    enum qemu_plugin_event ev;
     bool success;
 
-    qemu_rec_mutex_lock(&plugin.lock);
+    /*
+     * After updating the subscription lists there is no need to wait for an RCU
+     * grace period to elapse, because right now we either are in a "safe async"
+     * work environment (i.e. all vCPUs are asleep), or no vCPUs have yet been
+     * created.
+     */
+    for (ev = 0; ev < QEMU_PLUGIN_EV_MAX; ev++) {
+        plugin_unregister_cb__locked(ctx, ev);
+    }
+
+    if (data->reset) {
+        g_assert(ctx->resetting);
+        if (data->cb) {
+            data->cb(ctx->id);
+        }
+        ctx->resetting = false;
+        g_free(data);
+        return;
+    }
+
     g_assert(ctx->uninstalling);
+    /* we cannot dlclose if we are going to return to plugin code */
+    if (ctx->installing) {
+        error_report("Calling qemu_plugin_uninstall from the install function "
+                     "is a bug. Instead, return !0 from the install function.");
+        abort();
+    }
+
     success = g_hash_table_remove(plugin.id_ht, &ctx->id);
     g_assert(success);
-
     QTAILQ_REMOVE(&plugin.ctxs, ctx, entry);
-    qemu_rec_mutex_unlock(&plugin.lock);
-
-    if (ctx->uninstall_cb) {
-        ctx->uninstall_cb(ctx->id);
+    if (data->cb) {
+        data->cb(ctx->id);
     }
     if (dlclose(ctx->handle)) {
         warn_report("%s: %s", __func__, dlerror());
@@ -401,51 +426,67 @@ static void plugin_destroy(struct qemu_plugin_uninstall_data *data)
     g_free(data);
 }
 
+static void plugin_reset_destroy(struct qemu_plugin_reset_data *data)
+{
+    qemu_rec_mutex_lock(&plugin.lock);
+    plugin_reset_destroy__locked(data);
+    qemu_rec_mutex_lock(&plugin.lock);
+}
+
 static void plugin_flush_destroy(CPUState *cpu, run_on_cpu_data arg)
 {
-    struct qemu_plugin_uninstall_data *data = arg.host_ptr;
+    struct qemu_plugin_reset_data *data = arg.host_ptr;
 
     g_assert(cpu_in_exclusive_work_context(cpu));
     tb_flush(cpu);
-    plugin_destroy(data);
+    plugin_reset_destroy(data);
 }
 
-void qemu_plugin_uninstall(qemu_plugin_id_t id, qemu_plugin_simple_cb_t cb)
+static void plugin_reset_uninstall(qemu_plugin_id_t id,
+                                   qemu_plugin_simple_cb_t cb,
+                                   bool reset)
 {
-    struct qemu_plugin_uninstall_data *data;
+    struct qemu_plugin_reset_data *data;
     struct qemu_plugin_ctx *ctx;
-    enum qemu_plugin_event ev;
 
     qemu_rec_mutex_lock(&plugin.lock);
     ctx = id_to_ctx__locked(id);
-    if (unlikely(ctx->uninstalling)) {
+    if (ctx->uninstalling || (reset && ctx->resetting)) {
         qemu_rec_mutex_unlock(&plugin.lock);
         return;
     }
-    ctx->uninstalling = true;
-    ctx->uninstall_cb = cb;
-    /*
-     * Unregister all callbacks. This is an RCU list so it is possible that some
-     * callbacks will still be called in this RCU grace period. For this reason
-     * we cannot yet uninstall the plugin.
-     */
-    for (ev = 0; ev < QEMU_PLUGIN_EV_MAX; ev++) {
-        plugin_unregister_cb__locked(ctx, ev);
-    }
+    ctx->resetting = reset;
+    ctx->uninstalling = !reset;
     qemu_rec_mutex_unlock(&plugin.lock);
 
-    /*
-     * If current_cpu isn't set, then we don't flush the code cache because
-     * there are no vCPUs yet.
-     */
-    data = g_new(struct qemu_plugin_uninstall_data, 1);
+    data = g_new(struct qemu_plugin_reset_data, 1);
     data->ctx = ctx;
+    data->cb = cb;
+    data->reset = reset;
+    /*
+     * Only flush the code cache if the vCPUs have been created. If so,
+     * current_cpu must be non-NULL.
+     */
     if (current_cpu) {
         async_safe_run_on_cpu(current_cpu, plugin_flush_destroy,
                               RUN_ON_CPU_HOST_PTR(data));
     } else {
-        call_rcu(data, plugin_destroy, rcu);
+        /*
+         * If current_cpu isn't set, then we don't have yet any vCPU threads
+         * and we therefore can remove the callbacks synchronously.
+         */
+        plugin_reset_destroy(data);
     }
+}
+
+void qemu_plugin_uninstall(qemu_plugin_id_t id, qemu_plugin_simple_cb_t cb)
+{
+    plugin_reset_uninstall(id, cb, false);
+}
+
+void qemu_plugin_reset(qemu_plugin_id_t id, qemu_plugin_simple_cb_t cb)
+{
+    plugin_reset_uninstall(id, cb, true);
 }
 
 static void plugin_vcpu_cb__simple(CPUState *cpu, enum qemu_plugin_event ev)
