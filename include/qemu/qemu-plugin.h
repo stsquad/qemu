@@ -36,14 +36,17 @@
 typedef uint64_t qemu_plugin_id_t;
 
 /**
- * qemu_plugin_install - Install a plugin
+ * qemu_plugin_install() - Install a plugin
  * @id: this plugin's opaque ID
  * @argc: number of arguments
  * @argv: array of arguments (@argc elements)
  *
  * All plugins must export this symbol.
  *
- * Note: @argv is freed after this function returns.
+ * Note: Calling qemu_plugin_uninstall() from this function is a bug. To raise
+ * an error during install, return !0.
+ *
+ * Note: @argv remains valid throughout the lifetime of the loaded plugin.
  */
 QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id, int argc,
                                            char **argv);
@@ -59,19 +62,33 @@ typedef void (*qemu_plugin_vcpu_udata_cb_t)(unsigned int vcpu_index,
                                             void *userdata);
 
 /**
- * qemu_plugin_uninstall - Uninstall a plugin
+ * qemu_plugin_uninstall() - Uninstall a plugin
  * @id: this plugin's opaque ID
  * @cb: callback to be called once the plugin has been removed
  *
- * Do NOT assume that the plugin has been uninstalled once this
- * function returns. Plugins are uninstalled asynchronously,
- * and therefore the given plugin might still receive callbacks
- * from prior subscriptions _until_ @cb is called.
+ * Do NOT assume that the plugin has been uninstalled once this function
+ * returns. Plugins are uninstalled asynchronously, and therefore the given
+ * plugin receives callbacks until @cb is called.
+ *
+ * Note: Calling this function from qemu_plugin_install() is a bug.
  */
 void qemu_plugin_uninstall(qemu_plugin_id_t id, qemu_plugin_simple_cb_t cb);
 
 /**
- * qemu_plugin_register_vcpu_init_cb - register a vCPU initialization callback
+ * qemu_plugin_reset() - Reset a plugin
+ * @id: this plugin's opaque ID
+ * @cb: callback to be called once the plugin has been reset
+ *
+ * Unregisters all callbacks for the plugin given by @id.
+ *
+ * Do NOT assume that the plugin has been reset once this function returns.
+ * Plugins are reset asynchronously, and therefore the given plugin receives
+ * callbacks until @cb is called.
+ */
+void qemu_plugin_reset(qemu_plugin_id_t id, qemu_plugin_simple_cb_t cb);
+
+/**
+ * qemu_plugin_register_vcpu_init_cb() - register a vCPU initialization callback
  * @id: plugin ID
  * @cb: callback function
  *
@@ -83,7 +100,7 @@ void qemu_plugin_register_vcpu_init_cb(qemu_plugin_id_t id,
                                        qemu_plugin_vcpu_simple_cb_t cb);
 
 /**
- * qemu_plugin_register_vcpu_exit_cb - register a vCPU exit callback
+ * qemu_plugin_register_vcpu_exit_cb() - register a vCPU exit callback
  * @id: plugin ID
  * @cb: callback function
  *
@@ -213,7 +230,7 @@ uint64_t qemu_plugin_insn_vaddr(const struct qemu_plugin_insn *insn);
 void *qemu_plugin_insn_haddr(const struct qemu_plugin_insn *insn);
 
 /**
- * qemu_plugin_vcpu_for_each - iterate over the existing vCPU
+ * qemu_plugin_vcpu_for_each() - iterate over the existing vCPU
  * @id: plugin ID
  * @cb: callback function
  *

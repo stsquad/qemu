@@ -1,5 +1,6 @@
 {
   qemu_plugin_uninstall;
+  qemu_plugin_reset;
   qemu_plugin_register_vcpu_init_cb;
   qemu_plugin_register_vcpu_exit_cb;
   qemu_plugin_register_vcpu_idle_cb;
