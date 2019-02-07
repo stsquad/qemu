@@ -48,7 +48,15 @@ typedef uint64_t qemu_plugin_id_t;
 QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id, int argc,
                                            char **argv);
 
-typedef void (*qemu_plugin_uninstall_cb_t)(qemu_plugin_id_t id);
+typedef void (*qemu_plugin_simple_cb_t)(qemu_plugin_id_t id);
+
+typedef void (*qemu_plugin_udata_cb_t)(qemu_plugin_id_t id, void *userdata);
+
+typedef void (*qemu_plugin_vcpu_simple_cb_t)(qemu_plugin_id_t id,
+                                             unsigned int vcpu_index);
+
+typedef void (*qemu_plugin_vcpu_udata_cb_t)(unsigned int vcpu_index,
+                                            void *userdata);
 
 /**
  * qemu_plugin_uninstall - Uninstall a plugin
@@ -60,17 +68,7 @@ typedef void (*qemu_plugin_uninstall_cb_t)(qemu_plugin_id_t id);
  * and therefore the given plugin might still receive callbacks
  * from prior subscriptions _until_ @cb is called.
  */
-void qemu_plugin_uninstall(qemu_plugin_id_t id, qemu_plugin_uninstall_cb_t cb);
-
-typedef void (*qemu_plugin_simple_cb_t)(qemu_plugin_id_t id);
-
-typedef void (*qemu_plugin_udata_cb_t)(qemu_plugin_id_t id, void *userdata);
-
-typedef void (*qemu_plugin_vcpu_simple_cb_t)(qemu_plugin_id_t id,
-                                             unsigned int vcpu_index);
-
-typedef void (*qemu_plugin_vcpu_udata_cb_t)(unsigned int vcpu_index,
-                                            void *userdata);
+void qemu_plugin_uninstall(qemu_plugin_id_t id, qemu_plugin_simple_cb_t cb);
 
 /**
  * qemu_plugin_register_vcpu_init_cb - register a vCPU initialization callback

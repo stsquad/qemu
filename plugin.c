@@ -40,7 +40,7 @@ struct qemu_plugin_ctx {
     qemu_plugin_id_t id;
     struct qemu_plugin_cb *callbacks[QEMU_PLUGIN_EV_MAX];
     QTAILQ_ENTRY(qemu_plugin_ctx) entry;
-    qemu_plugin_uninstall_cb_t uninstall_cb;
+    qemu_plugin_simple_cb_t uninstall_cb;
     /*
      * keep a reference to @desc until uninstall, so that plugins do not have
      * to strdup plugin args.
@@ -404,7 +404,7 @@ static void plugin_destroy(CPUState *cpu, run_on_cpu_data arg)
     g_free(data);
 }
 
-void qemu_plugin_uninstall(qemu_plugin_id_t id, qemu_plugin_uninstall_cb_t cb)
+void qemu_plugin_uninstall(qemu_plugin_id_t id, qemu_plugin_simple_cb_t cb)
 {
     struct qemu_plugin_uninstall_data *data;
     struct qemu_plugin_ctx *ctx;
