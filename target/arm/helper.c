@@ -9551,8 +9551,8 @@ static void arm_cpu_do_interrupt_aarch64(CPUState *cs)
 
     env->pc = addr;
 
-    qemu_log_mask(CPU_LOG_INT, "...to EL%d PC 0x%" PRIx64 " PSTATE 0x%x\n",
-                  new_el, env->pc, pstate_read(env));
+    qemu_log_mask(CPU_LOG_INT, "...to EL%d PC 0x%" PRIx64 " PSTATE 0x%x (%#x)\n",
+                  new_el, env->pc, pstate_read(env), env->hflags);
 }
 
 static inline bool check_for_semihosting(CPUState *cs)
@@ -13950,6 +13950,8 @@ uint32_t rebuild_hflags_a64(CPUARMState *env, int el)
     uint64_t sctlr;
     int tbii, tbid;
 
+    assert(el == arm_current_el(env));
+
     flags = FIELD_DP32(flags, TBFLAG_ANY, AARCH64_STATE, 1);
 
     /* Get control bits for tagged addresses.  */
@@ -14039,8 +14041,17 @@ void cpu_get_tb_cpu_state(CPUARMState *env, target_ulong *pc,
 
     *cs_base = 0;
     if (FIELD_EX32(flags, TBFLAG_ANY, AARCH64_STATE)) {
+#ifdef CONFIG_DEBUG_TCG
+        static uint32_t tb_state = 0;
+        uint32_t recalc_flags = rebuild_hflags_a64(env, arm_current_el(env));
+        tb_state++;
+        if (flags != recalc_flags) {
+            fprintf(stderr, "%s: flags %#x, should be %#x (%#x/%d)\n", __func__,
+                    flags, recalc_flags, flags ^ recalc_flags, tb_state);
+            abort();
+        }
+#endif
         *pc = env->pc;
-        tcg_debug_assert(flags == rebuild_hflags_a64(env, arm_current_el(env)));
         flags = FIELD_DP32(flags, TBFLAG_A64, BTYPE, env->btype);
         pstate_for_ss = env->pstate;
     } else {
