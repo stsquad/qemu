@@ -14040,10 +14040,12 @@ void cpu_get_tb_cpu_state(CPUARMState *env, target_ulong *pc,
     *cs_base = 0;
     if (FIELD_EX32(flags, TBFLAG_ANY, AARCH64_STATE)) {
         *pc = env->pc;
+        tcg_debug_assert(flags == rebuild_hflags_a64(env, arm_current_el(env)));
         flags = FIELD_DP32(flags, TBFLAG_A64, BTYPE, env->btype);
         pstate_for_ss = env->pstate;
     } else {
         *pc = env->regs[15];
+        tcg_debug_assert(flags == rebuild_hflags_a32(env, arm_current_el(env)));
         flags = FIELD_DP32(flags, TBFLAG_A32, THUMB, env->thumb);
         flags = FIELD_DP32(flags, TBFLAG_A32, CONDEXEC, env->condexec_bits);
         pstate_for_ss = env->uncached_cpsr;
