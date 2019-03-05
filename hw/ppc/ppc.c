@@ -89,7 +89,7 @@ void ppc_set_irq(PowerPCCPU *cpu, int n_IRQ, int level)
 
     LOG_IRQ("%s: %p n_IRQ %d level %d => pending %08" PRIx32
                 "req %08x\n", __func__, env, n_IRQ, level,
-                env->pending_interrupts, CPU(cpu)->interrupt_request);
+                env->pending_interrupts, cpu_interrupt_request(CPU(cpu)));
 
     if (locked) {
         qemu_mutex_unlock_iothread();
@@ -149,7 +149,7 @@ static void ppc6xx_set_irq(void *opaque, int pin, int level)
             /* XXX: Note that the only way to restart the CPU is to reset it */
             if (level) {
                 LOG_IRQ("%s: stop the CPU\n", __func__);
-                cs->halted = 1;
+                cpu_halted_set(cs, 1);
             }
             break;
         case PPC6xx_INPUT_HRESET:
@@ -228,10 +228,10 @@ static void ppc970_set_irq(void *opaque, int pin, int level)
             /* XXX: TODO: relay the signal to CKSTP_OUT pin */
             if (level) {
                 LOG_IRQ("%s: stop the CPU\n", __func__);
-                cs->halted = 1;
+                cpu_halted_set(cs, 1);
             } else {
                 LOG_IRQ("%s: restart the CPU\n", __func__);
-                cs->halted = 0;
+                cpu_halted_set(cs, 0);
                 qemu_cpu_kick(cs);
             }
             break;
@@ -457,10 +457,10 @@ static void ppc40x_set_irq(void *opaque, int pin, int level)
             /* Level sensitive - active low */
             if (level) {
                 LOG_IRQ("%s: stop the CPU\n", __func__);
-                cs->halted = 1;
+                cpu_halted_set(cs, 1);
             } else {
                 LOG_IRQ("%s: restart the CPU\n", __func__);
-                cs->halted = 0;
+                cpu_halted_set(cs, 0);
                 qemu_cpu_kick(cs);
             }
             break;
