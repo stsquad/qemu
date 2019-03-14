@@ -22,6 +22,15 @@ build-system2:
  - make -j2
  - make -j2 check
 
+build-arm64-native:
+ tags:
+   - arm64
+ script:
+ - apt-get build-dep qemu
+ - ./configure --enable-werror --target-list="arm-softmmu,aarch64-softmmu"
+ - make -j30
+ - make -j30 check check-tcg check-acceptance
+
 build-disabled:
  script:
  - ./configure --enable-werror --disable-rdma --disable-slirp --disable-curl
