@@ -11337,19 +11337,27 @@ ARMMMUIdx arm_mmu_idx_el(CPUARMState *env, int el)
         return arm_v7m_mmu_idx_for_secstate(env, env->v7m.secure);
     }
 
+    if (el == 3 || arm_is_secure_below_el3(env)) {
+        /* TODO: ARMv8.4-SecEL2, Secure EL2&0 regime. */
+        return ARMMMUIdx_SE0 + el;
+    }
+
+    /* See ARM pseudo-function ELIsInHost.  */
     switch (el) {
     case 0:
-        /* TODO: ARMv8.1-VHE */
+        if ((env->cp15.hcr_el2 & (HCR_E2H | HCR_TGE)) == (HCR_E2H | HCR_TGE)
+            && arm_el_is_aa64(env, 2)) {
+            return ARMMMUIdx_EL20_0;
+        }
+        return ARMMMUIdx_EL10_0;
     case 1:
-        return (arm_is_secure_below_el3(env)
-                ? ARMMMUIdx_SE0 + el
-                : ARMMMUIdx_EL10_0 + el);
+        return ARMMMUIdx_EL10_1;
     case 2:
-        /* TODO: ARMv8.1-VHE */
-        /* TODO: ARMv8.4-SecEL2 */
+        /* Note that TGE does not apply at EL2.  */
+        if ((env->cp15.hcr_el2 & HCR_E2H) && arm_el_is_aa64(env, 2)) {
+            return ARMMMUIdx_EL20_2;
+        }
         return ARMMMUIdx_E2;
-    case 3:
-        return ARMMMUIdx_SE3;
     default:
         g_assert_not_reached();
     }
