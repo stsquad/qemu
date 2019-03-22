@@ -60,6 +60,8 @@ int do_cmpxchg_s32(int32_t *ptr, int32_t swapval)
 {
     int i;
 
+    printf("%s: with swapval = %x\n", __func__, swapval);
+
     for (i = 0; i < VALUES; i++) {
         int32_t *ptr = &sdata_32[i];
         int32_t check = int32_val(i);
@@ -87,6 +89,8 @@ int do_cmpxchg_s32(int32_t *ptr, int32_t swapval)
 int do_cmpxchg_u32(uint32_t *ptr, uint32_t swapval)
 {
     int i;
+
+    printf("%s: with swapval = %x\n", __func__, swapval);
 
     for (i = 0; i < VALUES; i++) {
         uint32_t *ptr = &udata_32[i];
@@ -116,6 +120,8 @@ int do_cmpxchg_s64(int64_t *ptr, int64_t swapval)
 {
     int i;
 
+    printf("%s: with swapval = %lx\n", __func__, swapval);
+
     for (i = 0; i < VALUES; i++) {
         int64_t *ptr = &sdata_64[i];
         int64_t check = int64_val(i);
@@ -144,6 +150,8 @@ int do_cmpxchg_u64(uint64_t *ptr, uint64_t swapval)
 {
     int i;
 
+    printf("%s: with swapval = %lx\n", __func__, swapval);
+
     for (i = 0; i < VALUES; i++) {
         uint64_t *ptr = &udata_64[i];
         uint64_t check = uint64_val(i);
@@ -168,6 +176,149 @@ int do_cmpxchg_u64(uint64_t *ptr, uint64_t swapval)
     return 0;
 }
 
+int do_cmpxchg_u128(uint64_t *ptr, uint64_t swapin)
+{
+    int i;
+    __uint128_t swapval = ((__uint128_t) swapin << 64) | swapin;
+
+    printf("%s: with swapval = %lx:%lx\n", __func__, swapin, swapin);
+
+    for (i = 0; i < VALUES; i = i + 2) {
+        __uint128_t *ptr = (__uint128_t *) &udata_64[i];
+        __uint128_t check = ((__uint128_t)uint64_val(i) << 64) | uint64_val(i+1);
+        __uint128_t expected = check;
+
+        __atomic_compare_exchange(ptr, &expected, &swapval, true,
+                                  __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);
+        if (expected != check) {
+            printf("%s: expected != check and current = %" PRIx64 ":%" PRIx64"\n",
+                   __func__, udata_64[i], udata_64[i+1]);
+            return -1;
+        }
+    }
+
+    for (i = 0; i < VALUES; i++) {
+        if (udata_64[i] != swapin) {
+            printf("%s: data[i]=%" PRIx64 " != %" PRIx64 "\n", __func__, udata_64[i], swapin);
+            return -1;
+        }
+        if (udata_64[i+1] != swapin) {
+            printf("%s: data[i]=%" PRIx64 " != %" PRIx64 "\n", __func__, udata_64[i+1], swapin);
+            return -1;
+        }
+    }
+
+    return 0;
+}
+
+
+int do_swap_u32(uint32_t *ptr, uint32_t swapval)
+{
+    int i;
+
+    printf("%s: with swapval = %x\n", __func__, swapval);
+
+    for (i = 0; i < VALUES; i++) {
+        uint32_t *ptr = &udata_32[i];
+        uint32_t expected = uint32_val(i);
+        uint32_t ret;
+
+        __atomic_exchange(ptr, &swapval, &ret, __ATOMIC_SEQ_CST);
+
+        if (ret != expected) {
+            printf("%s: %" PRIu32 " != %" PRIu32 " and current = %" PRIu32 "\n",
+                   __func__, ret, expected, udata_32[i]);
+            return -1;
+        }
+    }
+
+    for (i = 0; i < VALUES; i++) {
+        if (udata_32[i] != swapval) {
+            printf("%s: data[i]=%" PRIx32 " != %" PRIx32 "\n", __func__, udata_32[i], swapval);
+            return -1;
+        }
+    }
+
+    return 0;
+}
+
+int do_swap_u64(uint64_t *ptr, uint64_t swapval)
+{
+    int i;
+
+    printf("%s: with swapval = %lx\n", __func__, swapval);
+
+    for (i = 0; i < VALUES; i++) {
+        uint64_t *ptr = &udata_64[i];
+        uint64_t expected = uint64_val(i);
+        uint64_t ret;
+
+        __atomic_exchange(ptr, &swapval, &ret, __ATOMIC_SEQ_CST);
+
+        if (ret != expected) {
+            printf("%s: %" PRIu64 " != %" PRIu64 " and current = %" PRIu64 "\n",
+                   __func__, ret, expected, udata_64[i]);
+            return -1;
+        }
+    }
+
+    for (i = 0; i < VALUES; i++) {
+        if (udata_64[i] != swapval) {
+            printf("%s: data[i]=%" PRIx64 " != %" PRIx64 "\n", __func__, udata_64[i], swapval);
+            return -1;
+        }
+    }
+
+    return 0;
+}
+
+int do_sub_u32(uint32_t *ptr, uint32_t subval)
+{
+    int i;
+
+    printf("%s: with subval = %x\n", __func__, subval);
+
+    for (i = 0; i < VALUES; i++) {
+        uint32_t *ptr = &udata_32[i];
+        uint32_t expected = uint32_val(i) - subval;
+        uint32_t ret;
+
+        ret = __atomic_sub_fetch(ptr, subval, __ATOMIC_SEQ_CST);
+
+        if (ret != expected) {
+            printf("%s: %" PRIu32 " != %" PRIu32 " and current = %" PRIu32 "\n",
+                   __func__, ret, expected, udata_32[i]);
+            return -1;
+        }
+    }
+
+    return 0;
+}
+
+int do_sub_u64(uint64_t *ptr, uint64_t subval)
+{
+    int i;
+
+    printf("%s: with subval = %lx\n", __func__, subval);
+
+    for (i = 0; i < VALUES; i++) {
+        uint64_t *ptr = &udata_64[i];
+        uint64_t expected = uint64_val(i) - subval;
+        uint64_t ret;
+
+        ret = __atomic_sub_fetch(ptr, subval, __ATOMIC_SEQ_CST);
+
+        if (ret != expected) {
+            printf("%s: %" PRIu64 " != %" PRIu64 " and current = %" PRIu64 "\n",
+                   __func__, ret, expected, udata_64[i]);
+            return -1;
+        }
+    }
+
+    return 0;
+}
+
+
 int main(int argc, char **argv)
 {
     int i, r = 0;
@@ -177,14 +328,41 @@ int main(int argc, char **argv)
 
     for (i = 0; i < 64 && !r; i++) {
         seed = seed ^ (1 << i);
-        swap = (1 << (64 - i)) ^ swap;
-        printf("iteration: %d/%#lx/%#lx\n", i, seed,swap);
+        swap = (1ULL << (64 - i));
+        printf("iteration: %d, data_seed = %#lx\n", i, seed);
+
+        reset_data(seed);
+        r  = do_cmpxchg_u32(udata_32, swap)
+            || do_cmpxchg_s32(sdata_32, swap)
+            || do_cmpxchg_u64(udata_64, swap)
+            || do_cmpxchg_s64(sdata_64, swap);
+
+        if (r) {
+            break;
+        }
         reset_data(seed);
 
-        r  = do_cmpxchg_u32(udata_32, swap);
-        r |= do_cmpxchg_s32(sdata_32, swap);
-        r |= do_cmpxchg_u64(udata_64, swap);
-        r |= do_cmpxchg_s64(sdata_64, swap);
+        r  = do_cmpxchg_u128(udata_64, swap);
+        if (r) {
+            break;
+        }
+
+        reset_data(seed);
+        r = do_swap_u32(udata_32, swap)
+            || do_swap_u64(udata_64, swap);
+
+        if (r) {
+            break;
+        }
+
+        reset_data(seed);
+        r = do_sub_u32(udata_32, swap)
+            || do_sub_u64(udata_64, swap);
+
+        if (r) {
+            break;
+        }
+
     }
 
     printf("Finished %d, r = %d\n", i, r);
