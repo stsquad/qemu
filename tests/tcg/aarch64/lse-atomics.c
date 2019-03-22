@@ -176,34 +176,41 @@ int do_cmpxchg_u64(uint64_t *ptr, uint64_t swapval)
     return 0;
 }
 
-int do_cmpxchg_u128(uint64_t *ptr, uint64_t swapin)
+int do_cmpxchg_u128(uint64_t *ptr, uint64_t swapval)
 {
     int i;
-    __uint128_t swapval = ((__uint128_t) swapin << 64) | swapin;
 
-    printf("%s: with swapval = %lx:%lx\n", __func__, swapin, swapin);
+    printf("%s: with swapval = %lx\n", __func__, swapval);
 
     for (i = 0; i < VALUES; i = i + 2) {
-        __uint128_t *ptr = (__uint128_t *) &udata_64[i];
-        __uint128_t check = ((__uint128_t)uint64_val(i) << 64) | uint64_val(i+1);
-        __uint128_t expected = check;
+        uint64_t cmp_a = uint64_val(i);
+        uint64_t cmp_b = uint64_val(i+1);
+        register unsigned long old_a asm ("x0") = cmp_a;
+        register unsigned long old_b asm ("x1") = cmp_b;
+        register unsigned long swp_a asm ("x2") = swapval;
+        register unsigned long swp_b asm ("x3") = swapval;
+        void *ptr = &udata_64[i];
 
-        __atomic_compare_exchange(ptr, &expected, &swapval, true,
-                                  __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);
-        if (expected != check) {
-            printf("%s: expected != check and current = %" PRIx64 ":%" PRIx64"\n",
-                   __func__, udata_64[i], udata_64[i+1]);
+        asm volatile("	casp\t%[s1], %[s2], %[t1], %[t2], %[n]\n"       \
+                     : [s1] "+&r" (old_a), [s2] "+&r" (old_b),          \
+                       [n] "+Q" (*(unsigned long *)ptr)                 \
+                     : [t1] "r" (swp_a), [t2] "r" (swp_b)               \
+                     : "memory" );
+
+        if (old_a != cmp_a || old_b != cmp_b) {
+            printf("%s: a %" PRIx64 " != %" PRIx64 " || b %" PRIx64 " != %" PRIx64 " (current = %" PRIx64 ":%" PRIx64")\n",
+                   __func__, old_a, cmp_a, old_b, cmp_b, udata_64[i], udata_64[i+1]);
             return -1;
         }
     }
 
     for (i = 0; i < VALUES; i++) {
-        if (udata_64[i] != swapin) {
-            printf("%s: data[i]=%" PRIx64 " != %" PRIx64 "\n", __func__, udata_64[i], swapin);
+        if (udata_64[i] != swapval) {
+            printf("%s: data[i]=%" PRIx64 " != %" PRIx64 "\n", __func__, udata_64[i], swapval);
             return -1;
         }
-        if (udata_64[i+1] != swapin) {
-            printf("%s: data[i]=%" PRIx64 " != %" PRIx64 "\n", __func__, udata_64[i+1], swapin);
+        if (udata_64[i+1] != swapval) {
+            printf("%s: data[i]=%" PRIx64 " != %" PRIx64 "\n", __func__, udata_64[i+1], swapval);
             return -1;
         }
     }
