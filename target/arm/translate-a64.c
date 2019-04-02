@@ -358,8 +358,10 @@ static void a64_test_cc(DisasCompare64 *c64, int cc)
 
     arm_test_cc(&c32, cc);
 
-    /* Sign-extend the 32-bit value so that the GE/LT comparisons work
-       * properly.  The NE/EQ comparisons are also fine with this choice.  */
+    /*
+     * Sign-extend the 32-bit value so that the GE/LT comparisons work
+     * properly.  The NE/EQ comparisons are also fine with this choice.
+     */
     c64->cond = c32.cond;
     c64->value = tcg_temp_new_i64();
     tcg_gen_ext_i32_i64(c64->value, c32.value);
@@ -423,7 +425,8 @@ static void gen_exception_bkpt_insn(DisasContext *s, int offset,
 
 static void gen_step_complete_exception(DisasContext *s)
 {
-    /* We just completed step of an insn. Move from Active-not-pending
+    /*
+     * We just completed step of an insn. Move from Active-not-pending
      * to Active-pending, and then also take the swstep exception.
      * This corresponds to making the (IMPDEF) choice to prioritize
      * swstep exceptions over asynchronous exceptions taken to an exception
@@ -440,7 +443,8 @@ static void gen_step_complete_exception(DisasContext *s)
 
 static inline bool use_goto_tb(DisasContext *s, int n, uint64_t dest)
 {
-    /* No direct tb linking with singlestep (either QEMU's or the ARM
+    /*
+     * No direct tb linking with singlestep (either QEMU's or the ARM
      * debug architecture kind) or deterministic io
      */
     if (s->base.singlestep_enabled || s->ss_active ||
@@ -548,7 +552,8 @@ TCGv_i64 cpu_reg_sp(DisasContext *s, int reg)
     return cpu_X[reg];
 }
 
-/* read a cpu register in 32bit/64bit mode. Returns a TCGv_i64
+/*
+ * Read a cpu register in 32bit/64bit mode. Returns a TCGv_i64
  * representing the register contents. This TCGv is an auto-freed
  * temporary so it need not be explicitly freed, and may be modified.
  */
@@ -578,10 +583,10 @@ TCGv_i64 read_cpu_reg_sp(DisasContext *s, int reg, int sf)
     return v;
 }
 
-/* Return the offset into CPUARMState of a slice (from
- * the least significant end) of FP register Qn (ie
- * Dn, Sn, Hn or Bn).
- * (Note that this is not the same mapping as for A32; see cpu.h)
+/*
+ * Return the offset into CPUARMState of a slice (from the least
+ * significant end) of FP register Qn (ie Dn, Sn, Hn or Bn). (Note
+ * that this is not the same mapping as for A32; see cpu.h)
  */
 static inline int fp_reg_offset(DisasContext *s, int regno, TCGMemOp size)
 {
@@ -594,11 +599,12 @@ static inline int fp_reg_hi_offset(DisasContext *s, int regno)
     return vec_reg_offset(s, regno, 1, MO_64);
 }
 
-/* Convenience accessors for reading and writing single and double
- * FP registers. Writing clears the upper parts of the associated
- * 128 bit vector register, as required by the architecture.
- * Note that unlike the GP register accessors, the values returned
- * by the read functions must be manually freed.
+/*
+ * Convenience accessors for reading and writing single and double FP
+ * registers. Writing clears the upper parts of the associated 128 bit
+ * vector register, as required by the architecture. Note that unlike
+ * the GP register accessors, the values returned by the read
+ * functions must be manually freed.
  */
 static TCGv_i64 read_fp_dreg(DisasContext *s, int reg)
 {
@@ -624,8 +630,9 @@ static TCGv_i32 read_fp_hreg(DisasContext *s, int reg)
     return v;
 }
 
-/* Clear the bits above an N-bit vector, for N = (is_q ? 128 : 64).
- * If SVE is not enabled, then there are only 128 bits in the vector.
+/*
+ * Clear the bits above an N-bit vector, for N = (is_q ? 128 : 64). If
+ * SVE is not enabled, then there are only 128 bits in the vector.
  */
 static void clear_vec_high(DisasContext *s, bool is_q, int rd)
 {
@@ -664,7 +671,8 @@ TCGv_ptr get_fpstatus_ptr(bool is_f16)
     TCGv_ptr statusptr = tcg_temp_new_ptr();
     int offset;
 
-    /* In A64 all instructions (both FP and Neon) use the FPCR; there
+    /*
+     * In A64 all instructions (both FP and Neon) use the FPCR; there
      * is no equivalent of the A32 Neon "standard FPSCR value".
      * However half-precision operations operate under a different
      * FZ16 flag and use vfp.fp_status_f16 instead of vfp.fp_status.
@@ -686,8 +694,9 @@ static void gen_gvec_fn2(DisasContext *s, bool is_q, int rd, int rn,
             is_q ? 16 : 8, vec_full_reg_size(s));
 }
 
-/* Expand a 2-operand + immediate AdvSIMD vector operation using
- * an expander function.
+/*
+ * Expand a 2-operand + immediate AdvSIMD vector operation using an
+ * expander function.
  */
 static void gen_gvec_fn2i(DisasContext *s, bool is_q, int rd, int rn,
                           int64_t imm, GVecGen2iFn *gvec_fn, int vece)
@@ -1121,17 +1130,17 @@ static void read_vec_element(DisasContext *s, TCGv_i64 tcg_dest, int srcidx,
     case MO_32:
         tcg_gen_ld32u_i64(tcg_dest, cpu_env, vect_off);
         break;
-    case MO_8|MO_SIGN:
+    case MO_8 | MO_SIGN:
         tcg_gen_ld8s_i64(tcg_dest, cpu_env, vect_off);
         break;
-    case MO_16|MO_SIGN:
+    case MO_16 | MO_SIGN:
         tcg_gen_ld16s_i64(tcg_dest, cpu_env, vect_off);
         break;
-    case MO_32|MO_SIGN:
+    case MO_32 | MO_SIGN:
         tcg_gen_ld32s_i64(tcg_dest, cpu_env, vect_off);
         break;
     case MO_64:
-    case MO_64|MO_SIGN:
+    case MO_64 | MO_SIGN:
         tcg_gen_ld_i64(tcg_dest, cpu_env, vect_off);
         break;
     default:
@@ -1150,14 +1159,14 @@ static void read_vec_element_i32(DisasContext *s, TCGv_i32 tcg_dest, int srcidx,
     case MO_16:
         tcg_gen_ld16u_i32(tcg_dest, cpu_env, vect_off);
         break;
-    case MO_8|MO_SIGN:
+    case MO_8 | MO_SIGN:
         tcg_gen_ld8s_i32(tcg_dest, cpu_env, vect_off);
         break;
-    case MO_16|MO_SIGN:
+    case MO_16 | MO_SIGN:
         tcg_gen_ld16s_i32(tcg_dest, cpu_env, vect_off);
         break;
     case MO_32:
-    case MO_32|MO_SIGN:
+    case MO_32 | MO_SIGN:
         tcg_gen_ld_i32(tcg_dest, cpu_env, vect_off);
         break;
     default:
@@ -1170,6 +1179,7 @@ static void write_vec_element(DisasContext *s, TCGv_i64 tcg_src, int destidx,
                               int element, TCGMemOp memop)
 {
     int vect_off = vec_reg_offset(s, destidx, element, memop & MO_SIZE);
+
     switch (memop) {
     case MO_8:
         tcg_gen_st8_i64(tcg_src, cpu_env, vect_off);
