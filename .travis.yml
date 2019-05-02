@@ -163,6 +163,13 @@ matrix:
         - ${SRC_DIR}/scripts/travis/coverage-summary.sh
 
 
+    - env:
+        - CONFIG="--enable-gprof --enable-gcov --disable-pie --disable-system"
+        - TEST_CMD="make -j3 check-tcg V=1"
+      after_success:
+        - ${SRC_DIR}/scripts/travis/coverage-summary.sh
+
+
     # We manually include builds which we disable "make check" for
     - env:
         - CONFIG="--without-default-devices --disable-user"
