@@ -32,6 +32,7 @@
 #include "hw/arm/arm.h"
 #include "qemu/cutils.h"
 #endif
+#include "chardev/char.h"
 
 #define TARGET_SYS_OPEN        0x01
 #define TARGET_SYS_CLOSE       0x02
@@ -310,7 +311,15 @@ target_ulong do_arm_semihosting(CPUARMState *env)
           if (use_gdb_syscalls()) {
                 return arm_gdb_syscall(cpu, arm_semi_cb, "write,2,%x,1", args);
           } else {
-                return write(STDERR_FILENO, &c, 1);
+#ifdef CONFIG_SOFTMMU
+              Chardev *chardev = semihosting_get_chardev();
+              if (chardev) {
+                  return qemu_chr_write_all(chardev, (uint8_t *) &c, 1);
+              } else
+#endif
+              {
+                  return write(STDERR_FILENO, &c, 1);
+              }
           }
         }
     case TARGET_SYS_WRITE0:
@@ -322,7 +331,15 @@ target_ulong do_arm_semihosting(CPUARMState *env)
             return arm_gdb_syscall(cpu, arm_semi_cb, "write,2,%x,%x",
                                    args, len);
         } else {
-            ret = write(STDERR_FILENO, s, len);
+#ifdef CONFIG_SOFTMMU
+            Chardev *chardev = semihosting_get_chardev();
+            if (chardev) {
+                ret = qemu_chr_write_all(chardev, (uint8_t *) s, len);
+            } else
+#endif
+            {
+                ret = write(STDERR_FILENO, s, len);
+            }
         }
         unlock_user(s, args, 0);
         return ret;

@@ -512,6 +512,9 @@ static QemuOptsList qemu_semihosting_config_opts = {
             .name = "target",
             .type = QEMU_OPT_STRING,
         }, {
+            .name = "chardev",
+            .type = QEMU_OPT_STRING,
+        }, {
             .name = "arg",
             .type = QEMU_OPT_STRING,
         },
@@ -1356,6 +1359,7 @@ static void configure_msg(QemuOpts *opts)
 typedef struct SemihostingConfig {
     bool enabled;
     SemihostingTarget target;
+    Chardev *chardev;
     const char **argv;
     int argc;
     const char *cmdline; /* concatenated argv */
@@ -1384,6 +1388,11 @@ const char *semihosting_get_arg(int i)
 int semihosting_get_argc(void)
 {
     return semihosting.argc;
+}
+
+Chardev *semihosting_get_chardev(void)
+{
+    return semihosting.chardev;
 }
 
 const char *semihosting_get_cmdline(void)
@@ -3027,6 +3036,7 @@ int main(int argc, char **argv, char **envp)
     int display_remote = 0;
     const char *log_mask = NULL;
     const char *log_file = NULL;
+    const char *semihost_chardev = NULL;
     char *trace_file = NULL;
     ram_addr_t maxram_size;
     uint64_t ram_slots = 0;
@@ -3744,6 +3754,8 @@ int main(int argc, char **argv, char **envp)
                     semihosting.enabled = qemu_opt_get_bool(opts, "enable",
                                                             true);
                     const char *target = qemu_opt_get(opts, "target");
+                    /* setup of chardev is deferred until they are initialised */
+                    semihost_chardev = qemu_opt_get(opts, "chardev");
                     if (target != NULL) {
                         if (strcmp("native", target) == 0) {
                             semihosting.target = SEMIHOSTING_TARGET_NATIVE;
@@ -4276,6 +4288,17 @@ int main(int argc, char **argv, char **envp)
 
     qemu_opts_foreach(qemu_find_opts("chardev"),
                       chardev_init_func, NULL, &error_fatal);
+
+    /* We had to defer this until chardevs were created */
+    if (semihost_chardev) {
+        Chardev *chr = qemu_chr_find(semihost_chardev);
+        if (chr == NULL) {
+            error_report("semihosting chardev '%s' not found",
+                         semihost_chardev);
+            exit(1);
+        }
+        semihosting.chardev = chr;
+    }
 
 #ifdef CONFIG_VIRTFS
     qemu_opts_foreach(qemu_find_opts("fsdev"),
