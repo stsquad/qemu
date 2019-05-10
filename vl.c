@@ -512,6 +512,9 @@ static QemuOptsList qemu_semihosting_config_opts = {
             .name = "target",
             .type = QEMU_OPT_STRING,
         }, {
+            .name = "chardev",
+            .type = QEMU_OPT_STRING,
+        }, {
             .name = "arg",
             .type = QEMU_OPT_STRING,
         },
@@ -1356,6 +1359,7 @@ static void configure_msg(QemuOpts *opts)
 typedef struct SemihostingConfig {
     bool enabled;
     SemihostingTarget target;
+    Chardev *chardev;
     const char **argv;
     int argc;
     const char *cmdline; /* concatenated argv */
@@ -1384,6 +1388,11 @@ const char *semihosting_get_arg(int i)
 int semihosting_get_argc(void)
 {
     return semihosting.argc;
+}
+
+Chardev *semihosting_get_chardev(void)
+{
+    return semihosting.chardev;
 }
 
 const char *semihosting_get_cmdline(void)
@@ -2015,7 +2024,7 @@ typedef struct VGAInterfaceInfo {
     const char *class_names[2];
 } VGAInterfaceInfo;
 
-static VGAInterfaceInfo vga_interfaces[VGA_TYPE_MAX] = {
+static const VGAInterfaceInfo vga_interfaces[VGA_TYPE_MAX] = {
     [VGA_NONE] = {
         .opt_name = "none",
     },
@@ -2061,7 +2070,7 @@ static VGAInterfaceInfo vga_interfaces[VGA_TYPE_MAX] = {
 
 static bool vga_interface_available(VGAInterfaceType t)
 {
-    VGAInterfaceInfo *ti = &vga_interfaces[t];
+    const VGAInterfaceInfo *ti = &vga_interfaces[t];
 
     assert(t < VGA_TYPE_MAX);
     return !ti->class_names[0] ||
@@ -2069,14 +2078,42 @@ static bool vga_interface_available(VGAInterfaceType t)
            object_class_by_name(ti->class_names[1]);
 }
 
-static void select_vgahw(const char *p)
+static const char *
+get_default_vga_model(const MachineClass *machine_class)
+{
+    if (machine_class->default_display) {
+        return machine_class->default_display;
+    } else if (vga_interface_available(VGA_CIRRUS)) {
+        return "cirrus";
+    } else if (vga_interface_available(VGA_STD)) {
+        return "std";
+    }
+
+    return NULL;
+}
+
+static void select_vgahw(const MachineClass *machine_class, const char *p)
 {
     const char *opts;
     int t;
 
+    if (g_str_equal(p, "help")) {
+        const char *def = get_default_vga_model(machine_class);
+
+        for (t = 0; t < VGA_TYPE_MAX; t++) {
+            const VGAInterfaceInfo *ti = &vga_interfaces[t];
+
+            if (vga_interface_available(t) && ti->opt_name) {
+                printf("%-20s %s%s\n", ti->opt_name, ti->name ?: "",
+                       g_str_equal(ti->opt_name, def) ? " (default)" : "");
+            }
+        }
+        exit(0);
+    }
+
     assert(vga_interface_type == VGA_NONE);
     for (t = 0; t < VGA_TYPE_MAX; t++) {
-        VGAInterfaceInfo *ti = &vga_interfaces[t];
+        const VGAInterfaceInfo *ti = &vga_interfaces[t];
         if (ti->opt_name && strstart(p, ti->opt_name, &opts)) {
             if (!vga_interface_available(t)) {
                 error_report("%s not available", ti->name);
@@ -2999,6 +3036,7 @@ int main(int argc, char **argv, char **envp)
     int display_remote = 0;
     const char *log_mask = NULL;
     const char *log_file = NULL;
+    const char *semihost_chardev = NULL;
     char *trace_file = NULL;
     ram_addr_t maxram_size;
     uint64_t ram_slots = 0;
@@ -3716,6 +3754,8 @@ int main(int argc, char **argv, char **envp)
                     semihosting.enabled = qemu_opt_get_bool(opts, "enable",
                                                             true);
                     const char *target = qemu_opt_get(opts, "target");
+                    /* setup of chardev is deferred until they are initialised */
+                    semihost_chardev = qemu_opt_get(opts, "chardev");
                     if (target != NULL) {
                         if (strcmp("native", target) == 0) {
                             semihosting.target = SEMIHOSTING_TARGET_NATIVE;
@@ -4249,6 +4289,17 @@ int main(int argc, char **argv, char **envp)
     qemu_opts_foreach(qemu_find_opts("chardev"),
                       chardev_init_func, NULL, &error_fatal);
 
+    /* We had to defer this until chardevs were created */
+    if (semihost_chardev) {
+        Chardev *chr = qemu_chr_find(semihost_chardev);
+        if (chr == NULL) {
+            error_report("semihosting chardev '%s' not found",
+                         semihost_chardev);
+            exit(1);
+        }
+        semihosting.chardev = chr;
+    }
+
 #ifdef CONFIG_VIRTFS
     qemu_opts_foreach(qemu_find_opts("fsdev"),
                       fsdev_init_func, NULL, &error_fatal);
@@ -4424,16 +4475,10 @@ int main(int argc, char **argv, char **envp)
 
     /* If no default VGA is requested, the default is "none".  */
     if (default_vga) {
-        if (machine_class->default_display) {
-            vga_model = machine_class->default_display;
-        } else if (vga_interface_available(VGA_CIRRUS)) {
-            vga_model = "cirrus";
-        } else if (vga_interface_available(VGA_STD)) {
-            vga_model = "std";
-        }
+        vga_model = get_default_vga_model(machine_class);
     }
     if (vga_model) {
-        select_vgahw(vga_model);
+        select_vgahw(machine_class, vga_model);
     }
 
     if (watchdog) {
