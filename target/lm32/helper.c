@@ -22,7 +22,7 @@
 #include "exec/exec-all.h"
 #include "qemu/host-utils.h"
 #include "sysemu/sysemu.h"
-#include "exec/semihost.h"
+#include "hw/semihosting/semihost.h"
 #include "exec/log.h"
 
 int lm32_cpu_handle_mmu_fault(CPUState *cs, vaddr address, int size, int rw,
