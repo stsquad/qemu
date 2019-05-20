@@ -34,6 +34,7 @@ typedef struct {
     uint64_t start_addr;
     uint64_t exec_count;
     int      trans_count;
+    unsigned long insns;
 } ExecCount;
 
 static gint cmp_exec_count(gconstpointer a, gconstpointer b)
@@ -57,10 +58,10 @@ static void plugin_exit(qemu_plugin_id_t id, void *p)
 
     for (i = 0; i < limit && it->next; i++, it = it->next) {
         ExecCount *rec = (ExecCount *) it->data;
-        g_string_append_printf(report, "  pc: %#" PRIx64 " (%d block%s, %" PRId64" total hits)\n",
+        g_string_append_printf(report, "  pc: %#" PRIx64 " (%d block%s, %ld insns, %" PRId64" total hits)\n",
                                rec->start_addr,
                                rec->trans_count, rec->trans_count < 2 ? "" : "s",
-                               rec->exec_count);
+                               rec->insns, rec->exec_count);
     }
 
     g_mutex_unlock(&lock);
@@ -78,15 +79,13 @@ static void plugin_init(void)
 static void vcpu_tb_exec(unsigned int cpu_index, void *udata)
 {
     ExecCount *cnt;
-    uint64_t pc = (uint64_t) udata;
+    uint64_t cheap_hash = (uint64_t) udata;
 
     g_mutex_lock(&lock);
-    cnt = (ExecCount *) g_hash_table_lookup(hotblocks, (gconstpointer) pc);
-    if (cnt) {
-        cnt->exec_count++;
-    } else {
-        dprintf(stdout_fd, "couldn't find record for %lx\n", pc);
-    }
+    cnt = (ExecCount *) g_hash_table_lookup(hotblocks, (gconstpointer) cheap_hash);
+    /* should always succeed */
+    g_assert(cnt);
+    cnt->exec_count++;
     g_mutex_unlock(&lock);
 }
 
@@ -100,16 +99,19 @@ static void vcpu_tb_trans(qemu_plugin_id_t id, unsigned int cpu_index,
 {
     ExecCount *cnt;
     uint64_t pc = qemu_plugin_tb_vaddr(tb);
+    unsigned long insns = qemu_plugin_tb_n_insns(tb);
+    uint64_t cheap_hash = pc ^ insns;
 
     g_mutex_lock(&lock);
-    cnt = (ExecCount *) g_hash_table_lookup(hotblocks, (gconstpointer) pc);
+    cnt = (ExecCount *) g_hash_table_lookup(hotblocks, (gconstpointer) cheap_hash);
     if (cnt) {
         cnt->trans_count++;
     } else {
         cnt = g_new0(ExecCount, 1);
         cnt->start_addr = pc;
         cnt->trans_count = 1;
-        g_hash_table_insert(hotblocks, (gpointer) pc, (gpointer) cnt);
+        cnt->insns = insns;
+        g_hash_table_insert(hotblocks, (gpointer) cheap_hash, (gpointer) cnt);
     }
 
     g_mutex_unlock(&lock);
@@ -120,7 +122,7 @@ static void vcpu_tb_trans(qemu_plugin_id_t id, unsigned int cpu_index,
     } else {
         qemu_plugin_register_vcpu_tb_exec_cb(tb, vcpu_tb_exec,
                                              QEMU_PLUGIN_CB_NO_REGS,
-                                             (void *)pc);
+                                             (void *)cheap_hash);
     }
 }
 
