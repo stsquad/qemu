@@ -7,7 +7,7 @@
  * See the COPYING file in the top-level directory.
  *
  * Unlike the i386 version we instead use Xen's PVHVM booting header
- * which should drop us automatically in 64 bit mode ready to go. I've
+ * which should drop us automatically into 32 bit mode ready to go. I've
  * nabbed bits of the Linux kernel setup to achieve this.
  *
  * SPDX-License-Identifier: GPL-3.0-or-later
@@ -47,12 +47,9 @@
 #define __ASM_SEL_RAW(a,b)      __ASM_FORM_RAW(b)
 #define _ASM_PTR	__ASM_SEL(.long, .quad)
 
-        .code32
-        .section .text
-
 	ELFNOTE(Xen, XEN_ELFNOTE_VIRT_BASE,      _ASM_PTR 0x100000)
 	ELFNOTE(Xen, XEN_ELFNOTE_ENTRY,          _ASM_PTR _start)
-	ELFNOTE(Xen, XEN_ELFNOTE_PHYS32_ENTRY,   _ASM_PTR 0)    /* entry == virtbase */
+	ELFNOTE(Xen, XEN_ELFNOTE_PHYS32_ENTRY,   _ASM_PTR _start)    /* entry == virtbase */
 	ELFNOTE(Xen, XEN_ELFNOTE_PADDR_OFFSET,   _ASM_PTR 0)
 
        /*
@@ -77,6 +74,8 @@
 	* All other processor registers and flag bits are unspecified. The OS is in
 	* charge of setting up it's own stack, GDT and IDT.
 	*/
+        .code32
+        .section .text
 
 .global _start
 _start:
