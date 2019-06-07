@@ -45,6 +45,9 @@ class BaseVM(object):
         "no_proxy",
     ]
 
+    # path for seaching for qemu
+    qemu_build_dir = None
+
     # The script to run in the guest that builds QEMU
     BUILD_SCRIPT = ""
     # The guest name, to be overridden by subclasses
@@ -153,6 +156,19 @@ class BaseVM(object):
                             "-device",
                             "virtio-blk,drive=%s,serial=%s,bootindex=1" % (name, name)]
 
+    def set_qemu_build_dir(self, build_dir):
+        self.qemu_build_dir = build_dir
+
+    def _find_best_qemu(self):
+        "Return a QEMU we should use. Use the locally built one if we can."
+        bin_name = "qemu-system-" + self.arch
+        if self.qemu_build_dir:
+            bin_path = "%s/%s-softmmu/%s" % (self.qemu_build_dir,
+                                             self.arch, bin_name)
+            if os.path.exists(bin_path):
+                return bin_path
+        return bin_name
+
     def boot(self, img, extra_args=[]):
         args = self._args + [
             "-device", "VGA",
@@ -160,7 +176,7 @@ class BaseVM(object):
             "-device", "virtio-blk,drive=drive0,bootindex=0"]
         args += self._data_args + extra_args
         logging.debug("QEMU args: %s", " ".join(args))
-        qemu_bin = os.environ.get("QEMU", "qemu-system-" + self.arch)
+        qemu_bin = os.environ.get("QEMU", self._find_best_qemu())
         guest = QEMUMachine(binary=qemu_bin, args=args)
         try:
             guest.launch()
@@ -241,6 +257,8 @@ def parse_args(vmcls):
                       help="build QEMU from source in guest")
     parser.add_option("--build-target",
                       help="QEMU build target", default="check")
+    parser.add_option("--build-dir", default="flibble",
+                      help="QEMU build directory", action="store")
     parser.add_option("--interactive", "-I", action="store_true",
                       help="Interactively run command")
     parser.add_option("--snapshot", "-s", action="store_true",
@@ -262,6 +280,7 @@ def main(vmcls):
                 sys.stderr.writelines(["Image file exists: %s\n" % args.image,
                                       "Use --force option to overwrite\n"])
                 return 1
+            vm.set_qemu_build_dir(args.build_dir)
             return vm.build_image(args.image)
         if args.build_qemu:
             vm.add_source_dir(args.build_qemu)
