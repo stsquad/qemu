@@ -48,6 +48,7 @@ $(IMAGES_DIR)/%.img:	$(SRC_PATH)/tests/vm/% \
 	$(call quiet-command, \
 		$(PYTHON) $< \
 		$(if $(V)$(DEBUG), --debug) \
+		--build-dir $(BUILD_DIR) \
 		--image "$@" \
 		--force \
 		--build-image $@, \
