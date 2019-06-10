@@ -120,9 +120,11 @@ struct qemu_plugin_dyn_cb_arr {
 };
 
 struct qemu_plugin_insn {
+    /* GByteArray */
     void *data;
     size_t size;
     size_t capacity;
+    /* GByteArray */
     uint64_t vaddr;
     void *haddr;
     struct qemu_plugin_dyn_cb_arr cbs[PLUGIN_N_CB_TYPES][PLUGIN_N_CB_SUBTYPES];
@@ -131,6 +133,7 @@ struct qemu_plugin_insn {
 };
 
 struct qemu_plugin_tb {
+    /* GArray */
     struct qemu_plugin_insn *insns;
     size_t n;
     size_t capacity;
