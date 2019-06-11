@@ -821,8 +821,9 @@ static void plugin_gen_insn_udata(const struct qemu_plugin_tb *ptb,
                                   TCGOp *begin_op, int insn_idx)
 {
     const struct qemu_plugin_dyn_cb_arr *cbs;
+    struct qemu_plugin_insn *insn = g_ptr_array_index(ptb->insns, insn_idx);
 
-    cbs = &ptb->insns[insn_idx].cbs[PLUGIN_CB_INSN][PLUGIN_CB_REGULAR];
+    cbs = &insn->cbs[PLUGIN_CB_INSN][PLUGIN_CB_REGULAR];
     inject_udata_cb(cbs, begin_op);
 }
 
@@ -830,8 +831,9 @@ static void plugin_gen_insn_inline(const struct qemu_plugin_tb *ptb,
                                    TCGOp *begin_op, int insn_idx)
 {
     const struct qemu_plugin_dyn_cb_arr *cbs;
+    struct qemu_plugin_insn *insn = g_ptr_array_index(ptb->insns, insn_idx);
 
-    cbs = &ptb->insns[insn_idx].cbs[PLUGIN_CB_INSN][PLUGIN_CB_INLINE];
+    cbs = &insn->cbs[PLUGIN_CB_INSN][PLUGIN_CB_INLINE];
     inject_inline_cb(cbs, begin_op, op_ok);
 }
 
@@ -839,8 +841,9 @@ static void plugin_gen_mem_regular(const struct qemu_plugin_tb *ptb,
                                    TCGOp *begin_op, int insn_idx)
 {
     const struct qemu_plugin_dyn_cb_arr *cbs;
+    struct qemu_plugin_insn *insn = g_ptr_array_index(ptb->insns, insn_idx);
 
-    cbs = &ptb->insns[insn_idx].cbs[PLUGIN_CB_MEM][PLUGIN_CB_REGULAR];
+    cbs = &insn->cbs[PLUGIN_CB_MEM][PLUGIN_CB_REGULAR];
     inject_mem_cb(cbs, begin_op);
 }
 
@@ -848,8 +851,9 @@ static void plugin_gen_mem_inline(const struct qemu_plugin_tb *ptb,
                                   TCGOp *begin_op, int insn_idx)
 {
     const struct qemu_plugin_dyn_cb_arr *cbs;
+    struct qemu_plugin_insn *insn = g_ptr_array_index(ptb->insns, insn_idx);
 
-    cbs = &ptb->insns[insn_idx].cbs[PLUGIN_CB_MEM][PLUGIN_CB_INLINE];
+    cbs = &insn->cbs[PLUGIN_CB_MEM][PLUGIN_CB_INLINE];
     inject_inline_cb(cbs, begin_op, op_rw);
 }
 
@@ -857,21 +861,24 @@ static void plugin_gen_haddr_regular(const struct qemu_plugin_tb *ptb,
                                      TCGOp *begin_op, int insn_idx)
 {
     const struct qemu_plugin_dyn_cb_arr *cbs;
+    struct qemu_plugin_insn *insn = g_ptr_array_index(ptb->insns, insn_idx);
 
-    cbs = &ptb->insns[insn_idx].cbs[PLUGIN_CB_HADDR][PLUGIN_CB_REGULAR];
+    cbs = &insn->cbs[PLUGIN_CB_HADDR][PLUGIN_CB_REGULAR];
     inject_mem_cb(cbs, begin_op);
 }
 
 static void plugin_gen_enable_mem_helper(const struct qemu_plugin_tb *ptb,
                                          TCGOp *begin_op, int insn_idx)
 {
-    inject_mem_enable_helper(&ptb->insns[insn_idx], begin_op);
+    struct qemu_plugin_insn *insn = g_ptr_array_index(ptb->insns, insn_idx);
+    inject_mem_enable_helper(insn, begin_op);
 }
 
 static void plugin_gen_disable_mem_helper(const struct qemu_plugin_tb *ptb,
                                           TCGOp *begin_op, int insn_idx)
 {
-    inject_mem_disable_helper(&ptb->insns[insn_idx], begin_op);
+    struct qemu_plugin_insn *insn = g_ptr_array_index(ptb->insns, insn_idx);
+    inject_mem_disable_helper(insn, begin_op);
 }
 
 static void plugin_inject_cb(const struct qemu_plugin_tb *ptb, TCGOp *begin_op,

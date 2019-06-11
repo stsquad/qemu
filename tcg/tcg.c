@@ -729,6 +729,15 @@ void tcg_region_init(void)
 #endif
 }
 
+static void alloc_tcg_plugin_context(TCGContext *s)
+{
+#ifdef CONFIG_PLUGIN
+    s->plugin_tb = g_new0(struct qemu_plugin_tb, 1);
+    s->plugin_tb->insns =
+        g_ptr_array_new_with_free_func(qemu_plugin_insn_cleanup_fn);
+#endif
+}
+
 /*
  * All TCG threads except the parent (i.e. the one that called tcg_context_init
  * and registered the target's TCG globals) must register with this function
@@ -772,11 +781,9 @@ void tcg_register_thread(void)
     g_assert(n < max_cpus);
     atomic_set(&tcg_ctxs[n], s);
 
-#ifdef CONFIG_PLUGIN
     if (n > 0) {
-        s->plugin_tb = g_new0(struct qemu_plugin_tb, 1);
+        alloc_tcg_plugin_context(s);
     }
-#endif
 
     tcg_ctx = s;
     qemu_mutex_lock(&region.lock);
@@ -974,9 +981,7 @@ void tcg_context_init(TCGContext *s)
         indirect_reg_alloc_order[i] = tcg_target_reg_alloc_order[i];
     }
 
-#ifdef CONFIG_PLUGIN
-    s->plugin_tb = g_new0(struct qemu_plugin_tb, 1);
-#endif
+    alloc_tcg_plugin_context(s);
 
     tcg_ctx = s;
     /*

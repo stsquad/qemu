@@ -34,12 +34,8 @@ static inline void plugin_insn_append(const void *from, size_t size)
     if (insn == NULL) {
         return;
     }
-    if (unlikely(insn->size + size > insn->capacity)) {
-        insn->data = g_realloc(insn->data, insn->size + size);
-        insn->capacity = insn->size + size;
-    }
-    memcpy(insn->data + insn->size, from, size);
-    insn->size += size;
+
+    insn->data = g_byte_array_append(insn->data, from, size);
 }
 
 #else /* !CONFIG_PLUGIN */

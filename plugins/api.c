@@ -189,7 +189,7 @@ qemu_plugin_tb_get_insn(const struct qemu_plugin_tb *tb, size_t idx)
     if (unlikely(idx >= tb->n)) {
         return NULL;
     }
-    return &tb->insns[idx];
+    return g_ptr_array_index(tb->insns, idx);
 }
 
 /*
@@ -201,12 +201,12 @@ qemu_plugin_tb_get_insn(const struct qemu_plugin_tb *tb, size_t idx)
 
 const void *qemu_plugin_insn_data(const struct qemu_plugin_insn *insn)
 {
-    return insn->data;
+    return insn->data->data;
 }
 
 size_t qemu_plugin_insn_size(const struct qemu_plugin_insn *insn)
 {
-    return insn->size;
+    return insn->data->len;
 }
 
 uint64_t qemu_plugin_insn_vaddr(const struct qemu_plugin_insn *insn)
@@ -222,7 +222,7 @@ void *qemu_plugin_insn_haddr(const struct qemu_plugin_insn *insn)
 char *qemu_plugin_insn_disas(const struct qemu_plugin_insn *insn)
 {
     CPUState *cpu = current_cpu;
-    return plugin_disas(cpu, insn->vaddr, insn->size);
+    return plugin_disas(cpu, insn->vaddr, insn->data->len);
 }
 
 /*

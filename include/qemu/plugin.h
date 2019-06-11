@@ -120,11 +120,7 @@ struct qemu_plugin_dyn_cb_arr {
 };
 
 struct qemu_plugin_insn {
-    /* GByteArray */
-    void *data;
-    size_t size;
-    size_t capacity;
-    /* GByteArray */
+    GByteArray *data;
     uint64_t vaddr;
     void *haddr;
     struct qemu_plugin_dyn_cb_arr cbs[PLUGIN_N_CB_TYPES][PLUGIN_N_CB_SUBTYPES];
@@ -132,17 +128,17 @@ struct qemu_plugin_insn {
     bool mem_helper;
 };
 
-struct qemu_plugin_tb {
-    /* GArray */
-    struct qemu_plugin_insn *insns;
-    size_t n;
-    size_t capacity;
-    uint64_t vaddr;
-    uint64_t vaddr2;
-    void *haddr1;
-    void *haddr2;
-    struct qemu_plugin_dyn_cb_arr cbs[PLUGIN_N_CB_SUBTYPES];
-};
+/*
+ * qemu_plugin_insn allocate and cleanup functions. We don't expect to
+ * cleanup many of these structures. They are reused for each fresh
+ * translation.
+ */
+
+static inline void qemu_plugin_insn_cleanup_fn(gpointer data)
+{
+    struct qemu_plugin_insn *insn = (struct qemu_plugin_insn *) data;
+    g_byte_array_free(insn->data, true);
+}
 
 static inline
 void qemu_plugin_dyn_cb_arr_init(struct qemu_plugin_dyn_cb_arr *arr)
@@ -151,25 +147,47 @@ void qemu_plugin_dyn_cb_arr_init(struct qemu_plugin_dyn_cb_arr *arr)
     arr->capacity = 0;
 }
 
+static inline struct qemu_plugin_insn * qemu_plugin_insn_alloc(void)
+{
+    int i, j;
+    struct qemu_plugin_insn *insn = g_new0(struct qemu_plugin_insn, 1);
+    insn->data = g_byte_array_sized_new(4);
+
+    for (i = 0; i < PLUGIN_N_CB_TYPES; i++) {
+        for (j = 0; j < PLUGIN_N_CB_SUBTYPES; j++) {
+            qemu_plugin_dyn_cb_arr_init(&insn->cbs[i][j]);
+        }
+    }
+
+    return insn;
+}
+
+struct qemu_plugin_tb {
+    GPtrArray *insns;
+    size_t n;
+    uint64_t vaddr;
+    uint64_t vaddr2;
+    void *haddr1;
+    void *haddr2;
+    struct qemu_plugin_dyn_cb_arr cbs[PLUGIN_N_CB_SUBTYPES];
+};
+
+/**
+ * qemu_plugin_tb_insn_get(): get next plugin record for translation.
+ *
+ */
 static inline
 struct qemu_plugin_insn *qemu_plugin_tb_insn_get(struct qemu_plugin_tb *tb)
 {
     struct qemu_plugin_insn *insn;
     int i, j;
 
-    if (unlikely(tb->n == tb->capacity)) {
-        tb->insns = g_renew(struct qemu_plugin_insn, tb->insns, ++tb->capacity);
-        insn = &tb->insns[tb->capacity - 1];
-        insn->data = NULL;
-        insn->capacity = 0;
-        for (i = 0; i < PLUGIN_N_CB_TYPES; i++) {
-            for (j = 0; j < PLUGIN_N_CB_SUBTYPES; j++) {
-                qemu_plugin_dyn_cb_arr_init(&insn->cbs[i][j]);
-            }
-        }
+    if (unlikely(tb->n == tb->insns->len)) {
+        struct qemu_plugin_insn *new_insn = qemu_plugin_insn_alloc();
+        g_ptr_array_add(tb->insns, new_insn);
     }
-    insn = &tb->insns[tb->n++];
-    insn->size = 0;
+    insn = g_ptr_array_index(tb->insns, tb->n++);
+    g_byte_array_set_size(insn->data, 0);
     insn->calls_helpers = false;
     insn->mem_helper = false;
 
