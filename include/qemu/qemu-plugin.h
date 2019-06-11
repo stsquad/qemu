@@ -1,8 +1,11 @@
 /*
  * Copyright (C) 2017, Emilio G. Cota <cota@braap.org>
+ * Copyright (C) 2019, Linaro
  *
  * License: GNU GPL, version 2 or later.
  *   See the COPYING file in the top-level directory.
+ *
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 #ifndef QEMU_PLUGIN_API_H
 #define QEMU_PLUGIN_API_H
@@ -51,6 +54,10 @@ typedef uint64_t qemu_plugin_id_t;
 QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id, int argc,
                                            char **argv);
 
+/*
+ * Prototypes for the various callback styles we will be registering
+ * in the following functions.
+ */
 typedef void (*qemu_plugin_simple_cb_t)(qemu_plugin_id_t id);
 
 typedef void (*qemu_plugin_udata_cb_t)(qemu_plugin_id_t id, void *userdata);
@@ -111,12 +118,30 @@ void qemu_plugin_register_vcpu_init_cb(qemu_plugin_id_t id,
 void qemu_plugin_register_vcpu_exit_cb(qemu_plugin_id_t id,
                                        qemu_plugin_vcpu_simple_cb_t cb);
 
+/**
+ * qemu_plugin_register_vcpu_idle_cb() - register a vCPU idle callback
+ * @id: plugin ID
+ * @cb: callback function
+ *
+ * The @cb function is called every time a vCPU idles.
+ */
 void qemu_plugin_register_vcpu_idle_cb(qemu_plugin_id_t id,
                                        qemu_plugin_vcpu_simple_cb_t cb);
 
+/**
+ * qemu_plugin_register_vcpu_resume_cb() - register a vCPU resume callback
+ * @id: plugin ID
+ * @cb: callback function
+ *
+ * The @cb function is called every time a vCPU resumes execution.
+ */
 void qemu_plugin_register_vcpu_resume_cb(qemu_plugin_id_t id,
                                          qemu_plugin_vcpu_simple_cb_t cb);
 
+/*
+ * Opaque types that the plugin is given during the translation and
+ * instrumentation phase.
+ */
 struct qemu_plugin_tb;
 struct qemu_plugin_insn;
 
@@ -132,6 +157,18 @@ enum qemu_plugin_mem_rw {
     QEMU_PLUGIN_MEM_RW,
 };
 
+/**
+ * qemu_plugin_register_vcpu_tb_trans_cb() - register a translate cb
+ * @id: plugin ID
+ * @cb: callback function
+ *
+ * The @cb function is called every time a translation occurs. The @cb
+ * function is passed an opaque qemu_plugin_type which is can query
+ * for additional information including the list of translated
+ * instructions. At this point the plugin can register further
+ * callbacks to be triggered when the block or individual instruction
+ * executes.
+ */
 typedef void (*qemu_plugin_vcpu_tb_trans_cb_t)(qemu_plugin_id_t id,
                                                unsigned int vcpu_index,
                                                struct qemu_plugin_tb *tb);
@@ -139,7 +176,15 @@ typedef void (*qemu_plugin_vcpu_tb_trans_cb_t)(qemu_plugin_id_t id,
 void qemu_plugin_register_vcpu_tb_trans_cb(qemu_plugin_id_t id,
                                            qemu_plugin_vcpu_tb_trans_cb_t cb);
 
-/* can only call from tb_trans_cb callback */
+/**
+ * qemu_plugin_register_vcpu_tb_trans_exec_cb() - register execution callback
+ * @tb: the opaque qemu_plugin_tb handle for the translation
+ * @cb: callback function
+ * @flags: does the plugin read or write the CPU's registers?
+ * @userdata: any plugin data to pass to the @cb?
+ *
+ * The @cb function is called every time a translated unit executes.
+ */
 void qemu_plugin_register_vcpu_tb_exec_cb(struct qemu_plugin_tb *tb,
                                           qemu_plugin_vcpu_udata_cb_t cb,
                                           enum qemu_plugin_cb_flags flags,
@@ -149,19 +194,70 @@ enum qemu_plugin_op {
     QEMU_PLUGIN_INLINE_ADD_U64,
 };
 
+/**
+ * qemu_plugin_register_vcpu_tb_trans_exec_inline() - execution inline op
+ * @tb: the opaque qemu_plugin_tb handle for the translation
+ * @op: the type of qemu_plugin_op (e.g. ADD_U64)
+ * @ptr: the target memory location for the op
+ * @imm: the op data (e.g. 1)
+ *
+ * Insert an inline op to every time a translated unit executes.
+ * Useful if you just want to increment a single counter somewhere in
+ * memory.
+ */
 void qemu_plugin_register_vcpu_tb_exec_inline(struct qemu_plugin_tb *tb,
                                               enum qemu_plugin_op op,
                                               void *ptr, uint64_t imm);
 
+/**
+ * qemu_plugin_register_vcpu_insn_exec_cb() - register insn execution cb
+ * @insn: the opaque qemu_plugin_insn handle for an instruction
+ * @cb: callback function
+ * @flags: does the plugin read or write the CPU's registers?
+ * @userdata: any plugin data to pass to the @cb?
+ *
+ * The @cb function is called every time an instruction is executed
+ */
 void qemu_plugin_register_vcpu_insn_exec_cb(struct qemu_plugin_insn *insn,
                                             qemu_plugin_vcpu_udata_cb_t cb,
                                             enum qemu_plugin_cb_flags flags,
                                             void *userdata);
 
+/**
+ * qemu_plugin_register_vcpu_insn_exec_inline() - insn execution inline op
+ * @insn: the opaque qemu_plugin_insn handle for an instruction
+ * @cb: callback function
+ * @op: the type of qemu_plugin_op (e.g. ADD_U64)
+ * @ptr: the target memory location for the op
+ * @imm: the op data (e.g. 1)
+ *
+ * Insert an inline op to every time an instruction executes. Useful
+ * if you just want to increment a single counter somewhere in memory.
+ */
 void qemu_plugin_register_vcpu_insn_exec_inline(struct qemu_plugin_insn *insn,
                                                 enum qemu_plugin_op op,
                                                 void *ptr, uint64_t imm);
 
+/*
+ * Helpers to query information about the instructions in a block
+ */
+size_t qemu_plugin_tb_n_insns(const struct qemu_plugin_tb *tb);
+
+uint64_t qemu_plugin_tb_vaddr(const struct qemu_plugin_tb *tb);
+
+struct qemu_plugin_insn *
+qemu_plugin_tb_get_insn(const struct qemu_plugin_tb *tb, size_t idx);
+
+const void *qemu_plugin_insn_data(const struct qemu_plugin_insn *insn);
+
+size_t qemu_plugin_insn_size(const struct qemu_plugin_insn *insn);
+
+uint64_t qemu_plugin_insn_vaddr(const struct qemu_plugin_insn *insn);
+void *qemu_plugin_insn_haddr(const struct qemu_plugin_insn *insn);
+
+/*
+ * Memory Instrumentation
+ */
 typedef uint32_t qemu_plugin_meminfo_t;
 
 unsigned qemu_plugin_mem_size_shift(qemu_plugin_meminfo_t info);
@@ -215,19 +311,6 @@ void
 qemu_plugin_register_vcpu_syscall_ret_cb(qemu_plugin_id_t id,
                                          qemu_plugin_vcpu_syscall_ret_cb_t cb);
 
-size_t qemu_plugin_tb_n_insns(const struct qemu_plugin_tb *tb);
-
-uint64_t qemu_plugin_tb_vaddr(const struct qemu_plugin_tb *tb);
-
-struct qemu_plugin_insn *
-qemu_plugin_tb_get_insn(const struct qemu_plugin_tb *tb, size_t idx);
-
-const void *qemu_plugin_insn_data(const struct qemu_plugin_insn *insn);
-
-size_t qemu_plugin_insn_size(const struct qemu_plugin_insn *insn);
-
-uint64_t qemu_plugin_insn_vaddr(const struct qemu_plugin_insn *insn);
-void *qemu_plugin_insn_haddr(const struct qemu_plugin_insn *insn);
 
 /**
  * qemu_plugin_vcpu_for_each() - iterate over the existing vCPU

@@ -219,7 +219,8 @@ void *qemu_plugin_insn_haddr(const struct qemu_plugin_insn *insn)
 }
 
 /*
- *
+ * The memory queries allow the plugin to query information about a
+ * memory access.
  */
 
 unsigned qemu_plugin_mem_size_shift(qemu_plugin_meminfo_t info)
@@ -241,6 +242,11 @@ bool qemu_plugin_mem_is_store(qemu_plugin_meminfo_t info)
 {
     return !!(info & TRACE_MEM_ST);
 }
+
+/*
+ * Queries to the number and potential maximum number of vCPUs there
+ * will be. This helps the plugin dimension per-vcpu arrays.
+ */
 
 int qemu_plugin_n_vcpus(void)
 {
