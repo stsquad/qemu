@@ -883,7 +883,7 @@ static inline void set_hostaddr(CPUArchState *env, TCGMemOp mo, void *haddr)
 {
 #ifdef CONFIG_PLUGIN
     if (mo & MO_HADDR) {
-        env->hostaddr = haddr;
+        env_tlb(env)->c.hostaddr = haddr;
     }
 #endif
 }

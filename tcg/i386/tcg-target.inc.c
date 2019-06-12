@@ -1779,7 +1779,8 @@ static inline void tcg_out_tlb_load(TCGContext *s, TCGReg addrlo, TCGReg addrhi,
 #ifdef CONFIG_PLUGIN
     if (opc & MO_HADDR) {
         tcg_out_st(s, TCG_TYPE_PTR, r1, TCG_AREG0,
-                   offsetof(CPUArchState, hostaddr));
+                   offsetof(ArchCPU, neg.tlb.c.hostaddr) -
+                   offsetof(ArchCPU, env));
     }
 #endif
 }

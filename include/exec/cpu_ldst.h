@@ -88,7 +88,7 @@ typedef target_ulong abi_ptr;
 static inline void *read_hostaddr(CPUArchState *env)
 {
 #if defined(CONFIG_SOFTMMU) && defined(CONFIG_PLUGIN)
-    return env->hostaddr;
+    return env_tlb(env)->c.hostaddr;
 #else
     return NULL;
 #endif

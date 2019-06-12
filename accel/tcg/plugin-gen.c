@@ -103,8 +103,7 @@ static void do_gen_mem_cb(TCGv vaddr, uint8_t info, bool is_haddr)
     TCGv_ptr udata = tcg_const_ptr(NULL);
     TCGv_ptr haddr;
 
-    tcg_gen_ld_i32(cpu_index, cpu_env,
-                   -ENV_OFFSET + offsetof(CPUState, cpu_index));
+    tcg_gen_ld_i32(cpu_index, cpu_env, -offsetof(ArchCPU, env) + offsetof(CPUState, cpu_index));
     tcg_gen_extu_tl_i64(vaddr64, vaddr);
 
     if (is_haddr) {
@@ -114,7 +113,9 @@ static void do_gen_mem_cb(TCGv vaddr, uint8_t info, bool is_haddr)
          */
 #ifdef CONFIG_SOFTMMU
         haddr = tcg_temp_new_ptr();
-        tcg_gen_ld_ptr(haddr, cpu_env, offsetof(CPUArchState, hostaddr));
+        tcg_gen_ld_ptr(haddr, cpu_env,
+                       offsetof(ArchCPU, neg.tlb.c.hostaddr) -
+                       offsetof(ArchCPU, env));
 #else
         haddr = tcg_const_ptr(NULL);
 #endif
@@ -136,8 +137,8 @@ static void gen_empty_udata_cb(void)
     TCGv_i32 cpu_index = tcg_temp_new_i32();
     TCGv_ptr udata = tcg_const_ptr(NULL); /* will be overwritten later */
 
-    tcg_gen_ld_i32(cpu_index, cpu_env,
-                   -ENV_OFFSET + offsetof(CPUState, cpu_index));
+    tcg_gen_ld_i32(cpu_index, cpu_env, -offsetof(ArchCPU, env) +
+                   offsetof(CPUState, cpu_index));
     gen_helper_plugin_vcpu_udata_cb(cpu_index, udata);
 
     tcg_temp_free_ptr(udata);
@@ -180,8 +181,7 @@ static void gen_empty_mem_helper(void)
     TCGv_ptr ptr;
 
     ptr = tcg_const_ptr(NULL);
-    tcg_gen_st_ptr(ptr, cpu_env, -ENV_OFFSET + offsetof(CPUState,
-                                                        plugin_mem_cbs));
+    tcg_gen_st_ptr(ptr, cpu_env, offsetof(CPUState, plugin_mem_cbs));
     tcg_temp_free_ptr(ptr);
 }
 
@@ -799,8 +799,7 @@ void plugin_gen_disable_mem_helpers(void)
         return;
     }
     ptr = tcg_const_ptr(NULL);
-    tcg_gen_st_ptr(ptr, cpu_env, -ENV_OFFSET + offsetof(CPUState,
-                                                        plugin_mem_cbs));
+    tcg_gen_st_ptr(ptr, cpu_env, offsetof(CPUState, plugin_mem_cbs));
     tcg_temp_free_ptr(ptr);
     tcg_ctx->plugin_insn->mem_helper = false;
 }
