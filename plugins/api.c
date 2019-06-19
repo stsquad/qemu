@@ -245,15 +245,25 @@ bool qemu_plugin_mem_is_store(qemu_plugin_meminfo_t info)
 
 /*
  * Memory transformations.
+ * Queries about the hwaddr
  */
 
-uint64_t qemu_plugin_ram_addr_from_host(void *haddr)
+uint64_t qemu_plugin_hwaddr_page(const struct qemu_plugin_hwaddr *haddr, bool second_page)
+{
+#ifdef CONFIG_SOFTMMU
+    return second_page ? haddr->haddr2 : haddr->haddr1;
+#else
+    return 0;
+#endif
+}
+
+uint64_t qemu_plugin_ram_addr_from_host(const struct qemu_plugin_hwaddr *haddr)
 {
 #ifdef CONFIG_SOFTMMU
     ram_addr_t ram_addr;
 
     g_assert(haddr);
-    ram_addr = qemu_ram_addr_from_host(haddr);
+    ram_addr = qemu_ram_addr_from_host((void *) haddr->haddr1);
     if (ram_addr == RAM_ADDR_INVALID) {
         error_report("Bad ram pointer %p", haddr);
         abort();

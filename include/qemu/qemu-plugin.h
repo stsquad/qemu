@@ -259,6 +259,7 @@ void *qemu_plugin_insn_haddr(const struct qemu_plugin_insn *insn);
  * Memory Instrumentation
  */
 typedef uint32_t qemu_plugin_meminfo_t;
+struct qemu_plugin_hwaddr;
 
 unsigned qemu_plugin_mem_size_shift(qemu_plugin_meminfo_t info);
 bool qemu_plugin_mem_is_sign_extended(qemu_plugin_meminfo_t info);
@@ -273,7 +274,7 @@ typedef void
 typedef void
 (*qemu_plugin_vcpu_mem_haddr_cb_t)(unsigned int vcpu_index,
                                    qemu_plugin_meminfo_t info, uint64_t vaddr,
-                                   void *haddr, void *userdata);
+                                   const struct qemu_plugin_hwaddr *haddr, void *userdata);
 
 void qemu_plugin_register_vcpu_mem_cb(struct qemu_plugin_insn *insn,
                                       qemu_plugin_vcpu_mem_cb_t cb,
@@ -292,7 +293,8 @@ void qemu_plugin_register_vcpu_mem_inline(struct qemu_plugin_insn *insn,
                                           enum qemu_plugin_op op, void *ptr,
                                           uint64_t imm);
 
-uint64_t qemu_plugin_ram_addr_from_host(void *haddr);
+uint64_t qemu_plugin_hwaddr_page(const struct qemu_plugin_hwaddr *haddr, bool second_page);
+uint64_t qemu_plugin_ram_addr_from_host(const struct qemu_plugin_hwaddr *haddr);
 
 typedef void
 (*qemu_plugin_vcpu_syscall_cb_t)(qemu_plugin_id_t id, unsigned int vcpu_index,

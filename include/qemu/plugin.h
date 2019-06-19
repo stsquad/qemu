@@ -187,6 +187,13 @@ struct qemu_plugin_insn *qemu_plugin_tb_insn_get(struct qemu_plugin_tb *tb)
     return insn;
 }
 
+struct qemu_plugin_hwaddr {
+    uint64_t haddr1;
+    uint64_t haddr2;
+    bool is_io;
+};
+
+
 #ifdef CONFIG_PLUGIN
 
 void qemu_plugin_vcpu_init_hook(CPUState *cpu);
@@ -200,8 +207,7 @@ qemu_plugin_vcpu_syscall(CPUState *cpu, int64_t num, uint64_t a1,
                          uint64_t a6, uint64_t a7, uint64_t a8);
 void qemu_plugin_vcpu_syscall_ret(CPUState *cpu, int64_t num, int64_t ret);
 
-void qemu_plugin_vcpu_mem_cb(CPUState *cpu, uint64_t vaddr, void *haddr,
-                             uint32_t meminfo);
+void qemu_plugin_vcpu_mem_cb(CPUState *cpu, uint64_t vaddr, uint32_t meminfo);
 
 void qemu_plugin_flush_cb(void);
 

@@ -427,8 +427,7 @@ void exec_inline_op(struct qemu_plugin_dyn_cb *cb)
     }
 }
 
-void qemu_plugin_vcpu_mem_cb(CPUState *cpu, uint64_t vaddr, void *haddr,
-                             uint32_t info)
+void qemu_plugin_vcpu_mem_cb(CPUState *cpu, uint64_t vaddr, uint32_t info)
 {
     GArray *arr = cpu->plugin_mem_cbs;
     size_t i;
@@ -448,7 +447,8 @@ void qemu_plugin_vcpu_mem_cb(CPUState *cpu, uint64_t vaddr, void *haddr,
         case PLUGIN_CB_REGULAR:
 
             if (cb->mem.haddr) {
-                cb->f.vcpu_mem_haddr(cpu->cpu_index, info, vaddr, haddr,
+                struct qemu_plugin_hwaddr haddr;
+                cb->f.vcpu_mem_haddr(cpu->cpu_index, info, vaddr, &haddr,
                                      cb->userp);
             } else {
                 cb->f.vcpu_mem(cpu->cpu_index, info, vaddr, cb->userp);
