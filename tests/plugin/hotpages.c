@@ -81,9 +81,10 @@ static void plugin_init(void)
 }
 
 static void vcpu_haddr(unsigned int cpu_index, qemu_plugin_meminfo_t meminfo,
-                       uint64_t vaddr, void *haddr, void *udata)
+                       uint64_t vaddr, void *udata)
 {
-    uint64_t page = (uint64_t) haddr & page_mask;
+    struct qemu_plugin_hwaddr *hwaddr = qemu_plugin_get_hwaddr(vaddr);
+    uint64_t page = (uint64_t) qemu_plugin_raddr_from_hwaddr(hwaddr);
     PageCounters *count;
 
     g_mutex_lock(&lock);
@@ -113,9 +114,9 @@ static void vcpu_tb_trans(qemu_plugin_id_t id, unsigned int cpu_index,
 
     for (i = 0; i < n; i++) {
         struct qemu_plugin_insn *insn = qemu_plugin_tb_get_insn(tb, i);
-        qemu_plugin_register_vcpu_mem_haddr_cb(insn, vcpu_haddr,
-                                               QEMU_PLUGIN_CB_NO_REGS,
-                                               rw, NULL);
+        qemu_plugin_register_vcpu_mem_cb(insn, vcpu_haddr,
+                                         QEMU_PLUGIN_CB_NO_REGS,
+                                         rw, NULL);
     }
 }
 
