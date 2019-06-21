@@ -14,6 +14,7 @@
 #include <qemu-plugin.h>
 
 static uint64_t mem_count;
+static uint64_t io_count;
 static int stdout_fd;
 static bool do_inline;
 static bool do_haddr;
@@ -21,19 +22,26 @@ static enum qemu_plugin_mem_rw rw = QEMU_PLUGIN_MEM_RW;
 
 static void plugin_exit(qemu_plugin_id_t id, void *p)
 {
-    dprintf(stdout_fd, "accesses: %" PRIu64 "\n", mem_count);
+    dprintf(stdout_fd, "mem accesses: %" PRIu64 "\n", mem_count);
+    if (do_haddr) {
+        dprintf(stdout_fd, "io accesses: %" PRIu64 "\n", mem_count);
+    }
 }
 
 static void vcpu_mem(unsigned int cpu_index, qemu_plugin_meminfo_t meminfo,
                      uint64_t vaddr, void *udata)
 {
-    mem_count++;
-}
-
-static void vcpu_haddr(unsigned int cpu_index, qemu_plugin_meminfo_t meminfo,
-                       uint64_t vaddr, void *haddr, void *udata)
-{
-    mem_count++;
+    if (do_haddr) {
+        struct qemu_plugin_hwaddr *hwaddr;
+        hwaddr = qemu_plugin_get_hwaddr(vaddr);
+        if (qemu_plugin_hwaddr_is_io(hwaddr)) {
+            io_count++;
+        } else {
+            mem_count++;
+        }
+    } else {
+        mem_count++;
+    }
 }
 
 static void vcpu_tb_trans(qemu_plugin_id_t id, unsigned int cpu_index,
@@ -49,10 +57,6 @@ static void vcpu_tb_trans(qemu_plugin_id_t id, unsigned int cpu_index,
             qemu_plugin_register_vcpu_mem_inline(insn, rw,
                                                  QEMU_PLUGIN_INLINE_ADD_U64,
                                                  &mem_count, 1);
-        } else if (do_haddr) {
-            qemu_plugin_register_vcpu_mem_haddr_cb(insn, vcpu_haddr,
-                                                   QEMU_PLUGIN_CB_NO_REGS,
-                                                   rw, NULL);
         } else {
             qemu_plugin_register_vcpu_mem_cb(insn, vcpu_mem,
                                              QEMU_PLUGIN_CB_NO_REGS,
