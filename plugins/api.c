@@ -255,6 +255,30 @@ bool qemu_plugin_mem_is_store(qemu_plugin_meminfo_t info)
  * Queries about the hwaddr
  */
 
+static GArray *hwaddr_refs;
+
+struct qemu_plugin_hwaddr *qemu_plugin_get_hwaddr(uint64_t vaddr)
+{
+    CPUState *cpu = current_cpu;
+
+    if (!hwaddr_refs) {
+        hwaddr_refs = g_array_new()
+    }
+
+
+}
+
+bool qemu_plugin_hwaddr_spans_pages(struct qemu_plugin_hwaddr *hwaddr)
+{
+    return false;
+}
+
+bool qemu_plugin_hwaddr_is_io(struct qemu_plugin_hwaddr *hwaddr)
+{
+        return false;
+}
+uint64_t qemu_plugin_raddr_from_hwaddr(const struct qemu_plugin_hwaddr *haddr);
+
 uint64_t qemu_plugin_hwaddr_page(const struct qemu_plugin_hwaddr *haddr, bool second_page)
 {
 #ifdef CONFIG_SOFTMMU

@@ -30,6 +30,10 @@
   qemu_plugin_mem_is_sign_extended;
   qemu_plugin_mem_is_big_endian;
   qemu_plugin_mem_is_store;
+  qemu_plugin_get_hwaddr;
+  qemu_plugin_hwaddr_spans_pages;
+  qemu_plugin_hwaddr_is_io;
+  qemu_plugin_raddr_from_hwaddr;
   qemu_plugin_vcpu_for_each;
   qemu_plugin_n_vcpus;
   qemu_plugin_n_max_vcpus;
