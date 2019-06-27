@@ -304,14 +304,15 @@ uint64_t qemu_plugin_ram_addr_from_host(const struct qemu_plugin_hwaddr *haddr);
  * qemu_plugin_get_hwaddr():
  * @vaddr: the virtual address of the memory operation
  *
- * Return a qemu_plugin_hwaddr handle to query details about the
- * actual physical address backing the virtual address.
+ * For system emulation returns a qemu_plugin_hwaddr handle to query
+ * details about the actual physical address backing the virtual
+ * address. For linux-user guests it just returns NULL.
  *
  * This handle is *only* valid for the duration of the callback. Any
  * information about the handle should be recovered before the
  * callback returns.
  */
-struct qemu_plugin_hwaddr *qemu_plugin_get_hwaddr(uint64_t vaddr);
+struct qemu_plugin_hwaddr *qemu_plugin_get_hwaddr(qemu_plugin_meminfo_t info, uint64_t vaddr);
 
 bool qemu_plugin_hwaddr_spans_pages(struct qemu_plugin_hwaddr *hwaddr);
 bool qemu_plugin_hwaddr_is_io(struct qemu_plugin_hwaddr *hwaddr);

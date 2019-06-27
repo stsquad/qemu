@@ -83,9 +83,17 @@ static void plugin_init(void)
 static void vcpu_haddr(unsigned int cpu_index, qemu_plugin_meminfo_t meminfo,
                        uint64_t vaddr, void *udata)
 {
-    struct qemu_plugin_hwaddr *hwaddr = qemu_plugin_get_hwaddr(vaddr);
-    uint64_t page = (uint64_t) qemu_plugin_raddr_from_hwaddr(hwaddr);
+    struct qemu_plugin_hwaddr *hwaddr = qemu_plugin_get_hwaddr(meminfo, vaddr);
+    uint64_t page;
     PageCounters *count;
+
+    /* We only get a hwaddr for system emulation */
+    if (hwaddr) {
+        page = (uint64_t) qemu_plugin_raddr_from_hwaddr(hwaddr);
+    } else {
+        page = vaddr;
+    }
+    page &= page_mask;
 
     g_mutex_lock(&lock);
     count = (PageCounters *) g_hash_table_lookup(pages, GUINT_TO_POINTER(page));

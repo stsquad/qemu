@@ -188,8 +188,7 @@ struct qemu_plugin_insn *qemu_plugin_tb_insn_get(struct qemu_plugin_tb *tb)
 }
 
 struct qemu_plugin_hwaddr {
-    uint64_t haddr1;
-    uint64_t haddr2;
+    uint64_t hostaddr;
     bool is_io;
 };
 

@@ -39,7 +39,8 @@
 #include "cpu.h"
 #include "sysemu/sysemu.h"
 #include "tcg/tcg.h"
-#include "trace/mem-internal.h" /* mem_info macros */
+/* #include "trace/mem-internal.h" /\* mem_info macros *\/ */
+#include "exec/exec-all.h"
 #include "disas/disas.h"
 #include "plugin.h"
 
@@ -255,18 +256,41 @@ bool qemu_plugin_mem_is_store(qemu_plugin_meminfo_t info)
  * Queries about the hwaddr
  */
 
+#ifdef CONFIG_SOFTMMU
 static GArray *hwaddr_refs;
 
-struct qemu_plugin_hwaddr *qemu_plugin_get_hwaddr(uint64_t vaddr)
+struct qemu_plugin_hwaddr *qemu_plugin_get_hwaddr(qemu_plugin_meminfo_t info,
+                                                  uint64_t vaddr)
 {
     CPUState *cpu = current_cpu;
+    struct qemu_plugin_hwaddr *hwaddr;
 
+    /* Ensure we have memory allocated for this work */
     if (!hwaddr_refs) {
-        hwaddr_refs = g_array_new()
+        hwaddr_refs = g_array_sized_new(false, true,
+                                        sizeof(struct qemu_plugin_hwaddr),
+                                        cpu->cpu_index + 1);
+    } else if (cpu->cpu_index >= hwaddr_refs->len) {
+        hwaddr_refs = g_array_set_size(hwaddr_refs, cpu->cpu_index + 1);
     }
 
+    hwaddr = &g_array_index(hwaddr_refs, struct qemu_plugin_hwaddr,
+                            cpu->cpu_index);
 
+    if (!tlb_plugin_lookup(cpu, vaddr, 0 /* FIXME mmu_idx*/,
+                           info & TRACE_MEM_ST, hwaddr)) {
+        return NULL;
+    }
+
+    return hwaddr;
 }
+#else
+struct qemu_plugin_hwaddr *qemu_plugin_get_hwaddr(qemu_plugin_meminfo_t info,
+                                                  uint64_t vaddr)
+{
+    return NULL;
+}
+#endif
 
 bool qemu_plugin_hwaddr_spans_pages(struct qemu_plugin_hwaddr *hwaddr)
 {
@@ -275,34 +299,35 @@ bool qemu_plugin_hwaddr_spans_pages(struct qemu_plugin_hwaddr *hwaddr)
 
 bool qemu_plugin_hwaddr_is_io(struct qemu_plugin_hwaddr *hwaddr)
 {
-        return false;
-}
-uint64_t qemu_plugin_raddr_from_hwaddr(const struct qemu_plugin_hwaddr *haddr);
-
-uint64_t qemu_plugin_hwaddr_page(const struct qemu_plugin_hwaddr *haddr, bool second_page)
-{
-#ifdef CONFIG_SOFTMMU
-    return second_page ? haddr->haddr2 : haddr->haddr1;
-#else
-    return 0;
-#endif
+    return false;
 }
 
-uint64_t qemu_plugin_ram_addr_from_host(const struct qemu_plugin_hwaddr *haddr)
+uint64_t qemu_plugin_raddr_from_hwaddr(const struct qemu_plugin_hwaddr *hwaddr)
 {
 #ifdef CONFIG_SOFTMMU
-    ram_addr_t ram_addr;
+    ram_addr_t ram_addr = 0;
 
-    g_assert(haddr);
-    ram_addr = qemu_ram_addr_from_host((void *) haddr->haddr1);
-    if (ram_addr == RAM_ADDR_INVALID) {
-        error_report("Bad ram pointer %p", haddr);
-        abort();
+    if (hwaddr) {
+        ram_addr = qemu_ram_addr_from_host((void *) hwaddr->hostaddr);
+        if (ram_addr == RAM_ADDR_INVALID) {
+            error_report("Bad ram pointer %"PRIx64"", hwaddr->hostaddr);
+            abort();
+        }
     }
     return ram_addr;
 #else
     return 0;
 #endif
+}
+
+uint64_t qemu_plugin_hwaddr_page(const struct qemu_plugin_hwaddr *haddr, bool second_page)
+{
+    return 0;
+}
+
+uint64_t qemu_plugin_ram_addr_from_host(const struct qemu_plugin_hwaddr *haddr)
+{
+    return 0;
 }
 
 /*

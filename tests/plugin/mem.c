@@ -33,7 +33,7 @@ static void vcpu_mem(unsigned int cpu_index, qemu_plugin_meminfo_t meminfo,
 {
     if (do_haddr) {
         struct qemu_plugin_hwaddr *hwaddr;
-        hwaddr = qemu_plugin_get_hwaddr(vaddr);
+        hwaddr = qemu_plugin_get_hwaddr(meminfo, vaddr);
         if (qemu_plugin_hwaddr_is_io(hwaddr)) {
             io_count++;
         } else {

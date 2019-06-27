@@ -319,7 +319,7 @@ void plugin_register_vcpu_mem_cb(GArray **arr,
     dyn_cb->tcg_flags = cb_to_tcg_flags(flags);
     dyn_cb->type = PLUGIN_CB_REGULAR;
     dyn_cb->rw = rw;
-    dyn_cb->mem.haddr = haddr;
+    /* dyn_cb->mem.haddr = haddr; */
     dyn_cb->f.generic = cb;
 }
 

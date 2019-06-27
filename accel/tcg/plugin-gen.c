@@ -306,6 +306,7 @@ static TCGOp *copy_op_nocheck(TCGOp **begin_op, TCGOp *op)
 
 static TCGOp *copy_op(TCGOp **begin_op, TCGOp *op, TCGOpcode opc)
 {
+    fprintf(stderr, "%s: begin:%p op:%p opcode:%x\n", __func__, *begin_op, op, opc);
     op = copy_op_nocheck(begin_op, op);
     tcg_debug_assert((*begin_op)->opc == opc);
     return op;
@@ -556,48 +557,48 @@ static TCGOp *append_inline_cb(const struct qemu_plugin_dyn_cb *cb,
     return op;
 }
 
-static void set_memop_haddr_ldst_i32(TCGOp *op)
-{
-    int idx;
+/* static void set_memop_haddr_ldst_i32(TCGOp *op) */
+/* { */
+/*     int idx; */
 
-    if (TARGET_LONG_BITS == 32) {
-        idx = 2;
-    } else {
-        idx = TCG_TARGET_REG_BITS == 32 ? 3 : 2;
-    }
-    op->args[idx] |= make_memop_idx(MO_HADDR, 0);
-}
+/*     if (TARGET_LONG_BITS == 32) { */
+/*         idx = 2; */
+/*     } else { */
+/*         idx = TCG_TARGET_REG_BITS == 32 ? 3 : 2; */
+/*     } */
+/*     op->args[idx] |= make_memop_idx(MO_HADDR, 0); */
+/* } */
 
-static void set_memop_haddr_ldst_i64(TCGOp *op)
-{
-    int idx;
+/* static void set_memop_haddr_ldst_i64(TCGOp *op) */
+/* { */
+/*     int idx; */
 
-    if (TARGET_LONG_BITS == 32) {
-        idx = TCG_TARGET_REG_BITS == 32 ? 3 : 2;
-    } else {
-        idx = TCG_TARGET_REG_BITS == 32 ? 4 : 2;
-    }
-    op->args[idx] |= make_memop_idx(MO_HADDR, 0);
-}
+/*     if (TARGET_LONG_BITS == 32) { */
+/*         idx = TCG_TARGET_REG_BITS == 32 ? 3 : 2; */
+/*     } else { */
+/*         idx = TCG_TARGET_REG_BITS == 32 ? 4 : 2; */
+/*     } */
+/*     op->args[idx] |= make_memop_idx(MO_HADDR, 0); */
+/* } */
 
-static void find_prev_and_set_memop_haddr(TCGOp *op)
-{
-    while ((op = QTAILQ_PREV(op, link))) {
-        switch (op->opc) {
-        case INDEX_op_qemu_ld_i32:
-        case INDEX_op_qemu_st_i32:
-            set_memop_haddr_ldst_i32(op);
-            return;
-        case INDEX_op_qemu_ld_i64:
-        case INDEX_op_qemu_st_i64:
-            set_memop_haddr_ldst_i64(op);
-            return;
-        default:
-            break;
-        }
-    }
-    g_assert_not_reached();
-}
+/* static void find_prev_and_set_memop_haddr(TCGOp *op) */
+/* { */
+/*     while ((op = QTAILQ_PREV(op, link))) { */
+/*         switch (op->opc) { */
+/*         case INDEX_op_qemu_ld_i32: */
+/*         case INDEX_op_qemu_st_i32: */
+/*             set_memop_haddr_ldst_i32(op); */
+/*             return; */
+/*         case INDEX_op_qemu_ld_i64: */
+/*         case INDEX_op_qemu_st_i64: */
+/*             set_memop_haddr_ldst_i64(op); */
+/*             return; */
+/*         default: */
+/*             break; */
+/*         } */
+/*     } */
+/*     g_assert_not_reached(); */
+/* } */
 
 static TCGOp *append_mem_cb(const struct qemu_plugin_dyn_cb *cb,
                             TCGOp *begin_op, TCGOp *op, int *cb_idx)
@@ -632,7 +633,8 @@ static TCGOp *append_mem_cb(const struct qemu_plugin_dyn_cb *cb,
             /* ld_ptr; note that we only have to copy it once */
             if (*cb_idx == -1) {
                 op = copy_ld_ptr(&begin_op, op);
-                find_prev_and_set_memop_haddr(begin_op);
+                /* find_prev_and_set_memop_haddr(begin_op); */
+                /* XXX: find the mmu_idx we need */
             } else {
                 begin_op = skip_ld_ptr(begin_op);
             }
