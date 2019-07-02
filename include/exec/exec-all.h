@@ -324,6 +324,49 @@ static inline void tlb_flush_by_mmuidx_all_cpus_synced(CPUState *cpu,
 #define CODE_GEN_AVG_BLOCK_SIZE 150
 #endif
 
+typedef struct TBStatistics TBStatistics;
+
+/*
+ * This struct stores statistics such as execution count of the
+ * TranslationBlocks. Each sets of TBs for a given phys_pc/pc/flags
+ * has its own TBStatistics which will persist over tb_flush.
+ *
+ * We include additional counters to track number of translations as
+ * well as variants for compile flags.
+ */
+struct TBStatistics {
+    tb_page_addr_t phys_pc;
+    target_ulong pc;
+    uint32_t     flags;
+    /* cs_base isn't included in the hash but we do check for matches */
+    target_ulong cs_base;
+
+    /* Translation stats */
+    struct {
+        unsigned long total;
+        unsigned long uncached;
+        unsigned long spanning;
+        /* XXX: count invalidation? */
+    } translations;
+
+    /* Execution stats */
+    struct {
+        unsigned long total;
+        unsigned long atomic;
+    } executions;
+
+    struct {
+        unsigned num_guest_inst;
+        unsigned num_host_inst;
+        unsigned num_tcg_inst;
+    } code;
+
+    /* HMP information - used for referring to previous search */
+    int display_id;
+};
+
+bool tb_stats_cmp(const void *ap, const void *bp);
+
 /*
  * Translation Cache-related fields of a TB.
  * This struct exists just for convenience; we keep track of TB's in a binary
@@ -403,6 +446,9 @@ struct TranslationBlock {
     uintptr_t jmp_list_head;
     uintptr_t jmp_list_next[2];
     uintptr_t jmp_dest[2];
+
+    /* Pointer to a struct where statistics from the TB is stored */
+    TBStatistics *tb_stats;
 };
 
 extern bool parallel_cpus;
