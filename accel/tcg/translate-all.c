@@ -1865,6 +1865,17 @@ TranslationBlock *tb_gen_code(CPUState *cpu,
     atomic_set(&prof->search_out_len, prof->search_out_len + search_size);
 #endif
 
+    if (qemu_loglevel_mask(CPU_LOG_HOT_TBS) && qemu_log_in_addr_range(tb->pc)) {
+        size_t code_size = gen_code_size;
+        if (tcg_ctx->data_gen_ptr) {
+            code_size = tcg_ctx->data_gen_ptr - tb->tc.ptr;
+        }
+        qemu_log_lock();
+        atomic_set(&tb->tb_stats->code.num_host_inst,
+                    get_num_insts(tb->tc.ptr, code_size));
+        qemu_log_unlock();
+    }
+
 #ifdef DEBUG_DISAS
     if (qemu_loglevel_mask(CPU_LOG_TB_OUT_ASM) &&
         qemu_log_in_addr_range(tb->pc)) {
@@ -1922,6 +1933,9 @@ TranslationBlock *tb_gen_code(CPUState *cpu,
     phys_page2 = -1;
     if ((pc & TARGET_PAGE_MASK) != virt_page2) {
         phys_page2 = get_page_addr_code(env, virt_page2);
+        if (tb->tb_stats) {
+            atomic_inc(&tb->tb_stats->translations.spanning);
+        }
     }
     /*
      * No explicit memory barrier is required -- tb_link_page() makes the
