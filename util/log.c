@@ -19,6 +19,7 @@
 
 #include "qemu/osdep.h"
 #include "qemu/log.h"
+#include "qemu/qemu-print.h"
 #include "qemu/range.h"
 #include "qemu/error-report.h"
 #include "qapi/error.h"
@@ -30,21 +31,26 @@ FILE *qemu_logfile;
 int qemu_loglevel;
 static int log_append = 0;
 static GArray *debug_regions;
+int32_t max_num_hot_tbs_to_dump;
+static bool to_monitor;
 
 /* Return the number of characters emitted.  */
 int qemu_log(const char *fmt, ...)
 {
     int ret = 0;
-    if (qemu_logfile) {
-        va_list ap;
-        va_start(ap, fmt);
-        ret = vfprintf(qemu_logfile, fmt, ap);
-        va_end(ap);
+    va_list ap;
+    va_start(ap, fmt);
 
-        /* Don't pass back error results.  */
-        if (ret < 0) {
-            ret = 0;
-        }
+    if (to_monitor) {
+        ret = qemu_vprintf(fmt, ap);
+    } else if (qemu_logfile) {
+        ret = vfprintf(qemu_logfile, fmt, ap);
+    }
+    va_end(ap);
+
+    /* Don't pass back error results.  */
+    if (ret < 0) {
+        ret = 0;
     }
     return ret;
 }
@@ -97,6 +103,11 @@ void qemu_set_log(int log_flags)
         (is_daemonized() ? logfilename == NULL : !qemu_loglevel)) {
         qemu_log_close();
     }
+}
+
+void qemu_log_to_monitor(bool enable)
+{
+    to_monitor = enable;
 }
 
 void qemu_log_needs_buffers(void)
@@ -273,6 +284,9 @@ const QEMULogItem qemu_log_items[] = {
     { CPU_LOG_TB_NOCHAIN, "nochain",
       "do not chain compiled TBs so that \"exec\" and \"cpu\" show\n"
       "complete traces" },
+    { CPU_LOG_HOT_TBS, "hot_tbs(:limit)",
+      "show TBs (until given a limit) ordered by their hotness.\n"
+      "(if no limit is given, show all)" },
     { 0, NULL, NULL },
 };
 
@@ -294,6 +308,11 @@ int qemu_str_to_log_mask(const char *str)
             trace_enable_events((*tmp) + 6);
             mask |= LOG_TRACE;
 #endif
+        } else if (g_str_has_prefix(*tmp, "hot_tbs")) {
+            if (g_str_has_prefix(*tmp, "hot_tbs:") && (*tmp)[8] != '\0') {
+                max_num_hot_tbs_to_dump = atoi((*tmp) + 8);
+            }
+            mask |= CPU_LOG_HOT_TBS;
         } else {
             for (item = qemu_log_items; item->mask != 0; item++) {
                 if (g_str_equal(*tmp, item->name)) {
