@@ -288,6 +288,7 @@ ETEXI
         .params     = "",
         .help       = "show dynamic compiler info",
         .cmd        = hmp_info_jit,
+    },
     {
         .name       = "tbs",
         .args_type  = "number:i?,sortedby:s?",
