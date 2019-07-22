@@ -18,4 +18,10 @@ run-fcvt: fcvt
 AARCH64_TESTS += pauth-1 pauth-2
 run-pauth-%: QEMU += -cpu max
 
+AARCH64_TESTS += pauth-linux-test
+# newer compilers use -mbranch-protection=pac-ret
+pauth-linux-test: CFLAGS+=-msign-return-address=all
+pauth-linux-test: linux-test.c
+	$(CC) $(CFLAGS) $(EXTRA_CFLAGS) $< -o $@ $(LDFLAGS)
+
 TESTS:=$(AARCH64_TESTS)
