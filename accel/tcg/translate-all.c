@@ -1878,8 +1878,7 @@ TranslationBlock *tb_gen_code(CPUState *cpu,
             code_size = tcg_ctx->data_gen_ptr - tb->tc.ptr;
         }
 
-        atomic_add(&tb->tb_stats->code.num_host_inst,
-                    get_num_insts(tb->tc.ptr, code_size));
+        atomic_add(&tb->tb_stats->code.num_host_bytes, code_size);
     }
 
 

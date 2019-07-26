@@ -39,7 +39,7 @@ struct TBStatistics {
 
     struct {
         unsigned num_guest_inst;
-        unsigned num_host_inst;
+        unsigned num_host_bytes;
         unsigned num_tcg_ops;
         unsigned num_tcg_ops_opt;
         unsigned spills;
