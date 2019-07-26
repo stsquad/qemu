@@ -19,7 +19,6 @@ struct jit_profile_info {
     unsigned temps_max;
     uint64_t host;
     uint64_t guest;
-    uint64_t host_ins;
     uint64_t search_data;
 };
 
@@ -41,9 +40,8 @@ static void collect_jit_profile_info(void *p, uint32_t hash, void *userp)
             jpi->temps_max) {
         jpi->temps_max = tbs->code.temps / tbs->translations.total;
     }
-    jpi->host += tbs->code.out_len;
+    jpi->host += tbs->code.num_host_bytes;
     jpi->guest += tbs->code.in_len;
-    jpi->host_ins += tbs->code.num_host_inst;
     jpi->search_data += tbs->code.search_out_len;
 }
 
@@ -68,8 +66,6 @@ void dump_jit_profile_info(TCGProfile *s)
                 jpi->temps / (double) jpi->translations, jpi->temps_max);
         qemu_printf("avg host code/TB    %0.1f\n",
                 jpi->host / (double) jpi->translations);
-        qemu_printf("avg host ins/TB     %0.1f\n",
-                jpi->host_ins / (double) jpi->translations);
         qemu_printf("avg search data/TB  %0.1f\n",
                 jpi->search_data / (double) jpi->translations);
 
@@ -83,8 +79,6 @@ void dump_jit_profile_info(TCGProfile *s)
                         jpi->guest ? (double)tot / jpi->guest : 0);
             qemu_printf("cycles/out byte     %0.1f\n",
                         jpi->host ? (double)tot / jpi->host : 0);
-            qemu_printf("cycles/out inst     %0.1f\n",
-                        jpi->host_ins ? (double)tot / jpi->host_ins : 0);
             qemu_printf("cycles/search byte     %0.1f\n",
                         jpi->search_data ? (double)tot / jpi->search_data : 0);
             if (tot == 0) {
@@ -226,7 +220,7 @@ static void dump_tb_header(TBStatistics *tbs)
     unsigned ops_opt = tbs->translations.total ?
         tbs->code.num_tcg_ops_opt / tbs->translations.total : 0;
     unsigned h = tbs->translations.total ?
-        tbs->code.num_host_inst / tbs->translations.total : 0;
+        tbs->code.num_host_bytes / tbs->translations.total : 0;
     unsigned spills = tbs->translations.total ?
         tbs->code.spills / tbs->translations.total : 0;
 
@@ -265,8 +259,8 @@ inverse_sort_tbs(gconstpointer p1, gconstpointer p2, gpointer psort_by)
             return 1;
         }
 
-        float a = (float) tbs1->code.num_host_inst / tbs1->code.num_guest_inst;
-        float b = (float) tbs2->code.num_host_inst / tbs2->code.num_guest_inst;
+        float a = (float) tbs1->code.num_host_bytes / tbs1->code.num_guest_inst;
+        float b = (float) tbs2->code.num_host_bytes / tbs2->code.num_guest_inst;
         c1 = a <= b ? 0 : 1;
         c2 = a <= b ? 1 : 0;
     }

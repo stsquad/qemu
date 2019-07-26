@@ -48,7 +48,6 @@ struct TBStatistics {
         unsigned temps;
         unsigned deleted_ops;
         unsigned in_len;
-        unsigned out_len;
         unsigned search_out_len;
     } code;
 
