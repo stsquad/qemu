@@ -233,11 +233,12 @@ static void dump_tb_header(TBStatistics *tbs)
     float guest_host_prop = g ? ((float) h / g) : 0;
 
     qemu_log("TB%d: phys:0x"TB_PAGE_ADDR_FMT" virt:0x"TARGET_FMT_lx
-             " flags:%#08x (trans:%lu uncached:%lu exec:%lu ints: g:%u op:%u op_opt:%u h:%u h/g:%.2f spills:%d)\n",
+             " flags:%#08x (trans:%lu uncached:%lu exec:%lu/%lu ints: g:%u op:%u op_opt:%u h:%u h/g:%.2f spills:%d)\n",
              tbs->display_id,
              tbs->phys_pc, tbs->pc, tbs->flags,
              tbs->translations.total, tbs->translations.uncached,
-             tbs->executions.total, g, ops, ops_opt, h, guest_host_prop,
+             tbs->executions.normal, tbs->executions.atomic,
+             g, ops, ops_opt, h, guest_host_prop,
              spills);
 }
 
@@ -254,8 +255,8 @@ inverse_sort_tbs(gconstpointer p1, gconstpointer p2, gpointer psort_by)
         c1 = tbs1->code.spills;
         c2 = tbs2->code.spills;
     } else if (likely(sort_by == SORT_BY_HOTNESS)) {
-        c1 = tbs1->executions.total;
-        c2 = tbs2->executions.total;
+        c1 = tbs1->executions.normal;
+        c2 = tbs2->executions.normal;
     } else if (likely(sort_by == SORT_BY_HG)) {
         if (tbs1->code.num_guest_inst == 0) {
             return -1;
@@ -297,12 +298,12 @@ static void do_dump_coverset_info(int percentage)
     /* Compute total execution count for all tbs */
     for (i = last_search; i; i = i->next) {
         TBStatistics *tbs = (TBStatistics *) i->data;
-        total_exec_count += tbs->executions.total * tbs->code.num_guest_inst;
+        total_exec_count += tbs->executions.normal * tbs->code.num_guest_inst;
     }
 
     for (i = last_search; i; i = i->next) {
         TBStatistics *tbs = (TBStatistics *) i->data;
-        covered_exec_count += tbs->executions.total * tbs->code.num_guest_inst;
+        covered_exec_count += tbs->executions.normal * tbs->code.num_guest_inst;
         tbs->display_id = id++;
         coverset_size++;
         dump_tb_header(tbs);

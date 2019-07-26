@@ -172,5 +172,5 @@ void HELPER(inc_exec_freq)(void *ptr)
 {
     TBStatistics *stats = (TBStatistics *) ptr;
     g_assert(stats);
-    atomic_inc(&stats->executions.total);
+    atomic_inc(&stats->executions.normal);
 }

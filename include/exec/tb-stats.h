@@ -33,7 +33,7 @@ struct TBStatistics {
 
     /* Execution stats */
     struct {
-        unsigned long total;
+        unsigned long normal;
         unsigned long atomic;
     } executions;
 
