@@ -211,12 +211,13 @@ static void collect_tb_stats(void *p, uint32_t hash, void *userp)
     last_search = g_list_prepend(last_search, p);
 }
 
+#define stat_per_translation(stat, name) \
+    stat->translations.total ? stat->name / stat->translations.total : 0
+
 static void dump_tb_header(TBStatistics *tbs)
 {
-    unsigned g = tbs->translations.total ?
-        tbs->code.num_guest_inst / tbs->translations.total : 0;
-    unsigned ops = tbs->translations.total ?
-        tbs->code.num_tcg_ops / tbs->translations.total : 0;
+    unsigned g = stat_per_translation(tbs, code.num_guest_inst);
+    unsigned ops = stat_per_translation(tbs, code.num_tcg_ops);
     unsigned ops_opt = tbs->translations.total ?
         tbs->code.num_tcg_ops_opt / tbs->translations.total : 0;
     unsigned h = tbs->translations.total ?
@@ -437,7 +438,9 @@ static void do_tb_dump_with_statistics(TBStatistics *tbs, int log_flags)
 
     qemu_set_log(old_log_flags);
 
-    tcg_tb_remove(tb);
+    if (tb) {
+        tcg_tb_remove(tb);
+    }
 }
 
 struct tb_dump_info {
