@@ -781,6 +781,8 @@ void tcg_register_thread(void)
     g_assert(n < ms->smp.max_cpus);
     atomic_set(&tcg_ctxs[n], s);
 
+    s->notes = g_array_new(true, false, sizeof(TCGNote));
+
     tcg_ctx = s;
     qemu_mutex_lock(&region.lock);
     err = tcg_region_initial_alloc__locked(tcg_ctx);
@@ -977,6 +979,8 @@ void tcg_context_init(TCGContext *s)
         indirect_reg_alloc_order[i] = tcg_target_reg_alloc_order[i];
     }
 
+    s->notes = g_array_new(true, false, sizeof(TCGNote));
+
     tcg_ctx = s;
     /*
      * In user-mode we simply share the init context among threads, since we
@@ -1078,7 +1082,7 @@ void tcg_prologue_init(TCGContext *s)
             size_t data_size = prologue_size - code_size;
             size_t i;
 
-            log_disas(buf0, code_size);
+            log_disas(buf0, code_size, s);
 
             for (i = 0; i < data_size; i += sizeof(tcg_target_ulong)) {
                 if (sizeof(tcg_target_ulong) == 8) {
@@ -1092,7 +1096,7 @@ void tcg_prologue_init(TCGContext *s)
                 }
             }
         } else {
-            log_disas(buf0, prologue_size);
+            log_disas(buf0, prologue_size, s);
         }
         qemu_log("\n");
         qemu_log_flush();
@@ -3124,6 +3128,10 @@ static void temp_sync(TCGContext *s, TCGTemp *ts, TCGRegSet allocated_regs,
             /* fallthrough */
 
         case TEMP_VAL_REG:
+        {
+            TCGNote n = { REGISTER_SPILL, s->code_ptr };
+            g_array_append_val(s->notes, n);
+            
             tcg_out_st(s, ts->type, ts->reg,
                        ts->mem_base->reg, ts->mem_offset);
 
@@ -3132,7 +3140,7 @@ static void temp_sync(TCGContext *s, TCGTemp *ts, TCGRegSet allocated_regs,
                 atomic_inc(&s->current_tb->tb_stats->code.spills);
             }
             break;
-
+        }
         case TEMP_VAL_MEM:
             break;
 
@@ -4133,6 +4141,9 @@ int tcg_gen_code(TCGContext *s, TranslationBlock *tb)
             tcg_reg_alloc_dup(s, op);
             break;
         case INDEX_op_insn_start:
+        {
+            TCGNote n = { INSN_START, s->code_ptr };
+            g_array_append_val(s->notes, n);
             if (num_insns >= 0) {
                 size_t off = tcg_current_code_size(s);
                 s->gen_insn_end_off[num_insns] = off;
@@ -4150,6 +4161,7 @@ int tcg_gen_code(TCGContext *s, TranslationBlock *tb)
                 s->gen_insn_data[num_insns][i] = a;
             }
             break;
+        }
         case INDEX_op_discard:
             temp_dead(s, arg_temp(op->args[0]));
             break;
@@ -4220,6 +4232,27 @@ void tcg_dump_info(void)
 #endif
     dump_jit_profile_info(s);
 }
+
+void tcg_disas_annotation(FILE *out, void *opaque, uintptr_t pc)
+{
+    TCGContext *s = (TCGContext *) opaque;
+    int i;
+
+    for (i = 0; i < s->notes->len; i++) {
+        TCGNote *n = &g_array_index(s->notes, TCGNote, i);
+        if (n->start == (tcg_insn_unit *) pc) {
+            switch (n->e) {
+            case INSN_START:
+                fprintf(out, "\tinsn");
+                break;
+            case REGISTER_SPILL:
+                fprintf(out, "\tspill");
+                break;
+            }
+        }
+    }
+}
+
 
 #ifdef ELF_HOST_MACHINE
 /* In order to use this feature, the backend needs to do three things:

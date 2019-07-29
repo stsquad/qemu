@@ -342,7 +342,7 @@ static bool cap_disas_target(disassemble_info *info, uint64_t pc, size_t size)
 }
 
 /* Disassemble SIZE bytes at CODE for the host.  */
-static bool cap_disas_host(disassemble_info *info, void *code, size_t size)
+static bool cap_disas_host(disassemble_info *info, void *code, size_t size, void *opaque)
 {
     csh handle;
     const uint8_t *cbuf;
@@ -359,6 +359,7 @@ static bool cap_disas_host(disassemble_info *info, void *code, size_t size)
 
     while (cs_disasm_iter(handle, &cbuf, &size, &pc, insn)) {
        cap_dump_insn(info, insn);
+       tcg_disas_annotation(stderr, opaque, pc);
     }
     if (size != 0) {
         (*info->fprintf_func)(info->stream,
@@ -416,7 +417,7 @@ static bool cap_disas_monitor(disassemble_info *info, uint64_t pc, int count)
 #endif /* !CONFIG_USER_ONLY */
 #else
 # define cap_disas_target(i, p, s)  false
-# define cap_disas_host(i, p, s)  false
+# define cap_disas_host(i, p, s, o)  false
 # define cap_disas_monitor(i, p, c)  false
 #endif /* CONFIG_CAPSTONE */
 
@@ -462,7 +463,6 @@ void target_disas(FILE *out, CPUState *cpu, target_ulong code,
     for (pc = code; size > 0; pc += count, size -= count) {
 	fprintf(out, "0x" TARGET_FMT_lx ":  ", pc);
 	count = s.info.print_insn(pc, &s.info);
-	fprintf(out, "\n");
 	if (count < 0)
 	    break;
         if (size < count) {
@@ -477,7 +477,7 @@ void target_disas(FILE *out, CPUState *cpu, target_ulong code,
 
 
 /* Disassemble this for me please... (debugging). */
-void disas(FILE *out, void *code, unsigned long size)
+void disas(FILE *out, void *code, unsigned long size, void *opaque)
 {
     uintptr_t pc;
     int count;
@@ -555,7 +555,7 @@ void disas(FILE *out, void *code, unsigned long size)
     print_insn = print_insn_hppa;
 #endif
 
-    if (s.info.cap_arch >= 0 && cap_disas_host(&s.info, code, size)) {
+    if (s.info.cap_arch >= 0 && cap_disas_host(&s.info, code, size, opaque)) {
         return;
     }
 
@@ -565,9 +565,10 @@ void disas(FILE *out, void *code, unsigned long size)
     for (pc = (uintptr_t)code; size > 0; pc += count, size -= count) {
         fprintf(out, "0x%08" PRIxPTR ":  ", pc);
         count = print_insn(pc, &s.info);
-	fprintf(out, "\n");
-	if (count < 0)
-	    break;
+        tcg_disas_annotation(out, opaque, pc);
+        fprintf(out, "\n");
+        if (count < 0)
+            break;
     }
 }
 

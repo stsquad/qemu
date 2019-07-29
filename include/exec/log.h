@@ -43,10 +43,12 @@ static inline void log_target_disas(CPUState *cpu, target_ulong start,
     target_disas(qemu_logfile, cpu, start, len);
 }
 
-static inline void log_disas(void *code, unsigned long size)
+static inline void log_disas(void *code, unsigned long size, void *s)
 {
-    disas(qemu_logfile, code, size);
+    disas(qemu_logfile, code, size, s);
 }
+
+void tcg_disas_annotation(FILE *out, void *opaque, uintptr_t pc);
 
 #if defined(CONFIG_USER_ONLY)
 /* page_dump() output to the log file: */

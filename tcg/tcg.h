@@ -653,6 +653,21 @@ typedef struct TCGProfile {
     int64_t table_op_count[NB_OPS];
 } TCGProfile;
 
+/*
+ * TCGNote entries are used to track points in the outgoing instruction stream
+ * for better debug output.
+ */
+
+typedef enum {
+    INSN_START,
+    REGISTER_SPILL
+} TCGEvent;
+
+typedef struct {
+    TCGEvent e;
+    tcg_insn_unit *start;
+} TCGNote;
+
 struct TCGContext {
     uint8_t *pool_cur, *pool_end;
     TCGPool *pool_first, *pool_current, *pool_first_large;
@@ -686,6 +701,8 @@ struct TCGContext {
     int goto_tb_issue_mask;
     const TCGOpcode *vecop_list;
 #endif
+
+    GArray *notes;
 
     /* Code generation.  Note that we specifically do not use tcg_insn_unit
        here, because there's too much arithmetic throughout that relies

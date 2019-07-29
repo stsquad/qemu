@@ -5,8 +5,10 @@
 #ifdef NEED_CPU_H
 #include "cpu.h"
 
+void tcg_disas_annotation(FILE *out, void *opaque, uintptr_t pc);
+
 /* Disassemble this for me please... (debugging). */
-void disas(FILE *out, void *code, unsigned long size);
+void disas(FILE *out, void *code, unsigned long size, void *s);
 void target_disas(FILE *out, CPUState *cpu, target_ulong code,
                   target_ulong size);
 
