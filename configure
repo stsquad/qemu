@@ -6472,7 +6472,7 @@ fi
   export $i
 done
 export target_list source_path
-${SHELL-/bin/sh} $source_path/tests/tcg/configure.sh)
+$source_path/tests/tcg/configure.sh)
 
 config_host_mak="config-host.mak"
 
