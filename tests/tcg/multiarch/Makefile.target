@@ -13,7 +13,7 @@ MULTIARCH_SRCS   =$(notdir $(wildcard $(MULTIARCH_SRC)/*.c))
 MULTIARCH_TESTS  =$(MULTIARCH_SRCS:.c=)
 
 # Update TESTS
-TESTS		+=$(MULTIARCH_TESTS)
+TESTS		+= $(filter-out $(BROKEN_TESTS), $(MULTIARCH_TESTS))
 
 #
 # The following are any additional rules needed to build things
