@@ -146,4 +146,7 @@ enum TBStatsStatus {
 extern int tcg_collect_tb_stats;
 extern uint32_t default_tbstats_flag;
 
+void jitdump_enable(void);
+bool jitdump_enabled(void);
+
 #endif
