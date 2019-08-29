@@ -1776,8 +1776,6 @@ TranslationBlock *tb_gen_code(CPUState *cpu,
  tb_overflow:
 
 #ifdef CONFIG_PROFILER
-    /* includes aborted translations because of exceptions */
-    atomic_set(&prof->tb_count1, prof->tb_count1 + 1);
     ti = profile_getclock();
 #endif
 
@@ -1793,6 +1791,7 @@ TranslationBlock *tb_gen_code(CPUState *cpu,
     } else {
         tb->tb_stats = NULL;
     }
+
 
     tcg_func_start(tcg_ctx);
 
@@ -1815,7 +1814,6 @@ TranslationBlock *tb_gen_code(CPUState *cpu,
     }
 
 #ifdef CONFIG_PROFILER
-    atomic_set(&prof->tb_count, prof->tb_count + 1);
     atomic_set(&prof->interm_time, prof->interm_time + profile_getclock() - ti);
     ti = profile_getclock();
 #endif
@@ -1862,9 +1860,6 @@ TranslationBlock *tb_gen_code(CPUState *cpu,
 
 #ifdef CONFIG_PROFILER
     atomic_set(&prof->code_time, prof->code_time + profile_getclock() - ti);
-    atomic_set(&prof->code_in_len, prof->code_in_len + tb->size);
-    atomic_set(&prof->code_out_len, prof->code_out_len + gen_code_size);
-    atomic_set(&prof->search_out_len, prof->search_out_len + search_size);
 #endif
 
 #ifdef DEBUG_DISAS
@@ -1938,7 +1933,11 @@ TranslationBlock *tb_gen_code(CPUState *cpu,
         ts->code.num_tcg_ops += prof->translation.nb_ops_pre_opt;
         ts->code.num_tcg_ops_opt += tcg_ctx->nb_ops;
         ts->code.spills += prof->translation.nb_spills;
+        ts->code.temps += prof->translation.temp_count;
+        ts->code.deleted_ops += prof->translation.del_op_count;
+        ts->code.in_len += tb->size;
         ts->code.out_len += tb->tc.size;
+        ts->code.search_out_len += search_size;
 
         ts->translations.total++;
         if (phys_page2 != -1) {
