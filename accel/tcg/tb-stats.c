@@ -21,6 +21,7 @@ enum TBStatsStatus {
 };
 
 static enum TBStatsStatus tcg_collect_tb_stats;
+static uint32_t default_tbstats_flag;
 
 void init_tb_stats_htable(void)
 {
@@ -54,4 +55,9 @@ bool tb_stats_collection_enabled(void)
 bool tb_stats_collection_paused(void)
 {
     return tcg_collect_tb_stats == TB_STATS_PAUSED;
+}
+
+uint32_t get_default_tbstats_flag(void)
+{
+    return default_tbstats_flag;
 }
