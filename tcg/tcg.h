@@ -594,6 +594,9 @@ typedef struct TCGProfile {
     uint64_t gen_opt_done_time;
     uint64_t gen_la_done_time;
     uint64_t gen_code_done_time;
+
+    /* Lifetime count of TCGOps per TCGContext */
+    uint64_t table_op_count[NB_OPS];
 } TCGProfile;
 
 struct TCGContext {
@@ -969,7 +972,7 @@ int tcg_check_temp_count(void);
 #define tcg_check_temp_count() 0
 #endif
 
-int64_t tcg_cpu_exec_time(void);
+uint64_t tcg_cpu_exec_time(void);
 void tcg_dump_info(void);
 void tcg_dump_op_count(void);
 
