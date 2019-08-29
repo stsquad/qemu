@@ -1689,6 +1689,8 @@ static TBStatistics *tb_get_stats(tb_page_addr_t phys_pc, target_ulong pc,
     new_stats->cs_base = cs_base;
     new_stats->flags = flags;
     new_stats->stats_enabled = get_default_tbstats_flag();
+    new_stats->tbs = g_ptr_array_sized_new(4);
+    qemu_mutex_init(&new_stats->jit_stats_lock);
 
     /*
      * All initialisation must be complete before we insert into qht
@@ -1702,6 +1704,7 @@ static TBStatistics *tb_get_stats(tb_page_addr_t phys_pc, target_ulong pc,
          * If there is already a TBStatistic for this TB from a previous flush
          * then just make the new TB point to the older TBStatistic
          */
+        g_ptr_array_free(new_stats->tbs, true);
         g_free(new_stats);
         return existing_stats;
     } else {
@@ -1721,8 +1724,8 @@ TranslationBlock *tb_gen_code(CPUState *cpu,
     target_ulong virt_page2;
     tcg_insn_unit *gen_code_buf;
     int gen_code_size, search_size, max_insns;
-#ifdef CONFIG_PROFILER
     TCGProfile *prof = &tcg_ctx->prof;
+#ifdef CONFIG_PROFILER
     int64_t ti;
 #endif
 
@@ -1922,6 +1925,31 @@ TranslationBlock *tb_gen_code(CPUState *cpu,
     if ((pc & TARGET_PAGE_MASK) != virt_page2) {
         phys_page2 = get_page_addr_code(env, virt_page2);
     }
+
+    /*
+     * Collect JIT stats when enabled. We batch them all up here to
+     * avoid spamming the cache with atomic accesses
+     */
+    if (tb_stats_enabled(tb, TB_JIT_STATS)) {
+        TBStatistics *ts = tb->tb_stats;
+        qemu_mutex_lock(&ts->jit_stats_lock);
+
+        ts->code.num_guest_inst += prof->translation.nb_guest_insns;
+        ts->code.num_tcg_ops += prof->translation.nb_ops_pre_opt;
+        ts->code.num_tcg_ops_opt += tcg_ctx->nb_ops;
+        ts->code.spills += prof->translation.nb_spills;
+        ts->code.out_len += tb->tc.size;
+
+        ts->translations.total++;
+        if (phys_page2 != -1) {
+            ts->translations.spanning++;
+        }
+
+        g_ptr_array_add(ts->tbs, tb);
+
+        qemu_mutex_unlock(&ts->jit_stats_lock);
+    }
+
     /*
      * No explicit memory barrier is required -- tb_link_page() makes the
      * TB visible in a consistent state.
