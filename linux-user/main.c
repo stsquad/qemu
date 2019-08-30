@@ -378,6 +378,11 @@ static void handle_arg_strace(const char *arg)
     do_strace = 1;
 }
 
+static void handle_arg_perf(const char *arg)
+{
+    enable_jitdump();
+}
+
 static void handle_arg_version(const char *arg)
 {
     printf("qemu-" TARGET_NAME " version " QEMU_FULL_VERSION
@@ -463,6 +468,8 @@ static const struct qemu_argument arg_table[] = {
     {"plugin",     "QEMU_PLUGIN",      true,  handle_arg_plugin,
      "",           "[file=]<file>[,arg=<string>]"},
 #endif
+    {"perf",      "QEMU_PERF",         false, handle_arg_perf,
+     "",           "dump jitdump files to help linux perf JIT code visualization"},
     {"version",    "QEMU_VERSION",     false, handle_arg_version,
      "",           "display version information and exit"},
 #if defined(TARGET_XTENSA)
