@@ -150,6 +150,17 @@ void append_load_in_jitdump_file(TranslationBlock *tb)
 
     g_string_append_printf(func_name, "0x"TARGET_FMT_lx, tb->pc);
 
+    if (tb->tb_stats) {
+        TBStatistics *tbs = tb->tb_stats;
+        unsigned g = stat_per_translation(tbs, code.num_guest_inst);
+        unsigned ops = stat_per_translation(tbs, code.num_tcg_ops);
+        unsigned ops_opt = stat_per_translation(tbs, code.num_tcg_ops_opt);
+        unsigned spills = stat_per_translation(tbs, code.spills);
+
+        g_string_append_printf(func_name, " (g:%u op:%u opt:%u spills:%d)",
+                               g, ops, ops_opt, spills);
+    }
+
     /* Serialise the writing of the dump file */
     qemu_mutex_lock(&dumpfile_lock);
 
