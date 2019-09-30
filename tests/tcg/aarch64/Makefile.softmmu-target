@@ -7,6 +7,7 @@ VPATH+=$(AARCH64_SYSTEM_SRC)
 
 # These objects provide the basic boot code and helper functions for all tests
 CRT_OBJS=boot.o
+CRTEL2_OBJS=boot_el2_vhe.o
 
 AARCH64_TEST_SRCS=$(wildcard $(AARCH64_SYSTEM_SRC)/*.c)
 AARCH64_TESTS = $(patsubst $(AARCH64_SYSTEM_SRC)/%.c, %, $(AARCH64_TEST_SRCS))
@@ -16,19 +17,35 @@ LINK_SCRIPT=$(AARCH64_SYSTEM_SRC)/kernel.ld
 LDFLAGS=-Wl,-T$(LINK_SCRIPT)
 TESTS+=$(AARCH64_TESTS) $(MULTIARCH_TESTS)
 CFLAGS+=-nostdlib -ggdb -O0 $(MINILIB_INC)
-LDFLAGS+=-static -nostdlib $(CRT_OBJS) $(MINILIB_OBJS) -lgcc
+LDFLAGS+=-static -nostdlib
+LDFLAGS_EL2=$(LDFLAGS) $(CRTEL2_OBJS) $(MINILIB_OBJS) -lgcc
+LDFLAGS_EL1=$(LDFLAGS) $(CRT_OBJS) $(MINILIB_OBJS) -lgcc
+
+$(info LDFLAGS_EL2=$(LDFLAGS_EL2))
+$(info LDFLAGS_EL1=$(LDFLAGS_EL1))
 
 # building head blobs
-.PRECIOUS: $(CRT_OBJS)
+.PRECIOUS: $(CRT_OBJS) $(CRTEL2_OBJS)
 
 %.o: $(CRT_PATH)/%.S
 	$(CC) $(CFLAGS) $(EXTRA_CFLAGS) -x assembler-with-cpp -c $< -o $@
 
 # Build and link the tests
 %: %.c $(LINK_SCRIPT) $(CRT_OBJS) $(MINILIB_OBJS)
-	$(CC) $(CFLAGS) $(EXTRA_CFLAGS) $< -o $@ $(LDFLAGS)
+	$(CC) $(CFLAGS) $(EXTRA_CFLAGS) $< -o $@ $(LDFLAGS_EL1)
+
+# Building a test which runs in EL2
+%-el2: %.c $(LINK_SCRIPT) $(CRTEL2_OBJS) $(MINILIB_OBJS)
+	$(CC) $(CFLAGS) $(EXTRA_CFLAGS) $< -o $@ $(LDFLAGS_EL2)
 
 memory: CFLAGS+=-DCHECK_UNALIGNED=1
 
+# Additional variants
+memory-el2: CFLAGS+=-DCHECK_UNALIGNED=1
+
+run-memory-el2: QEMU_OPTS=-machine type=virt,virtualization=on,gic-version=3 -cpu max -display none -semihosting-config enable=on,target=native,chardev=output -kernel
+
+TESTS+=memory-el2
+
 # Running
-QEMU_OPTS+=-M virt -cpu max -display none -semihosting-config enable=on,target=native,chardev=output -kernel
+QEMU_OPTS=-M virt -cpu max -display none -semihosting-config enable=on,target=native,chardev=output -kernel
