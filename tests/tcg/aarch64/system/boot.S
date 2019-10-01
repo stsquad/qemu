@@ -53,6 +53,14 @@ vector_table:
 	.text
 	.align 4
 
+	/* Special handling */
+lower_a64_sync:
+	stp 	x0, x1, [sp, #-16]!
+	mov	x0, __svc_handler
+	msr	elr_el1, x0
+	ldp 	x0, x1, [sp], #16
+	ret
+
 	/* Common vector handling for now */
 curr_sp0_sync:
 curr_sp0_irq:
@@ -62,7 +70,6 @@ curr_spx_sync:
 curr_spx_irq:
 curr_spx_fiq:
 curr_spx_serror:
-lower_a64_sync:
 lower_a64_irq:
 lower_a64_fiq:
 lower_a64_serror:
@@ -232,6 +239,11 @@ ttb:
 	.align	12
 ttb_stage2:
 	.space	4096, 0
+
+	.align  12
+	.global __svc_handler
+__svc_handler:
+	.long lower_a64_irq
 
 	.align	12
 stack:

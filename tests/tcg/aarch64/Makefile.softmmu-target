@@ -27,8 +27,11 @@ $(info LDFLAGS_EL1=$(LDFLAGS_EL1))
 # building head blobs
 .PRECIOUS: $(CRT_OBJS) $(CRTEL2_OBJS)
 
+boot_el2_vhe.o: CFLAGS=-march=armv8.2-a
+
 %.o: $(CRT_PATH)/%.S
 	$(CC) $(CFLAGS) $(EXTRA_CFLAGS) -x assembler-with-cpp -c $< -o $@
+
 
 # Build and link the tests
 %: %.c $(LINK_SCRIPT) $(CRT_OBJS) $(MINILIB_OBJS)

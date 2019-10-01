@@ -57,7 +57,15 @@ vector_table:
 	.text
 	.align 4
 
-	/* Common vector handling for now */
+	/* Special handling */
+lower_a64_sync:
+	stp 	x0, x1, [sp, #-16]!
+	mov	x0, __svc_handler
+	msr	elr_el2, x0
+	ldp 	x0, x1, [sp], #16
+	ret
+
+	/* The rest are considered error conditions  */
 curr_sp0_sync:
 curr_sp0_irq:
 curr_sp0_fiq:
@@ -66,7 +74,6 @@ curr_spx_sync:
 curr_spx_irq:
 curr_spx_fiq:
 curr_spx_serror:
-lower_a64_sync:
 lower_a64_irq:
 lower_a64_fiq:
 lower_a64_serror:
@@ -161,7 +168,11 @@ __start:
 	orr 	x1, x0, #3 			/* ptr to stage 2 */
 	str	x1, [x2]
 
-	/* Stage 2 entries: indexed by IA[29:21] */
+	/*
+	 * Stage 2 entries: indexed by IA[29:21]
+	 *
+	 * We enable access for EL0 to keep everything flat
+	 */
 	ldr	x5, =(((1 << 9) - 1) << 21)
 
 	/* First block: .text/RO/execute enabled */
@@ -169,7 +180,7 @@ __start:
 	bic	x1, x1, #(1 << 21) - 1		/* 2mb block alignment	*/
 	and	x4, x1, x5			/* IA[29:21] */
 	add	x2, x0, x4, lsr #(21 - 3)	/* offset in l2 page table */
-	ldr	x3, =0x401			/* attr(AF, block) */
+	ldr	x3, =0x441			/* attr(AF, block, ro/ro) */
 	orr	x1, x1, x3
 	str	x1, [x2]			/* 1st 2mb (.text & rodata) */
 
@@ -179,7 +190,7 @@ __start:
 	bic	x1, x1, #(1 << 21) - 1		/* 2mb block alignment */
 	and	x4, x1, x5			/* IA[29:21] */
 	add	x2, x0, x4, lsr #(21 - 3)	/* offset in l2 page table */
-	ldr	x3, =(3 << 53) | 0x401		/* attr(AF, NX, block) */
+	ldr	x3, =(3 << 53) | 0x4c1		/* attr(AF, NX, rw/rw,block) */
 	orr	x1, x1, x3
 	str	x1, [x2]			/* 2nd 2mb (.data & .bss)*/
 
@@ -243,6 +254,11 @@ __start:
 	adrp	x0, stack_end
 	add	x0, x0, :lo12:stack_end
 	mov	sp, x0
+
+	adrp	x0, el0_stack_end
+	add	x0, x0, :lo12:el0_stack_end
+	msr	sp_el0, x0
+
 	bl	main
 
 	/* pass return value to sys exit */
@@ -282,7 +298,17 @@ ttb:
 ttb_stage2:
 	.space	4096, 0
 
+	.align  12
+	.global __svc_handler
+__svc_handler:
+	.long error_exit
+
 	.align	12
 stack:
 	.space 65536, 0
 stack_end:
+
+	.align 12
+el0_stack:
+	.space 65536, 0
+el0_stack_end:
