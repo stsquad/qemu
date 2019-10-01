@@ -34,7 +34,7 @@
 #include "qemu/atomic.h"
 #include "qemu/atomic128.h"
 
-/* DEBUG defines, enable DEBUG_TLB_LOG to log to the CPU_LOG_MMU target */
+/* DEBUG defines, enable DEBUG_TLB_LOG to log to the CPU_LOG_SMMU target */
 /* #define DEBUG_TLB */
 /* #define DEBUG_TLB_LOG */
 
@@ -52,7 +52,7 @@
 
 #define tlb_debug(fmt, ...) do { \
     if (DEBUG_TLB_LOG_GATE) { \
-        qemu_log_mask(CPU_LOG_MMU, "%s: " fmt, __func__, \
+        qemu_log_mask(CPU_LOG_SMMU, "%s: " fmt, __func__, \
                       ## __VA_ARGS__); \
     } else if (DEBUG_TLB_GATE) { \
         fprintf(stderr, "%s: " fmt, __func__, ## __VA_ARGS__); \
@@ -727,9 +727,9 @@ void tlb_set_page_with_attrs(CPUState *cpu, target_ulong vaddr,
                                                 &xlat, &sz, attrs, &prot);
     assert(sz >= TARGET_PAGE_SIZE);
 
-    tlb_debug("vaddr=" TARGET_FMT_lx " paddr=0x" TARGET_FMT_plx
-              " prot=%x idx=%d\n",
-              vaddr, paddr, prot, mmu_idx);
+    qemu_log_mask(CPU_LOG_SMMU, "%s: vaddr=" TARGET_FMT_lx
+                  " paddr=0x" TARGET_FMT_plx " prot=%x idx=%d\n",
+                  __func__, vaddr, paddr, prot, mmu_idx);
 
     address = vaddr_page;
     if (size < TARGET_PAGE_SIZE) {
