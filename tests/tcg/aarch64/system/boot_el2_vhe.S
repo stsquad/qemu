@@ -135,8 +135,8 @@ __start:
 	 */
 
 	mov	x0, #HCR_E2H
-	orr 	x0, x0, #HCR_TGE
-	orr 	x0, x0, #HCR_RW
+	orr	x0, x0, #HCR_TGE
+	orr	x0, x0, #HCR_RW
 	msr	hcr_el2, x0
 	isb
 
@@ -179,24 +179,25 @@ __start:
 	 *
 	 * We enable access for EL0 to keep everything flat
 	 */
-	ldr	x5, =(((1 << 9) - 1) << 21)
 
 	/* First block: .text/RO/execute enabled */
 	adr	x1, .				/* phys address */
-	bic	x1, x1, #(1 << 21) - 1		/* 2mb block alignment	*/
-	and	x4, x1, x5			/* IA[29:21] */
+	and	x4, x1, #(((1 << 9) - 1) << 21)	/* IA[29:21] */
 	add	x2, x0, x4, lsr #(21 - 3)	/* offset in l2 page table */
-	ldr	x3, =0x441			/* attr(AF, block, ro/ro) */
+
+	bic	x1, x1, #(1 << 21) - 1		/* 2mb block alignment	*/
+	mov	x3, #0x401			/* attr(AF, block, ro/ro) */
 	orr	x1, x1, x3
 	str	x1, [x2]			/* 1st 2mb (.text & rodata) */
 
 	/* Second block: .data/RW/no execute */
 	adrp	x1, .data
-	add	x1, x1, :lo12:.data
-	bic	x1, x1, #(1 << 21) - 1		/* 2mb block alignment */
-	and	x4, x1, x5			/* IA[29:21] */
+	and	x4, x1, #(((1 << 9) - 1) << 21)	/* IA[29:21] */
 	add	x2, x0, x4, lsr #(21 - 3)	/* offset in l2 page table */
-	ldr	x3, =(3 << 53) | 0x4c1		/* attr(AF, NX, rw/rw,block) */
+
+	bic	x1, x1, #(1 << 21) - 1		/* 2mb block alignment */
+	mov	x3, #3 << 53			/* attr(XN, PXN) */
+	movk	x3, #0x4c1			/* attr(AF, rw/rw,block) */
 	orr	x1, x1, x3
 	str	x1, [x2]			/* 2nd 2mb (.data & .bss)*/
 
@@ -217,7 +218,8 @@ __start:
 	 * with at least 1gb range to see RAM. So we start with a
 	 * level 1 lookup.
 	 */
-	ldr	x0, = (2 << 32) | 25 | (3 << 10) | (3 << 8)
+	mov	x0, #2 << 32
+	movk	x0, #(3 << 10) | (3 << 8) | 25
 	msr	tcr_el2, x0
 
 	mov	x0, #0xee			/* Inner/outer cacheable WB */
@@ -234,9 +236,9 @@ __start:
 	 * M[0] = 1, enable stage 1 address translation for EL0/2
 	 */
 	mrs	x0, sctlr_el2
-	ldr	x1, =0x100d			/* bits I(12) SA(3) C(2) M(0) */
 	bic	x0, x0, #(1 << 1)		/* clear bit A(1) */
 	bic	x0, x0, #(1 << 19)		/* clear WXN */
+	mov	x1, #0x100d			/* bits I(12) SA(3) C(2) M(0) */
 	orr	x0, x0, x1			/* set bits */
 
 	dsb	sy
@@ -268,11 +270,11 @@ __start:
 	bl	main
 
 	/* pass return value to sys exit */
-	mov    x1, x0
-	ldr    x0, =0x20026 /* ADP_Stopped_ApplicationExit */
-	stp    x0, x1, [sp, #-16]!
-	mov    x1, sp
-	mov    x0, SYS_EXIT
+	mov	x1, #0x20000
+	movk	x1, #0x00026  /* 0x20026 -- ADP_Stopped_ApplicationExit */
+	stp	x1, x0, [sp, #-16]!
+	mov	x1, sp
+	mov	x0, SYS_EXIT
 	semihosting_call
 	/* never returns */
 
@@ -283,12 +285,12 @@ __start:
 	/* Output a single character to serial port */
 	.global __sys_outc
 __sys_outc:
-	stp x0, x1, [sp, #-16]!
+	stp	x0, x1, [sp, #-16]!
 	/* pass address of c on stack */
-	mov x1, sp
-	mov x0, SYS_WRITEC
+	mov	x1, sp
+	mov	x0, SYS_WRITEC
 	semihosting_call
-	ldp x0, x1, [sp], #16
+	ldp	x0, x1, [sp], #16
 	ret
 
 	.data
