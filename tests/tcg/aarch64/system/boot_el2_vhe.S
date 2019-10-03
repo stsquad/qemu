@@ -22,13 +22,16 @@
 #define HCR_RW		(1UL << 31)
 #define HCR_TGE	(1UL << 27)
 
-	.align	12
-
 	.macro	ventry	label
 	.align	7
+	.type	ventry_\label, %function
+	.size	ventry_\label, 128
+ventry_\label:
 	b	\label
 	.endm
 
+	.text
+	.align	7
 vector_table:
 	/* Current EL with SP0.	 */
 	ventry	curr_sp0_sync		/* Synchronous	*/
@@ -54,18 +57,21 @@ vector_table:
 	ventry	lower_a32_fiq		/* FIQ/vFIQ  */
 	ventry	lower_a32_serror	/* SError/VSError  */
 
-	.text
-	.align 4
+	.align	7
 
 	/* Special handling */
+	.type	lower_a64_sync, %function
 lower_a64_sync:
 	stp 	x0, x1, [sp, #-16]!
 	mov	x0, __svc_handler
 	msr	elr_el2, x0
 	ldp 	x0, x1, [sp], #16
 	ret
+.size	lower_a64_sync, . - lower_a64_sync
 
 	/* The rest are considered error conditions  */
+	.type	some_exception, %function
+some_exception:
 curr_sp0_sync:
 curr_sp0_irq:
 curr_sp0_fiq:
@@ -81,7 +87,11 @@ lower_a32_sync:
 lower_a32_irq:
 lower_a32_fiq:
 lower_a32_serror:
-	adr	x1, .error
+	adr	x1, term_error
+	/* fall through */
+.size some_exception, . - some_exception
+
+	.type error_exit, %function
 error_exit:
 	mov	x0, SYS_WRITE0
 	semihosting_call
@@ -89,20 +99,25 @@ error_exit:
 	mov	x1, 1
 	semihosting_call
 	/* never returns */
+.size error_exit, . - error_exit
 
 	.section .rodata
-.error:
+	.type	term_error, %object
+term_error:
 	.string "Terminated by exception.\n"
 
+	.type	not_el2, %object
 not_el2:
 	.string "Not in EL2.\n"
 
+	.type	no_vhe, %object
 no_vhe:
 	.string "No VHE support\n"
 
 	.text
 	.align 4
 	.global __start
+	.type	__start, %function
 __start:
 	/*
 	 * Check and enable VHE so we can proceed like a normal EL1
@@ -278,12 +293,15 @@ __start:
 	semihosting_call
 	/* never returns */
 
+.size __start, . - __start
+
 	/*
 	 * Helper Functions
-	*/
+	 */
 
 	/* Output a single character to serial port */
 	.global __sys_outc
+	.type	__sys_outc, %function
 __sys_outc:
 	stp	x0, x1, [sp, #-16]!
 	/* pass address of c on stack */
@@ -293,30 +311,42 @@ __sys_outc:
 	ldp	x0, x1, [sp], #16
 	ret
 
+.size __sys_outc, . - __sys_outc
+
 	.data
 	.align	12
 
 	/* Translation table
 	 * @4k granuale: 9 bit lookup, 512 entries
 	*/
+	.type	ttb, %object
+	.size	ttb, 4096
 ttb:
 	.space	4096, 0
 
 	.align	12
+	.type	ttb_stage2, %object
+	.size	ttb_stage2, 4096
 ttb_stage2:
 	.space	4096, 0
 
-	.align  12
-	.global __svc_handler
-__svc_handler:
-	.long error_exit
-
 	.align	12
+	.type	stack, %object
+	.size	stack, 65536
 stack:
 	.space 65536, 0
 stack_end:
 
 	.align 12
+	.type	el0_stack, %object
+	.size	el0_stack, 65536
 el0_stack:
 	.space 65536, 0
 el0_stack_end:
+
+	.global __svc_handler
+	.type	__svc_handler, %object
+	.size	__svc_handler, 8
+__svc_handler:
+	.quad error_exit
+
