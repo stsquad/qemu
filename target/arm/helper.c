@@ -10003,9 +10003,13 @@ static bool get_phys_addr_lpae(CPUARMState *env, target_ulong address,
         attrs |= extract32(tableattrs, 3, 1) << 5;      /* APT[1] => AP[2] */
         break;
     }
+
     /* Here descaddr is the final physical address, and attributes
      * are all in attrs.
      */
+    *phys_ptr = descaddr;
+    *page_size_ptr = page_size;
+
     fault_type = ARMFault_AccessFlag;
     if ((attrs & (1 << 8)) == 0) {
         /* Access flag */
@@ -10054,9 +10058,6 @@ static bool get_phys_addr_lpae(CPUARMState *env, target_ulong address,
         }
         cacheattrs->shareability = extract32(attrs, 6, 2);
     }
-
-    *phys_ptr = descaddr;
-    *page_size_ptr = page_size;
     return false;
 
 do_fault:
@@ -11004,7 +11005,13 @@ hwaddr arm_cpu_get_phys_page_attrs_debug(CPUState *cs, vaddr addr,
     ret = get_phys_addr(env, addr, 0, mmu_idx, &phys_addr,
                         attrs, &prot, &page_size, &fi, NULL);
 
-    if (ret) {
+    /*
+     * For AccessFlag and Permission, phys_addr is correct,
+     * it's merely the permissions check that failed.
+     */
+    if (ret &&
+        fi.type != ARMFault_AccessFlag &&
+        fi.type != ARMFault_Permission) {
         return -1;
     }
     return phys_addr;
