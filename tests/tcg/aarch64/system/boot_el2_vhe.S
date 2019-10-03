@@ -197,7 +197,7 @@ __start:
 
 	bic	x1, x1, #(1 << 21) - 1		/* 2mb block alignment */
 	mov	x3, #3 << 53			/* attr(XN, PXN) */
-	movk	x3, #0x4c1			/* attr(AF, rw/rw,block) */
+	movk	x3, #0x441			/* attr(AF, rw/rw,block) */
 	orr	x1, x1, x3
 	str	x1, [x2]			/* 2nd 2mb (.data & .bss)*/
 

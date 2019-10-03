@@ -24,18 +24,19 @@ static int get_el(void)
 
 static void el0_function(int magic)
 {
-    int el = get_el();
-    ml_printf("%s: EL:%d with %x\n", __func__, el, magic);
+    ml_printf("%s: with %x\n", __func__, magic);
+    asm("svc #0");
 }
 
-static void test_eret_to_el0_return()
+static bool test_eret_to_el0_return()
 {
-    ml_printf("%s: start\n", __func__);
+    ml_printf("%s: at EL%d\n", __func__, get_el());
+    return true;
 }
 
 static bool test_eret_to_el0(void)
 {
-    ml_printf("%s: start\n", __func__);
+    ml_printf("%s: at EL%d\n", __func__, get_el());
 
     __svc_handler = (uintptr_t) &test_eret_to_el0_return;
 
@@ -44,6 +45,9 @@ static bool test_eret_to_el0(void)
         "eret" :
         /* no outputs */ :
         "r" (0), "r" (&el0_function) );
+
+    /* we should come back via eret_to_el0_return */
+    return false;
 }
 
 int main(void)
