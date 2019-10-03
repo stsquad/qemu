@@ -46,9 +46,9 @@ memory: CFLAGS+=-DCHECK_UNALIGNED=1
 # Additional variants
 memory-el2: CFLAGS+=-DCHECK_UNALIGNED=1
 
-run-memory-el2: QEMU_OPTS=-machine type=virt,virtualization=on,gic-version=3 -cpu max -display none -semihosting-config enable=on,target=native,chardev=output -kernel
+run-%-el2: QEMU_OPTS=-machine type=virt,virtualization=on,gic-version=3 -cpu max -display none -semihosting-config enable=on,target=native,chardev=output -kernel
 
-TESTS+=memory-el2
+TESTS+=memory-el2 vhe_switch-el2
 
 # Running
 QEMU_OPTS=-M virt -cpu max -display none -semihosting-config enable=on,target=native,chardev=output -kernel

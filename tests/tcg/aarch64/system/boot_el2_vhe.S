@@ -108,7 +108,7 @@ __start:
 	 * Check and enable VHE so we can proceed like a normal EL1
 	 * kernel would. We'll leave it to the test code to actually
 	 * do the right thing.
- 	 */
+	 */
 	mrs 	x0, CurrentEL
 	/* EL is lsl 2 */
 	cmp	x0, #8
@@ -140,6 +140,12 @@ __start:
 	msr	hcr_el2, x0
 	isb
 
+	/*
+	 * From this point on while E2H is in effect we can either
+	 * write to EL2 registers directly (and they behave like their
+	 * EL1 counterparts) or writes to EL1 registers will be
+	 * redirected to the EL2 ones.
+	 */
 
 	/* Installs a table of exception vectors to catch and handle all
 	   exceptions by terminating the process with a diagnostic.  */
@@ -156,7 +162,7 @@ __start:
 	 * maps RAM to the first Gb. The stage2 tables have two 2mb
 	 * translation block entries covering a series of adjacent
 	 * 4k pages.
-	*/
+	 */
 
 	/* Stage 1 entry: indexed by IA[38:30] */
 	adr	x1, .				/* phys address */
