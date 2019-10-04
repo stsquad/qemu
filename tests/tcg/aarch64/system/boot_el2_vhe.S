@@ -63,10 +63,12 @@ vector_table:
 	.type	lower_a64_sync, %function
 lower_a64_sync:
 	stp 	x0, x1, [sp, #-16]!
-	mov	x0, __svc_handler
-	msr	elr_el2, x0
+	adrp	x1, __svc_handler
+	add	x1, x1, :lo12:__svc_handler
+	ldr	x0, [x1]
+	mov	x30, x0
 	ldp 	x0, x1, [sp], #16
-	ret
+	br	x30
 .size	lower_a64_sync, . - lower_a64_sync
 
 	/* The rest are considered error conditions  */
