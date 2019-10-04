@@ -201,7 +201,7 @@ __start:
 	add	x2, x0, x4, lsr #(21 - 3)	/* offset in l2 page table */
 
 	bic	x1, x1, #(1 << 21) - 1		/* 2mb block alignment	*/
-	mov	x3, #0x401			/* attr(AF, block, ro/ro) */
+	mov	x3, #0x4c1			/* attr(AF, block, ro/ro) */
 	orr	x1, x1, x3
 	str	x1, [x2]			/* 1st 2mb (.text & rodata) */
 
