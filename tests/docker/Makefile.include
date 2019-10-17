@@ -62,8 +62,7 @@ docker-image-%: $(DOCKER_FILES_DIR)/%.docker
 		$(if $(EXECUTABLE),--include-executable=$(EXECUTABLE)),\
 		"BUILD","$*")
 
-# Special rule for debootstraped binfmt linux-user images
-docker-binfmt-image-debian-%: $(DOCKER_FILES_DIR)/debian-bootstrap.docker
+docker-binfmt-image-debian-%: $(MULTARCH_BASE)/debian-bootstrap.docker
 	$(if $(EXECUTABLE),,\
 		$(error EXECUTABLE not set, debootstrap of debian-$* would fail))
 	$(if $(DEB_ARCH),,\
@@ -85,7 +84,6 @@ docker-binfmt-image-debian-%: $(DOCKER_FILES_DIR)/debian-bootstrap.docker
 			$(DOCKER_SCRIPT) check --quiet qemu:debian-$* $< || 	\
 			{ echo "You will need to build $(EXECUTABLE)"; exit 1;},\
 			"CHECK", "debian-$* exists"))
-
 endif
 
 # Enforce dependencies for composite images
