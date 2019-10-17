@@ -1,0 +1,15 @@
+#
+# Debain Native Build
+#
+# This docker target builds on the Debian Buster base image. It is
+# deliberatly architecture agnostic as it can build on any Debian
+# supported architecture.
+#
+FROM qemu:debian10
+MAINTAINER Alex Bennée <alex.bennee@linaro.org>
+
+# We use --arch-only as not all hosts have what's needed to build all
+# the binpkg's that come with QEMU (roms etc).
+RUN apt update && \
+    DEBIAN_FRONTEND=noninteractive eatmydata \
+    apt build-dep --arch-only -yy qemu
