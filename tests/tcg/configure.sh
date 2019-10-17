@@ -97,80 +97,80 @@ for target in $target_list; do
   case $target in
     aarch64-*)
       # We don't have any bigendian build tools so we only use this for AArch64
-      container_image=debian-arm64-cross
+      container_image=debian-arm64-build-qemu
       container_cross_cc=aarch64-linux-gnu-gcc
       ;;
     alpha-*)
-      container_image=debian-alpha-cross
+      container_image=debian10-alpha-build-tests
       container_cross_cc=alpha-linux-gnu-gcc
       ;;
     arm-*)
       # We don't have any bigendian build tools so we only use this for ARM
-      container_image=debian-armhf-cross
+      container_image=debian10-armhf-build-qemu
       container_cross_cc=arm-linux-gnueabihf-gcc
       ;;
     cris-*)
-      container_image=fedora-cris-cross
+      container_image=fedora-cris-build-tests
       container_cross_cc=cris-linux-gnu-gcc
       ;;
     hppa-*)
-      container_image=debian-hppa-cross
+      container_image=debian10-hppa-build-tests
       container_cross_cc=hppa-linux-gnu-gcc
       ;;
     i386-*)
-      container_image=fedora-i386-cross
+      container_image=fedora-i386-build-qemu
       container_cross_cc=gcc
       ;;
     m68k-*)
-      container_image=debian-m68k-cross
+      container_image=debian10-m68k-build-tests
       container_cross_cc=m68k-linux-gnu-gcc
       ;;
     mips64el-*)
-      container_image=debian-mips64el-cross
+      container_image=debian10-mips64el-build-qemu
       container_cross_cc=mips64el-linux-gnuabi64-gcc
       ;;
     mips64-*)
-      container_image=debian-mips64-cross
+      container_image=debian10-mips64-build-tests
       container_cross_cc=mips64-linux-gnuabi64-gcc
       ;;
     mipsel-*)
-      container_image=debian-mipsel-cross
+      container_image=debian10-mipsel-build-qemu
       container_cross_cc=mipsel-linux-gnu-gcc
       ;;
     mips-*)
-      container_image=debian-mips-cross
+      container_image=debian10-mips-build-qemu
       container_cross_cc=mips-linux-gnu-gcc
       ;;
     ppc-*|ppc64abi32-*)
-      container_image=debian-powerpc-cross
+      container_image=debian10-powerpc-build-tests
       container_cross_cc=powerpc-linux-gnu-gcc
       ;;
     ppc64-*)
-      container_image=debian-ppc64-cross
+      container_image=debian10-ppc64-build-tests
       container_cross_cc=powerpc64-linux-gnu-gcc
       ;;
     ppc64le-*)
-      container_image=debian-ppc64el-cross
+      container_image=debian10-ppc64el-build-qemu
       container_cross_cc=powerpc64le-linux-gnu-gcc
       ;;
     riscv64-*)
-      container_image=debian-riscv64-cross
+      container_image=debian10-riscv64-build-tests
       container_cross_cc=riscv64-linux-gnu-gcc
       ;;
     s390x-*)
-      container_image=debian-s390x-cross
+      container_image=debian10-s390x-build-qemu
       container_cross_cc=s390x-linux-gnu-gcc
       ;;
     sh4-*)
-      container_image=debian-sh4-cross
+      container_image=debian10-sh4-build-tests
       container_cross_cc=sh4-linux-gnu-gcc
       ;;
     sparc64-*)
-      container_image=debian-sparc64-cross
+      container_image=debian10-sparc64-build-tests
       container_cross_cc=sparc64-linux-gnu-gcc
       ;;
     xtensa*-softmmu)
-      container_image=debian-xtensa-cross
+      container_image=debian9-xtensa-build-tests
 
       # default to the dc232b cpu
       container_cross_cc=/opt/2018.02/xtensa-dc232b-elf/bin/xtensa-dc232b-elf-gcc
