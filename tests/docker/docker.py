@@ -190,9 +190,10 @@ def _read_qemu_dockerfile(img_name):
     if img_name.startswith("debian") and img_name.endswith("user"):
         img_name = "debian-bootstrap"
 
-    df = os.path.join(os.path.dirname(__file__), "dockerfiles",
-                      img_name + ".docker")
-    return _read_dockerfile(df)
+    dockerfile = img_name + ".docker"
+    for root, dirs, files in os.walk(os.path.dirname(__file__)):
+        if dockerfile in files:
+            return _read_dockerfile(os.path.join(root, dockerfile))
 
 
 def _dockerfile_preprocess(df):
