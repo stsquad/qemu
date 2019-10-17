@@ -5,12 +5,37 @@
 HOST_ARCH = $(if $(ARCH),$(ARCH),$(shell uname -m))
 
 DOCKER_SUFFIX := .docker
-DOCKER_FILES_DIR := $(SRC_PATH)/tests/docker/dockerfiles
-# we don't run tests on intermediate images (used as base by another image)
-DOCKER_PARTIAL_IMAGES := debian9 debian10
-DOCKER_PARTIAL_IMAGES += debian9-mxe debian-bootstrap
-DOCKER_IMAGES := $(sort $(notdir $(basename $(wildcard $(DOCKER_FILES_DIR)/*.docker))))
-DOCKER_TARGETS := $(patsubst %,docker-image-%,$(DOCKER_IMAGES))
+DOCKER_BASE := $(SRC_PATH)/tests/docker
+
+#
+# There are 3 classes of containers
+#
+#    BASE_CONTAINERS - intermeadiate containers which are used to build others
+#    TEST_BUILD_CONTAINERS - contain enough compiler support to build tests
+#    QEMU_BUILD_CONTAINERS - contain build dependencies enough to build QEMU
+#
+
+BASE_CONTAINERS :=
+TEST_BUILD_CONTAINERS :=
+QEMU_BUILD_CONTAINERS :=
+
+#
+# Helpers for sub-arch includes
+#
+# $1 = list of dockerfile paths
+get-basenames = $(sort $(notdir $(basename $1)))
+
+#
+# Dealing with different host architectures.
+#
+# For x86_64 this is easy enough as most cross compilers are built for
+# x86. However for other build hosts we may have a limited choice. To
+# fully support all potential build hosts we can use QEMU's own
+# linux-user support to have a native version of the toolchain.
+#
+-include $(DOCKER_BASE)/dockerfiles.multiarch/Makefile.include
+-include $(DOCKER_BASE)/dockerfiles.$(HOST_ARCH)/Makefile.include
+
 # Use a global constant ccache directory to speed up repetitive builds
 DOCKER_CCACHE_DIR := $$HOME/.cache/qemu-docker-ccache
 
@@ -42,18 +67,21 @@ $(DOCKER_SRC_COPY):
 
 docker-qemu-src: $(DOCKER_SRC_COPY)
 
-docker-image: ${DOCKER_TARGETS}
+# The global docker-image rule builds all docker images we are capable of building
+DOCKER_TARGETS := $(patsubst %,docker-image-%,$(BASE_CONTAINERS) $(TEST_BUILD_CONTAINERS) $(QEMU_BUILD_CONTAINERS))
+
+docker-image: $(DOCKER_TARGETS)
 
 # General rule for building docker images. If we are a sub-make
 # invoked with SKIP_DOCKER_BUILD we still check the image is up to date
 # though
 ifdef SKIP_DOCKER_BUILD
-docker-image-%: $(DOCKER_FILES_DIR)/%.docker
+docker-image-%: %.docker
 	$(call quiet-command, \
 		$(DOCKER_SCRIPT) check --quiet qemu:$* $<, \
 		"CHECK", "$*")
 else
-docker-image-%: $(DOCKER_FILES_DIR)/%.docker
+docker-image-%: %.docker
 	$(call quiet-command,\
 		$(DOCKER_SCRIPT) build qemu:$* $< \
 		$(if $V,,--quiet) $(if $(NOCACHE),--no-cache) \
@@ -62,7 +90,7 @@ docker-image-%: $(DOCKER_FILES_DIR)/%.docker
 		$(if $(EXECUTABLE),--include-executable=$(EXECUTABLE)),\
 		"BUILD","$*")
 
-docker-binfmt-image-debian-%: $(MULTARCH_BASE)/debian-bootstrap.docker
+docker-binfmt-image-debian-%: $(DOCKER_BASE)/dockerfiles/debian-bootstrap.docker
 	$(if $(EXECUTABLE),,\
 		$(error EXECUTABLE not set, debootstrap of debian-$* would fail))
 	$(if $(DEB_ARCH),,\
@@ -86,72 +114,8 @@ docker-binfmt-image-debian-%: $(MULTARCH_BASE)/debian-bootstrap.docker
 			"CHECK", "debian-$* exists"))
 endif
 
-# Enforce dependencies for composite images
-docker-image-debian9-mxe: docker-image-debian9
-ifeq ($(HOST_ARCH),x86_64)
-docker-image-debian-amd64: docker-image-debian10
-DOCKER_PARTIAL_IMAGES += debian-amd64-cross
-else
-docker-image-debian-amd64-cross: docker-image-debian10
-DOCKER_PARTIAL_IMAGES += debian-amd64
-endif
-docker-image-debian-win32-cross: docker-image-debian9-mxe
-docker-image-debian-win64-cross: docker-image-debian9-mxe
-
-# For non-x86 hosts not all cross-compilers have been packaged
-ifneq ($(HOST_ARCH),x86_64)
-DOCKER_PARTIAL_IMAGES += debian-mips-cross debian-mipsel-cross debian-mips64el-cross
-DOCKER_PARTIAL_IMAGES += debian-ppc64el-cross
-DOCKER_PARTIAL_IMAGES += debian-s390x-cross
-DOCKER_PARTIAL_IMAGES += debian-win32-cross debian-win64-cross
-DOCKER_PARTIAL_IMAGES += fedora travis
-endif
-
-docker-image-debian-alpha-cross: docker-image-debian10
-docker-image-debian-arm64-cross: docker-image-debian10
-docker-image-debian-armel-cross: docker-image-debian10
-docker-image-debian-armhf-cross: docker-image-debian10
-docker-image-debian-hppa-cross: docker-image-debian10
-docker-image-debian-m68k-cross: docker-image-debian10
-docker-image-debian-mips-cross: docker-image-debian10
-docker-image-debian-mips64-cross: docker-image-debian10
-docker-image-debian-mips64el-cross: docker-image-debian10
-docker-image-debian-mipsel-cross: docker-image-debian10
-docker-image-debian-powerpc-cross: docker-image-debian10
-docker-image-debian-ppc64-cross: docker-image-debian10
-docker-image-debian-ppc64el-cross: docker-image-debian10
-docker-image-debian-riscv64-cross: docker-image-debian10
-docker-image-debian-s390x-cross: docker-image-debian10
-docker-image-debian-sh4-cross: docker-image-debian10
-docker-image-debian-sparc64-cross: docker-image-debian10
-
-docker-image-travis: NOUSER=1
-
-# Specialist build images, sometimes very limited tools
-docker-image-tricore-cross: docker-image-debian9
-
-# These images may be good enough for building tests but not for test builds
-DOCKER_PARTIAL_IMAGES += debian-alpha-cross
-DOCKER_PARTIAL_IMAGES += debian-hppa-cross
-DOCKER_PARTIAL_IMAGES += debian-m68k-cross debian-mips64-cross
-DOCKER_PARTIAL_IMAGES += debian-powerpc-cross debian-ppc64-cross
-DOCKER_PARTIAL_IMAGES += debian-riscv64-cross
-DOCKER_PARTIAL_IMAGES += debian-sh4-cross debian-sparc64-cross
-DOCKER_PARTIAL_IMAGES += debian-tricore-cross
-DOCKER_PARTIAL_IMAGES += debian-xtensa-cross
-DOCKER_PARTIAL_IMAGES += fedora-i386-cross fedora-cris-cross
-
-# ensure we pull down and build fedora30 first
-fedora-i386-cross fedora-cris-cross: docker-image-fedora
-
-# Rules for building linux-user powered images
-#
-# These are slower than using native cross compiler setups but can
-# work around issues with poorly working multi-arch systems and broken
-# packages.
-
 # Expand all the pre-requistes for each docker image and test combination
-$(foreach i,$(filter-out $(DOCKER_PARTIAL_IMAGES),$(DOCKER_IMAGES)), \
+$(foreach i,$(QEMU_BUILD_CONTAINERS), \
 	$(foreach t,$(DOCKER_TESTS) $(DOCKER_TOOLS), \
 		$(eval .PHONY: docker-$t@$i) \
 		$(eval docker-$t@$i: docker-image-$i docker-run-$t@$i) \
@@ -177,15 +141,16 @@ docker:
 	@echo '                         "IMAGE" is one of the listed container name.'
 	@echo '    docker-image:        Build all images.'
 	@echo '    docker-image-IMAGE:  Build image "IMAGE".'
+	@echo '    docker-binfmt-image-debian-IMAGE:'
+	@echo '                         Build a binfmt Debian bootstraped IMAGE'
+	@echo '                         Specify DEB_ARCH, DEB_TYPE and EXECUTABLE.'
+	@echo '				Optionally specify DEB_URL'
 	@echo '    docker-run:          For manually running a "TEST" with "IMAGE".'
 	@echo
 	@echo 'Available container images:'
-	@echo '    $(DOCKER_IMAGES)'
-ifneq ($(DOCKER_USER_IMAGES),)
-	@echo
-	@echo 'Available linux-user images (docker-binfmt-image-debian-%):'
-	@echo '    $(DOCKER_USER_IMAGES)'
-endif
+	@echo '    BASE: $(BASE_CONTAINERS)'
+	@echo '    BUILD TESTS: $(TEST_BUILD_CONTAINERS)'
+	@echo '    BUILD QEMU: $(QEMU_BUILD_CONTAINERS)'
 	@echo
 	@echo 'Available tests:'
 	@echo '    $(DOCKER_TESTS)'
