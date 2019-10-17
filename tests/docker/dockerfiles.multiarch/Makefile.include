@@ -1,0 +1,17 @@
+# -*- Mode: makefile -*-
+#
+# Multiarch Containers
+#
+# These containers are ones that will build on any of the major
+# architectures. As a result we can share the rules with whatever
+# system we are installed on.
+#
+
+MULTIARCH_BASE = $(DOCKER_BASE)/dockerfiles.multiarch
+VPATH += $(MULTIARCH_BASE)
+
+#
+# None of the multiarch images can build anything by themselves so
+# they are all BASE containers.
+#
+BASE_CONTAINERS += $(sort $(notdir $(basename $(wildcard $(MULTIARCH_BASE)/*.docker))))
