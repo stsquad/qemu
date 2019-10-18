@@ -105,7 +105,9 @@ static void aarch64_a57_initfn(Object *obj)
     set_feature(&cpu->env, ARM_FEATURE_VFP4);
     set_feature(&cpu->env, ARM_FEATURE_NEON);
     set_feature(&cpu->env, ARM_FEATURE_GENERIC_TIMER);
+#ifdef TARGET_AARCH64
     set_feature(&cpu->env, ARM_FEATURE_AARCH64);
+#endif
     set_feature(&cpu->env, ARM_FEATURE_CBAR_RO);
     set_feature(&cpu->env, ARM_FEATURE_EL2);
     set_feature(&cpu->env, ARM_FEATURE_EL3);
@@ -159,7 +161,9 @@ static void aarch64_a53_initfn(Object *obj)
     set_feature(&cpu->env, ARM_FEATURE_VFP4);
     set_feature(&cpu->env, ARM_FEATURE_NEON);
     set_feature(&cpu->env, ARM_FEATURE_GENERIC_TIMER);
+#ifdef TARGET_AARCH64
     set_feature(&cpu->env, ARM_FEATURE_AARCH64);
+#endif
     set_feature(&cpu->env, ARM_FEATURE_CBAR_RO);
     set_feature(&cpu->env, ARM_FEATURE_EL2);
     set_feature(&cpu->env, ARM_FEATURE_EL3);
@@ -213,7 +217,9 @@ static void aarch64_a72_initfn(Object *obj)
     set_feature(&cpu->env, ARM_FEATURE_VFP4);
     set_feature(&cpu->env, ARM_FEATURE_NEON);
     set_feature(&cpu->env, ARM_FEATURE_GENERIC_TIMER);
+#ifdef TARGET_AARCH64
     set_feature(&cpu->env, ARM_FEATURE_AARCH64);
+#endif
     set_feature(&cpu->env, ARM_FEATURE_CBAR_RO);
     set_feature(&cpu->env, ARM_FEATURE_EL2);
     set_feature(&cpu->env, ARM_FEATURE_EL3);
@@ -256,6 +262,7 @@ static void aarch64_a72_initfn(Object *obj)
     define_arm_cp_regs(cpu, cortex_a72_a57_a53_cp_reginfo);
 }
 
+#ifdef TARGET_AARCH64
 static void cpu_max_get_sve_vq(Object *obj, Visitor *v, const char *name,
                                void *opaque, Error **errp)
 {
@@ -395,6 +402,7 @@ static void aarch64_max_initfn(Object *obj)
                             cpu_max_set_sve_vq, NULL, NULL, &error_fatal);
     }
 }
+#endif
 
 struct ARMCPUInfo {
     const char *name;
@@ -406,7 +414,9 @@ static const ARMCPUInfo aarch64_cpus[] = {
     { .name = "cortex-a57",         .initfn = aarch64_a57_initfn },
     { .name = "cortex-a53",         .initfn = aarch64_a53_initfn },
     { .name = "cortex-a72",         .initfn = aarch64_a72_initfn },
+#ifdef TARGET_AARCH64
     { .name = "max",                .initfn = aarch64_max_initfn },
+#endif
     { .name = NULL }
 };
 
@@ -452,21 +462,35 @@ static void aarch64_cpu_finalizefn(Object *obj)
 {
 }
 
+#ifdef TARGET_AARCH64
 static gchar *aarch64_gdb_arch_name(CPUState *cs)
 {
     return g_strdup("aarch64");
 }
+#else
+static gchar *arm_gdb_arch_name(CPUState *cs)
+{
+    return g_strdup("arm");
+}
+#endif
 
 static void aarch64_cpu_class_init(ObjectClass *oc, void *data)
 {
     CPUClass *cc = CPU_CLASS(oc);
-
     cc->cpu_exec_interrupt = arm_cpu_exec_interrupt;
+#ifdef TARGET_AARCH64
     cc->gdb_read_register = aarch64_cpu_gdb_read_register;
     cc->gdb_write_register = aarch64_cpu_gdb_write_register;
     cc->gdb_num_core_regs = 34;
     cc->gdb_core_xml_file = "aarch64-core.xml";
     cc->gdb_arch_name = aarch64_gdb_arch_name;
+#else
+    cc->gdb_read_register = arm_cpu_gdb_read_register;
+    cc->gdb_write_register = arm_cpu_gdb_write_register;
+    cc->gdb_num_core_regs = 26;
+    cc->gdb_core_xml_file = "arm-core.xml";
+    cc->gdb_arch_name = arm_gdb_arch_name;
+#endif
 }
 
 static void aarch64_cpu_instance_init(Object *obj)
