@@ -1076,7 +1076,7 @@ ifeq ($(CONFIG_PLUGIN),y)
 .PHONY: plugins
 plugins:
 	$(call quiet-command,\
-		$(MAKE) $(SUBDIR_MAKEFLAGS) -C tests/plugin V="$(V)", \
+		$(MAKE) $(SUBDIR_MAKEFLAGS) -C tests/tcg-plugins V="$(V)", \
 		"BUILD", "plugins")
 endif
 

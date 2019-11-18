@@ -65,8 +65,8 @@ Once built a program can be run with multiple plugins loaded each with
 their own arguments::
 
   $QEMU $OTHER_QEMU_ARGS \
-      -plugin tests/plugin/libhowvec.so,arg=inline,arg=hint \
-      -plugin tests/plugin/libhotblocks.so
+      -plugin tests/tcg-plugins/libhowvec.so,arg=inline,arg=hint \
+      -plugin tests/tcg-plugins/libhotblocks.so
 
 Arguments are plugin specific and can be used to modify their
 behaviour. In this case the howvec plugin is being asked to use inline

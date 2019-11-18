@@ -2371,7 +2371,7 @@ M: Alex Bennée <alex.bennee@linaro.org>
 S: Maintained
 F: docs/devel/tcg-plugins.rst
 F: plugins/
-F: tests/plugin
+F: tests/tcg-plugins
 
 AArch64 TCG target
 M: Claudio Fontana <claudio.fontana@huawei.com>

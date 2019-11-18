@@ -3,7 +3,7 @@ BUILD_DIR := $(CURDIR)/../..
 include $(BUILD_DIR)/config-host.mak
 include $(SRC_PATH)/rules.mak
 
-$(call set-vpath, $(SRC_PATH)/tests/plugin)
+$(call set-vpath, $(SRC_PATH)/tests/tcg-plugins)
 
 NAMES :=
 NAMES += bb

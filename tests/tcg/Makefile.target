@@ -126,7 +126,7 @@ RUN_TESTS=$(patsubst %,run-%, $(TESTS))
 
 # If plugins exist also include those in the tests
 ifeq ($(CONFIG_PLUGIN),y)
-PLUGIN_DIR=../../plugin
+PLUGIN_DIR=../../tcg-plugins
 VPATH+=$(PLUGIN_DIR)
 PLUGINS=$(notdir $(wildcard $(PLUGIN_DIR)/*.so))
 
