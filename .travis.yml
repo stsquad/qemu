@@ -361,6 +361,7 @@ matrix:
         - CACHE_NAME="${TRAVIS_BRANCH}-linux-gcc-debug-tcg"
 
     - arch: arm64
+      dist: bionic
       addons:
         apt_packages:
           - libaio-dev
@@ -385,10 +386,13 @@ matrix:
           - libusb-1.0-0-dev
           - libvdeplug-dev
           - libvte-2.91-dev
+          - gcc-x86-64-linux-gnu
       env:
-        - CONFIG="--target-list=${MAIN_SOFTMMU_TARGETS},x86_64-linux-user"
+        - TEST_CMD="make check check-tcg V=1"
+        - CONFIG="--disable-containers --target-list=${MAIN_SOFTMMU_TARGETS},x86_64-linux-user"
 
     - arch: ppc64le
+      dist: bionic
       addons:
         apt_packages:
           - libaio-dev
@@ -413,10 +417,13 @@ matrix:
           - libusb-1.0-0-dev
           - libvdeplug-dev
           - libvte-2.91-dev
+          - gcc-x86-64-linux-gnu
       env:
-        - CONFIG="--target-list=${MAIN_SOFTMMU_TARGETS},x86_64-linux-user"
+        - TEST_CMD="make check check-tcg V=1"
+        - CONFIG="--disable-containers --target-list=${MAIN_SOFTMMU_TARGETS},x86_64-linux-user"
 
     - arch: s390x
+      dist: bionic
       addons:
         apt_packages:
           - libaio-dev
@@ -441,8 +448,10 @@ matrix:
           - libusb-1.0-0-dev
           - libvdeplug-dev
           - libvte-2.91-dev
+          - gcc-x86-64-linux-gnu
       env:
-        - CONFIG="--target-list=${MAIN_SOFTMMU_TARGETS},x86_64-linux-user"
+        - TEST_CMD="make check check-tcg V=1"
+        - CONFIG="--disable-containers --target-list=${MAIN_SOFTMMU_TARGETS},x86_64-linux-user"
 
     # Release builds
     # The make-release script expect a QEMU version, so our tag must start with a 'v'.
