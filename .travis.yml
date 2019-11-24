@@ -448,10 +448,10 @@ matrix:
           - libusb-1.0-0-dev
           - libvdeplug-dev
           - libvte-2.91-dev
-          - gcc-x86-64-linux-gnu
+          - gcc-arm-none-eabi
       env:
         - TEST_CMD="make check check-tcg V=1"
-        - CONFIG="--disable-containers --target-list=${MAIN_SOFTMMU_TARGETS},x86_64-linux-user"
+        - CONFIG="--disable-containers --cross-cc-arm=gcc-arm-non-eabi --target-list=${MAIN_SOFTMMU_TARGETS}"
 
     # Release builds
     # The make-release script expect a QEMU version, so our tag must start with a 'v'.
