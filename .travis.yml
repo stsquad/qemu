@@ -451,7 +451,7 @@ matrix:
           - gcc-arm-none-eabi
       env:
         - TEST_CMD="make check check-tcg V=1"
-        - CONFIG="--disable-containers --cross-cc-arm=gcc-arm-non-eabi --target-list=${MAIN_SOFTMMU_TARGETS}"
+        - CONFIG="--disable-containers --cross-cc-arm=gcc-arm-non-eabi --target-list=${MAIN_SOFTMMU_TARGETS},arm-softmmu"
 
     # Release builds
     # The make-release script expect a QEMU version, so our tag must start with a 'v'.
