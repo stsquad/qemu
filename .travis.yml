@@ -386,10 +386,9 @@ matrix:
           - libusb-1.0-0-dev
           - libvdeplug-dev
           - libvte-2.91-dev
-          - gcc-x86-64-linux-gnu
       env:
         - TEST_CMD="make check check-tcg V=1"
-        - CONFIG="--disable-containers --target-list=${MAIN_SOFTMMU_TARGETS},x86_64-linux-user"
+        - CONFIG="--disable-containers --target-list=${MAIN_SOFTMMU_TARGETS},aarch64-linux-user"
 
     - arch: ppc64le
       dist: bionic
@@ -420,7 +419,7 @@ matrix:
           - gcc-x86-64-linux-gnu
       env:
         - TEST_CMD="make check check-tcg V=1"
-        - CONFIG="--disable-containers --target-list=${MAIN_SOFTMMU_TARGETS},x86_64-linux-user"
+        - CONFIG="--disable-containers --target-list=${MAIN_SOFTMMU_TARGETS},ppc64le-linux-user"
 
     - arch: s390x
       dist: bionic
@@ -448,10 +447,9 @@ matrix:
           - libusb-1.0-0-dev
           - libvdeplug-dev
           - libvte-2.91-dev
-          - gcc-arm-none-eabi
       env:
         - TEST_CMD="make check check-tcg V=1"
-        - CONFIG="--disable-containers --cross-cc-arm=gcc-arm-non-eabi --target-list=${MAIN_SOFTMMU_TARGETS},arm-softmmu"
+        - CONFIG="--disable-containers --cross-cc-arm=gcc-arm-non-eabi --target-list=${MAIN_SOFTMMU_TARGETS},s390x-linux-user"
 
     # Release builds
     # The make-release script expect a QEMU version, so our tag must start with a 'v'.
