@@ -239,13 +239,15 @@ static int arm_gdb_get_svereg(CPUARMState *env, GByteArray *buf, int reg)
     ARMCPU *cpu = env_archcpu(env);
     DynamicGDBXMLInfo *info = &cpu->dyn_svereg_xml;
 
-    /* The first 32 * vq registers are the zNpQ regs */
-    if (reg < (32 * cpu->sve_max_vq)) {
-        int vq = reg % cpu->sve_max_vq;
-        int z = reg / cpu->sve_max_vq;
-        return gdb_get_reg128(buf,
-                              env->vfp.zregs[z].d[vq * 2 + 1],
-                              env->vfp.zregs[z].d[vq * 2]);
+    /* The first 32 registers are the zregs */
+    if (reg < 32) {
+        int vq, len = 0;
+        for (vq = 0; vq < cpu->sve_max_vq; vq++) {
+            len += gdb_get_reg128(buf,
+                                  env->vfp.zregs[reg].d[vq * 2 + 1],
+                                  env->vfp.zregs[reg].d[vq * 2]);
+        }
+        return len;
     }
     switch (reg - info->data.sve.fpsr_pos) {
     case 0:
@@ -254,9 +256,12 @@ static int arm_gdb_get_svereg(CPUARMState *env, GByteArray *buf, int reg)
         return gdb_get_reg32(buf, vfp_get_fpsr(env));
     case 2 ... 19:
     {
-        /* XXX FIXME: not quite right, we could be bigger */
         int preg = reg - info->data.sve.fpsr_pos - 2;
-        return gdb_get_reg64(buf, env->vfp.pregs[preg].p[0]);
+        int vq, len = 0;
+        for (vq = 0; vq < cpu->sve_max_vq; vq = vq + 4) {
+            len += gdb_get_reg64(buf, env->vfp.pregs[preg].p[vq / 4]);
+        }
+        return len;
     }
     default:
         /* gdbstub asked for something out our range */
@@ -268,7 +273,39 @@ static int arm_gdb_get_svereg(CPUARMState *env, GByteArray *buf, int reg)
 
 static int arm_gdb_set_svereg(CPUARMState *env, uint8_t *buf, int reg)
 {
-    fprintf(stderr, "%s: %d\n", __func__, reg);
+    ARMCPU *cpu = env_archcpu(env);
+    DynamicGDBXMLInfo *info = &cpu->dyn_svereg_xml;
+
+    /* The first 32 registers are the zregs */
+    if (reg < 32) {
+        int vq, len = 0;
+        uint64_t *p = (uint64_t *) buf;
+        for (vq = 0; vq < cpu->sve_max_vq; vq++) {
+            env->vfp.zregs[reg].d[vq * 2 + 1] = *p++;
+            env->vfp.zregs[reg].d[vq * 2] = *p++;
+            len += 16;
+        }
+        return len;
+    }
+    switch (reg - info->data.sve.fpsr_pos) {
+    /* case 0: */
+    /*     return gdb_get_reg32(buf, vfp_get_fpsr(env)); */
+    /* case 1: */
+    /*     return gdb_get_reg32(buf, vfp_get_fpsr(env)); */
+    /* case 2 ... 19: */
+    /* { */
+    /*     int preg = reg - info->data.sve.fpsr_pos - 2; */
+    /*     int vq, len = 0; */
+    /*     for (vq = 0; vq < cpu->sve_max_vq; vq = vq + 4) { */
+    /*         len += gdb_get_reg64(buf, env->vfp.pregs[preg].p[vq / 4]); */
+    /*     } */
+    /*     return len; */
+    /* } */
+    default:
+        /* gdbstub asked for something out our range */
+        break;
+    }
+
     return 0;
 }
 #endif /* TARGET_AARCH64 */
