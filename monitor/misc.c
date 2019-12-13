@@ -1084,8 +1084,6 @@ static void hmp_info_mtree(Monitor *mon, const QDict *qdict)
 
 #ifdef CONFIG_PROFILER
 
-int64_t dev_time;
-
 static void hmp_info_profile(Monitor *mon, const QDict *qdict)
 {
     static int64_t last_cpu_exec_time;
