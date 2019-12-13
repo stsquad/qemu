@@ -4042,18 +4042,13 @@ int tcg_gen_code(TCGContext *s, TranslationBlock *tb)
     }
 #endif
 
-#ifdef CONFIG_PROFILER
-    atomic_set(&prof->opt_time, prof->opt_time - profile_getclock());
-#endif
-
 #ifdef USE_TCG_OPTIMIZATIONS
     tcg_optimize(s);
 #endif
 
-#ifdef CONFIG_PROFILER
-    atomic_set(&prof->opt_time, prof->opt_time + profile_getclock());
-    atomic_set(&prof->la_time, prof->la_time - profile_getclock());
-#endif
+    if (tb_stats_enabled(tb, TB_JIT_TIME)) {
+        prof->gen_opt_done_time = profile_getclock();
+    }
 
     reachable_code_pass(s);
     liveness_pass_1(s);
@@ -4076,9 +4071,9 @@ int tcg_gen_code(TCGContext *s, TranslationBlock *tb)
         }
     }
 
-#ifdef CONFIG_PROFILER
-    atomic_set(&prof->la_time, prof->la_time + profile_getclock());
-#endif
+    if (tb_stats_enabled(tb, TB_JIT_TIME)) {
+        prof->gen_la_done_time = profile_getclock();
+    }
 
 #ifdef DEBUG_DISAS
     if (unlikely(qemu_loglevel_mask(CPU_LOG_TB_OP_OPT)

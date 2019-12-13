@@ -1730,9 +1730,6 @@ TranslationBlock *tb_gen_code(CPUState *cpu,
     tcg_insn_unit *gen_code_buf;
     int gen_code_size, search_size, max_insns;
     TCGProfile *prof = &tcg_ctx->prof;
-#ifdef CONFIG_PROFILER
-    int64_t ti;
-#endif
 
     assert_memory_lock();
 
@@ -1780,9 +1777,6 @@ TranslationBlock *tb_gen_code(CPUState *cpu,
     tcg_ctx->tb_cflags = cflags;
  tb_overflow:
 
-#ifdef CONFIG_PROFILER
-    ti = profile_getclock();
-#endif
 
     /*
      * We want to fetch the stats structure before we start code
@@ -1793,6 +1787,9 @@ TranslationBlock *tb_gen_code(CPUState *cpu,
     if (tb_stats_collection_enabled() &&
         qemu_log_in_addr_range(tb->pc)) {
         tb->tb_stats = tb_get_stats(phys_pc, pc, cs_base, flags);
+        if (tb_stats_enabled(tb, TB_JIT_TIME)) {
+            prof->gen_start_time = profile_getclock();
+        }
     } else {
         tb->tb_stats = NULL;
     }
@@ -1803,6 +1800,10 @@ TranslationBlock *tb_gen_code(CPUState *cpu,
     tcg_ctx->cpu = env_cpu(env);
     gen_intermediate_code(cpu, tb, max_insns);
     tcg_ctx->cpu = NULL;
+
+    if (tb_stats_enabled(tb, TB_JIT_TIME)) {
+        prof->gen_ir_done_time = profile_getclock();
+    }
 
     trace_translate_block(tb, tb->pc, tb->tc.ptr);
 
@@ -1818,12 +1819,8 @@ TranslationBlock *tb_gen_code(CPUState *cpu,
         tcg_ctx->tb_jmp_target_addr = tb->jmp_target_arg;
     }
 
-#ifdef CONFIG_PROFILER
-    atomic_set(&prof->interm_time, prof->interm_time + profile_getclock() - ti);
-    ti = profile_getclock();
-#endif
-
     gen_code_size = tcg_gen_code(tcg_ctx, tb);
+
     if (unlikely(gen_code_size < 0)) {
         switch (gen_code_size) {
         case -1:
@@ -1863,9 +1860,9 @@ TranslationBlock *tb_gen_code(CPUState *cpu,
     }
     tb->tc.size = gen_code_size;
 
-#ifdef CONFIG_PROFILER
-    atomic_set(&prof->code_time, prof->code_time + profile_getclock() - ti);
-#endif
+    if (tb_stats_enabled(tb, TB_JIT_TIME)) {
+        prof->gen_code_done_time = profile_getclock();
+    }
 
 #ifdef DEBUG_DISAS
     if (qemu_loglevel_mask(CPU_LOG_TB_OUT_ASM) &&
@@ -1930,26 +1927,35 @@ TranslationBlock *tb_gen_code(CPUState *cpu,
      * Collect JIT stats when enabled. We batch them all up here to
      * avoid spamming the cache with atomic accesses
      */
-    if (tb_stats_enabled(tb, TB_JIT_STATS)) {
+    if (tb_stats_enabled(tb, (TB_JIT_STATS | TB_JIT_TIME))) {
         TBStatistics *ts = tb->tb_stats;
         qemu_mutex_lock(&ts->jit_stats_lock);
 
-        ts->code.num_guest_inst += prof->translation.nb_guest_insns;
-        ts->code.num_tcg_ops += prof->translation.nb_ops_pre_opt;
-        ts->code.num_tcg_ops_opt += tcg_ctx->nb_ops;
-        ts->code.spills += prof->translation.nb_spills;
-        ts->code.temps += prof->translation.temp_count;
-        ts->code.deleted_ops += prof->translation.del_op_count;
-        ts->code.in_len += tb->size;
-        ts->code.out_len += tb->tc.size;
-        ts->code.search_out_len += search_size;
+        if (tb_stats_enabled(tb, TB_JIT_STATS)) {
+            ts->code.num_guest_inst += prof->translation.nb_guest_insns;
+            ts->code.num_tcg_ops += prof->translation.nb_ops_pre_opt;
+            ts->code.num_tcg_ops_opt += tcg_ctx->nb_ops;
+            ts->code.spills += prof->translation.nb_spills;
+            ts->code.temps += prof->translation.temp_count;
+            ts->code.deleted_ops += prof->translation.del_op_count;
+            ts->code.in_len += tb->size;
+            ts->code.out_len += tb->tc.size;
+            ts->code.search_out_len += search_size;
 
-        ts->translations.total++;
-        if (phys_page2 != -1) {
-            ts->translations.spanning++;
+            ts->translations.total++;
+            if (phys_page2 != -1) {
+                ts->translations.spanning++;
+            }
+
+            g_ptr_array_add(ts->tbs, tb);
         }
 
-        g_ptr_array_add(ts->tbs, tb);
+        if (tb_stats_enabled(tb, TB_JIT_TIME)) {
+            ts->gen_times.ir += prof->gen_ir_done_time - prof->gen_start_time;
+            ts->gen_times.ir_opt += prof->gen_opt_done_time - prof->gen_ir_done_time;
+            ts->gen_times.la += prof->gen_la_done_time - prof->gen_opt_done_time;
+            ts->gen_times.code += prof->gen_code_done_time - prof->gen_la_done_time;
+        }
 
         qemu_mutex_unlock(&ts->jit_stats_lock);
     }
