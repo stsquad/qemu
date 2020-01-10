@@ -73,3 +73,6 @@ run-pauth-3:
 run-plugin-pauth-3-with-%:
 	$(call skip-test, "RUN of pauth-3 ($*)", "not built")
 endif
+
+QEMU_EL2_MACHINE=-machine virt,virtualization=on,gic-version=2 -cpu cortex-a57 -smp 4
+run-vtimer: QEMU_OPTS=$(QEMU_EL2_MACHINE) $(QEMU_SEMIHOST) -kernel
