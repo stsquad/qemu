@@ -1,0 +1,10 @@
+#
+# Docker cross-compiler target
+#
+# This docker target builds on the debian Buster base image.
+#
+FROM qemu:debian10
+
+RUN apt update && \
+    DEBIAN_FRONTEND=noninteractive eatmydata \
+    apt install -y --no-install-recommends gcc-x86-64-linux-gnu

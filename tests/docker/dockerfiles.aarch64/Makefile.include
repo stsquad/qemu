@@ -1,0 +1,24 @@
+# -*- Mode: makefile -*-
+#
+# AArch64 Containers
+#
+# The cross-compilers are not as well packaged for AArch64 although we
+# do have access to 32 bit ARM, x86 and a smattering of the
+# microcontrollers.
+#
+
+AARCH64_BASE = $(DOCKER_BASE)/dockerfiles.aarch64
+VPATH += $(AARCH64_BASE)
+
+#
+# We have both QEMU build and TEST build containers we can access
+#
+QEMU_BUILD_CONTAINERS += $(call get-basenames,$(wildcard $(AARCH64_BASE)/*-build-qemu.docker))
+TEST_BUILD_CONTAINERS += $(call get-basenames,$(wildcard $(AARCH64_BASE)/*-build-tests.docker))
+
+# Generate build-deps based on names
+#
+# Most of this architecture are based on Debian images
+AARCH64_CONTAINERS=$(call get-basenames,$(wildcard $(AARCH64_BASE)/*.docker))
+$(filter-out,debian9,$(AARCH64_CONTAINERS)): docker-image-debian9
+$(filter-out,debian10,$(AARCH64_CONTAINERS)): docker-image-debian10

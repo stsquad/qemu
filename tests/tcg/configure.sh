@@ -175,6 +175,9 @@ for target in $target_list; do
       # default to the dc232b cpu
       container_cross_cc=/opt/2018.02/xtensa-dc232b-elf/bin/xtensa-dc232b-elf-gcc
       ;;
+    x86-64-*)
+      container_image=debian10-x86-64-build-tests
+      container_cross_cc=gcc-x86-64-gnu-linux
   esac
 
   config_target_mak=tests/tcg/config-$target.mak
