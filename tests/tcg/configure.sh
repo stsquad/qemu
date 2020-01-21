@@ -118,7 +118,7 @@ for target in $target_list; do
       container_cross_cc=hppa-linux-gnu-gcc
       ;;
     i386-*)
-      container_image=fedora-i386-build-qemu
+      container_image=fedora-i386-build-tests
       container_cross_cc=gcc
       ;;
     m68k-*)
