@@ -1,0 +1,26 @@
+# -*- Mode: makefile -*-
+#
+# x86_64 Containers
+#
+# This architecture has by far the largest number of cross compilers
+# enabled for it.
+#
+
+X86_64_BASE = $(DOCKER_BASE)/dockerfiles.x86_64
+VPATH += $(X86_64_BASE)
+
+#
+# We have both QEMU build and TEST build containers we can access
+#
+QEMU_BUILD_CONTAINERS += $(call get-basenames,$(wildcard $(X86_64_BASE)/*-build-qemu.docker))
+TEST_BUILD_CONTAINERS += $(call get-basenames,$(wildcard $(X86_64_BASE)/*-build-tests.docker))
+
+# Generate build-deps based on names
+#
+# Most of this architecture are based on Debian images
+X86_64_CONTAINERS=$(call get-basenames,$(wildcard $(X86_64_BASE)/*.docker))
+$(filter-out,debian9,$(X86_64_CONTAINERS)): docker-image-debian9
+$(filter-out,debian10,$(X86_64_CONTAINERS)): docker-image-debian10
+
+# MXE windows cross compilers are all based on stretch
+debian9-mxe-%: docker-image-debian9-mxe
