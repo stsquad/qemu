@@ -16,6 +16,7 @@ import logging
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'python'))
 from avocado_qemu import Test
+from qemu.binutils import binary_get_accels
 from qemu.binutils import binary_get_arch
 from qemu.binutils import binary_get_machines
 from qemu.binutils import binary_get_qom_implementations
@@ -59,3 +60,12 @@ class PythonQemuCoreScripts(Test):
         for t in type_impl:
             logger.debug('type: {}'.format(t))
         self.assertIn(type_name, type_impl)
+
+    def test_get_accels(self):
+        logger = logging.getLogger('core')
+        accels = binary_get_accels(self.qemu_bin)
+        for a in accels:
+            logger.debug('accel: {}'.format(a))
+        self.assertNotIn("accel", accels)
+        # qtest is always available
+        self.assertIn("qtest", accels)

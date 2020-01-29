@@ -86,3 +86,13 @@ def binary_get_qom_implementations(qemu_bin, type_name, include_abstract=False):
         LOG.info(res)
         vm.shutdown()
         return [m['name'] for m in res]
+
+def binary_get_accels(qemu_bin):
+    '''
+    Get list of accelerators supported by a QEMU binary
+
+    @param qemu_bin (str): path to the QEMU binary
+    @return list of accelerators supported by the binary
+    '''
+    accel_types = binary_get_qom_implementations(qemu_bin, "accel", False)
+    return [a.strip("-accel") for a in accel_types]
