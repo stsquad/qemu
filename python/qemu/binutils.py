@@ -36,3 +36,18 @@ def binary_get_version(qemu_bin):
         LOG.info(res)
         vm.shutdown()
         return res['qemu']
+
+def binary_get_arch(qemu_bin):
+    '''
+    Get target architecture for a QEMU binary
+
+    @param qemu_bin (str): path to the QEMU binary
+    @return binary target architecture
+    '''
+    with QEMUMachine(qemu_bin) as vm:
+        vm.set_machine('none')
+        vm.launch()
+        res = vm.command('query-target')
+        LOG.info(res)
+        vm.shutdown()
+        return res['arch']

@@ -16,6 +16,7 @@ import logging
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'python'))
 from avocado_qemu import Test
+from qemu.binutils import binary_get_arch
 from qemu.binutils import binary_get_version
 
 
@@ -29,3 +30,13 @@ class PythonQemuCoreScripts(Test):
         self.assertGreaterEqual(version['major'], 0)
         if version['major'] == 0:
             self.assertGreaterEqual(version['minor'], 14)
+
+    def test_get_arch_x86(self):
+        """
+        :avocado: tags=arch:i386
+        :avocado: tags=arch:x86_64
+        """
+        logger = logging.getLogger('core')
+        a = binary_get_arch(self.qemu_bin)
+        logger.debug('arch: {}'.format(a))
+        self.assertIn(a, ['i386', 'x86_64'])
