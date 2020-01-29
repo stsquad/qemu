@@ -66,3 +66,23 @@ def binary_get_machines(qemu_bin):
         LOG.info(res)
         vm.shutdown()
         return [m['name'] for m in res]
+
+def binary_get_qom_implementations(qemu_bin, type_name, include_abstract=False):
+    '''
+    Get list of QOM types implementing a particular interface
+
+    @param qemu_bin (str): path to the QEMU binary
+    @param type_name (str): QOM interface name
+    @param include_abstract (bool): if True, abstract interfaces are also
+                                    returned in the list
+    @return list of QOM types implementing the interface @type_name
+    '''
+    with QEMUMachine(qemu_bin) as vm:
+        vm.set_machine('none')
+        vm.launch()
+        res = vm.command('qom-list-types',
+                         implements=type_name,
+                         abstract=include_abstract)
+        LOG.info(res)
+        vm.shutdown()
+        return [m['name'] for m in res]

@@ -18,6 +18,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'python'))
 from avocado_qemu import Test
 from qemu.binutils import binary_get_arch
 from qemu.binutils import binary_get_machines
+from qemu.binutils import binary_get_qom_implementations
 from qemu.binutils import binary_get_version
 
 
@@ -49,3 +50,12 @@ class PythonQemuCoreScripts(Test):
             logger.debug('machine: {}'.format(m))
         # The 'none' machine is always available
         self.assertIn('none', machines)
+
+    def test_get_qom_implementation(self):
+        logger = logging.getLogger('core')
+        type_name = "accel"
+        type_impl = binary_get_qom_implementations(self.qemu_bin,
+                                                   type_name, True)
+        for t in type_impl:
+            logger.debug('type: {}'.format(t))
+        self.assertIn(type_name, type_impl)
