@@ -51,3 +51,18 @@ def binary_get_arch(qemu_bin):
         LOG.info(res)
         vm.shutdown()
         return res['arch']
+
+def binary_get_machines(qemu_bin):
+    '''
+    Get list of machines supported by a QEMU binary
+
+    @param qemu_bin (str): path to the QEMU binary
+    @return list of machines supported by the binary
+    '''
+    with QEMUMachine(qemu_bin) as vm:
+        vm.set_machine('none')
+        vm.launch()
+        res = vm.command('query-machines')
+        LOG.info(res)
+        vm.shutdown()
+        return [m['name'] for m in res]

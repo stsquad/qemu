@@ -17,6 +17,7 @@ import logging
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'python'))
 from avocado_qemu import Test
 from qemu.binutils import binary_get_arch
+from qemu.binutils import binary_get_machines
 from qemu.binutils import binary_get_version
 
 
@@ -40,3 +41,11 @@ class PythonQemuCoreScripts(Test):
         a = binary_get_arch(self.qemu_bin)
         logger.debug('arch: {}'.format(a))
         self.assertIn(a, ['i386', 'x86_64'])
+
+    def test_get_machines(self):
+        logger = logging.getLogger('core')
+        machines = binary_get_machines(self.qemu_bin)
+        for m in sorted(machines):
+            logger.debug('machine: {}'.format(m))
+        # The 'none' machine is always available
+        self.assertIn('none', machines)
