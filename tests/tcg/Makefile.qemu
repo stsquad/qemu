@@ -39,11 +39,7 @@ cross-build-guest-tests:
 
 GUEST_BUILD=cross-build-guest-tests
 
-endif
-
-# Support building with Docker
-
-ifneq ($(DOCKER_IMAGE),)
+else ifeq ($(call image-available,$(DOCKER_IMAGE)),y)
 
 DOCKER_COMPILE_CMD="$(DOCKER_SCRIPT) cc \
 		--cc $(DOCKER_CROSS_CC_GUEST) \

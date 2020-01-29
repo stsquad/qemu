@@ -477,6 +477,8 @@ dummy := $(call unnest-vars,, \
                 common-obj-m \
                 trace-obj-y)
 
+# tests will want to know of what docker builds are available
+include $(SRC_PATH)/tests/docker/Makefile.include
 include $(SRC_PATH)/tests/Makefile.include
 
 all: $(DOCS) $(if $(BUILD_DOCS),sphinxdocs) $(TOOLS) $(HELPERS-y) recurse-all modules $(vhost-user-json-y)
@@ -1231,7 +1233,6 @@ endif
 # Dependencies in Makefile.objs files come from our recursive subdir rules
 -include $(wildcard *.d tests/*.d)
 
-include $(SRC_PATH)/tests/docker/Makefile.include
 include $(SRC_PATH)/tests/vm/Makefile.include
 
 print-help-run = printf "  %-30s - %s\\n" "$1" "$2"

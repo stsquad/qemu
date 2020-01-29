@@ -11,7 +11,7 @@ DOCKER_IMAGE:=
 
 -include $(BUILD_DIR)/tests/tcg/config-$(PROBE_TARGET).mak
 
-ifneq ($(DOCKER_IMAGE),)
+ifeq ($(call image-available,$(DOCKER_IMAGE)),y)
 build-tcg-tests-$(PROBE_TARGET): docker-image-$(DOCKER_IMAGE)
 endif
 $(BUILD_DIR)/tests/tcg/config_$(PROBE_TARGET).mak: config-host.mak

@@ -36,6 +36,13 @@ get-basenames = $(sort $(notdir $(basename $1)))
 -include $(DOCKER_BASE)/dockerfiles.multiarch/Makefile.include
 -include $(DOCKER_BASE)/dockerfiles.$(HOST_ARCH)/Makefile.include
 
+# Collect together the list of all build targets so we can check if we
+# can meet our build dependencies.
+ALL_BUILD_CONTAINERS = $(TEST_BUILD_CONTAINERS) $(QEMU_BUILD_CONTAINERS)
+
+# Helper for checking we can build it, $1 is image name
+image-available = $(if $(findstring $1,$(ALL_BUILD_CONTAINERS)),y)
+
 # Use a global constant ccache directory to speed up repetitive builds
 DOCKER_CCACHE_DIR := $$HOME/.cache/qemu-docker-ccache
 
@@ -68,7 +75,7 @@ $(DOCKER_SRC_COPY):
 docker-qemu-src: $(DOCKER_SRC_COPY)
 
 # The global docker-image rule builds all docker images we are capable of building
-DOCKER_TARGETS := $(patsubst %,docker-image-%,$(BASE_CONTAINERS) $(TEST_BUILD_CONTAINERS) $(QEMU_BUILD_CONTAINERS))
+DOCKER_TARGETS := $(patsubst %,docker-image-%,$(BASE_CONTAINERS) $(ALL_BUILD_CONTAINERS))
 
 docker-image: $(DOCKER_TARGETS)
 
