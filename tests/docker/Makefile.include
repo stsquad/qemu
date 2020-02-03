@@ -143,6 +143,9 @@ DOCKER_PARTIAL_IMAGES += debian-tricore-cross
 DOCKER_PARTIAL_IMAGES += debian-xtensa-cross
 DOCKER_PARTIAL_IMAGES += fedora-i386-cross fedora-cris-cross
 
+# ensure we pull down and build fedora30 first
+fedora-i386-cross fedora-cris-cross: docker-image-fedora
+
 # Rules for building linux-user powered images
 #
 # These are slower than using native cross compiler setups but can
