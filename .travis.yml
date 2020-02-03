@@ -426,7 +426,7 @@ jobs:
           - genisoimage
       env:
         - TEST_CMD="make check check-tcg V=1"
-        - CONFIG="--disable-containers --target-list=${MAIN_SOFTMMU_TARGETS}"
+        - CONFIG="--target-list=${MAIN_SOFTMMU_TARGETS}"
 
     - name: "[ppc64] GCC check-tcg"
       arch: ppc64le
