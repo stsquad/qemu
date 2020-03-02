@@ -3968,10 +3968,6 @@ void HELPER(sve_fcmla_zpzzz_d)(CPUARMState *env, void *vg, uint32_t desc)
 }
 
 /*
- * Load contiguous data, protected by a governing predicate.
- */
-
-/*
  * Load elements into @vd + @reg_off, from @host,
  * or the reverse for stores.
  */
@@ -4194,6 +4190,76 @@ static bool sve_probe_page(SVEHostPage *info, bool nofault,
     return true;
 }
 
+/*
+ * Load contiguous data, unpredicated.
+ *
+ * Note that unpredicated load/store of vector/predicate registers
+ * are defined as a stream of bytes, which equates to little-endian
+ * operations on larger quantities.
+ *
+ * Note any MTE check is already handled.
+ */
+
+void HELPER(sve_ldr)(CPUARMState *env, void *vd, target_ulong addr, int size)
+{
+    int mmu_idx = cpu_mmu_index(env, false);
+    int in_page = -((int)addr | TARGET_PAGE_MASK);
+    uintptr_t ra = GETPC();
+    uint64_t val;
+    int i;
+
+    /* Small loads are expanded inline. */
+    tcg_debug_assert(size > 2 * 8);
+
+    /* Bulk copy the data from memory to the register. */
+    if (likely(size <= in_page)) {
+        void *host = probe_read(env, addr, size, mmu_idx, ra);
+
+        if (unlikely(!host)) {
+            goto mmio;
+        }
+        memcpy(vd, host, size);
+    } else {
+        void *h1 = probe_read(env, addr, in_page, mmu_idx, ra);
+        void *h2 = probe_read(env, addr + in_page, size - in_page, mmu_idx, ra);
+
+        if (unlikely(!h1 || !h2)) {
+            goto mmio;
+        }
+        memcpy(vd, h1, in_page);
+        memcpy(vd + in_page, h2, size - in_page);
+    }
+
+    /* Predicate load length may be any multiple of 2; ensure high bits 0. */
+    if (unlikely(size & 7)) {
+        memset(vd + size, 0, 8 - (size & 7));
+    }
+
+    /*
+     * The memcpy and memset above kept the bytes in memory order.
+     * The in-register format has uint64_t in host order, so for
+     * big-endian host we need to bswap.
+     */
+    for (i = 0; i < size; i += 8) {
+        le64_to_cpus(vd + i);
+    }
+    return;
+
+ mmio:
+    for (i = 0; i + 8 <= size; i += 8) {
+        val = cpu_ldq_data_ra(env, addr + i, ra);
+        val = le_bswap64(val);
+        *(uint64_t *)(vd + i) = val;
+    }
+
+    /* Predicate load length may be any multiple of 2. */
+    if (unlikely(i != size)) {
+        val = cpu_ldq_data_ra(env, addr + i, ra);
+        val = le_bswap64(val);
+        val >>= (size - i) * 8;
+        *(uint64_t *)(vd + i + 8) = val;
+    }
+}
 
 /*
  * Analyse contiguous data, protected by a governing predicate.
