@@ -4191,7 +4191,7 @@ static bool sve_probe_page(SVEHostPage *info, bool nofault,
 }
 
 /*
- * Load contiguous data, unpredicated.
+ * Load/store contiguous data, unpredicated.
  *
  * Note that unpredicated load/store of vector/predicate registers
  * are defined as a stream of bytes, which equates to little-endian
@@ -4258,6 +4258,67 @@ void HELPER(sve_ldr)(CPUARMState *env, void *vd, target_ulong addr, int size)
         val = le_bswap64(val);
         val >>= (size - i) * 8;
         *(uint64_t *)(vd + i + 8) = val;
+    }
+}
+
+void HELPER(sve_str)(CPUARMState *env, void *vd, target_ulong addr, int size)
+{
+    int mem_idx = cpu_mmu_index(env, false);
+    int in_page = -((int)addr | TARGET_PAGE_MASK);
+    uintptr_t ra = GETPC();
+    uint64_t val;
+    void *host;
+    int i;
+
+    /* Small stores are expanded inline. */
+    tcg_debug_assert(size > 2 * 8);
+
+    if (likely(size <= in_page)) {
+        host = probe_write(env, addr, size, mem_idx, ra);
+        if (likely(host != NULL)) {
+            for (i = 0; i + 8 <= size; i += 8) {
+                stq_le_p(host + i, *(uint64_t *)(vd + i));
+            }
+
+            /* Predicate load length may be any multiple of 2. */
+            if (unlikely(i != size)) {
+                val = *(uint64_t *)(vd + i);
+                if (size & 4) {
+                    stl_le_p(host + i, val);
+                    i += 4;
+                    val >>= 32;
+                }
+                if (size & 2) {
+                    stw_le_p(host + i, val);
+                }
+            }
+            return;
+        }
+    } else {
+        (void)probe_write(env, addr, in_page, mem_idx, ra);
+        (void)probe_write(env, addr + in_page, size - in_page, mem_idx, ra);
+    }
+
+    /*
+     * Note there is no endian-specific target store function, so to handle
+     * aarch64_be-linux-user we need to bswap the big-endian store.
+     */
+    for (i = 0; i + 8 <= size; i += 8) {
+        val = *(uint64_t *)(vd + i);
+        cpu_stq_data_ra(env, addr + i, le_bswap64(val), ra);
+    }
+
+    /* Predicate load length may be any multiple of 2. */
+    if (unlikely(i != size)) {
+        val = *(uint64_t *)(vd + i);
+        if (size & 4) {
+            cpu_stl_data_ra(env, addr + i, le_bswap32(val), ra);
+            i += 4;
+            val >>= 32;
+        }
+        if (size & 2) {
+            cpu_stw_data_ra(env, addr + i, le_bswap16(val), ra);
+        }
     }
 }
 
