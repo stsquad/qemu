@@ -3985,7 +3985,7 @@ typedef void sve_ldst1_tlb_fn(CPUARMState *env, void *vd, intptr_t reg_off,
  *
  * For *_tlb, this uses the cpu_*_data_ra helpers.  There are not
  * endian-specific versions of these, so we must handle endianness
- * locally.
+ * locally.  See sve_probe_page about TBI.
  *
  * For *_host, this is a trivial application of the <qemu/bswap.h>
  * endian-specific access followed by a store into the vector register.
@@ -4009,7 +4009,7 @@ static void sve_##NAME##_host(void *vd, intptr_t reg_off, void *host)  \
 static void sve_##NAME##_tlb(CPUARMState *env, void *vd, intptr_t reg_off,  \
                              target_ulong addr, uintptr_t ra)               \
 {                                                                           \
-    TYPEM val = BSWAP(TLB(env, addr, ra));                                  \
+    TYPEM val = BSWAP(TLB(env, useronly_clean_ptr(addr), ra));              \
     *(TYPEE *)(vd + H(reg_off)) = val;                                      \
 }
 
@@ -4018,7 +4018,7 @@ static void sve_##NAME##_tlb(CPUARMState *env, void *vd, intptr_t reg_off,  \
                              target_ulong addr, uintptr_t ra)               \
 {                                                                           \
     TYPEM val = *(TYPEE *)(vd + H(reg_off));                                \
-    TLB(env, addr, BSWAP(val), ra);                                         \
+    TLB(env, useronly_clean_ptr(addr), BSWAP(val), ra);                     \
 }
 
 #define DO_LD_PRIM_1(NAME, H, TE, TM)                   \
@@ -4152,6 +4152,19 @@ static bool sve_probe_page(SVEHostPage *info, bool nofault,
     int flags;
 
     addr += mem_off;
+
+    /*
+     * User-only currently always issues with TBI.  See the comment
+     * above useronly_clean_ptr.  Usually we clean this top byte away
+     * during translation, but we can't do that for e.g. vector + imm
+     * addressing modes.
+     *
+     * We currently always enable TBI for user-only, and do not provide
+     * a way to turn it off.  So clean the pointer unconditionally here,
+     * rather than look it up here, or pass it down from above.
+     */
+    addr = useronly_clean_ptr(addr);
+
     flags = probe_access_flags(env, addr, access_type, mmu_idx, nofault,
                                &info->host, retaddr);
     info->flags = flags;
