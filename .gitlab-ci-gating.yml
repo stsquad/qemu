@@ -1,0 +1,111 @@
+variables:
+  GIT_SUBMODULE_STRATEGY: recursive
+
+# All ubuntu-18.04.3 jobs should run successfully in an environment
+# setup by the contrib/ci/orgs/qemu/build-environment.yml task
+# "Install basic packages to build QEMU on Ubuntu 18.04"
+ubuntu-18.04.3-x86_64-all-linux-static:
+ tags:
+ - ubuntu_18.04.3
+ - x86_64
+ rules:
+ - if: '$CI_COMMIT_REF_NAME == "staging"'
+ script:
+ # --disable-libssh is needed because of https://bugs.launchpad.net/qemu/+bug/1838763
+ # --disable-glusterfs is needed because there's no static version of those libs in distro supplied packages
+ - ./configure --enable-debug --static --disable-system --disable-glusterfs --disable-libssh
+ - make --output-sync -j`nproc`
+ - make --output-sync -j`nproc` check V=1
+ - make --output-sync -j`nproc` check-tcg V=1
+
+ubuntu-18.04.3-x86_64-all:
+ tags:
+ - ubuntu_18.04.3
+ - x86_64
+ rules:
+ - if: '$CI_COMMIT_REF_NAME == "staging"'
+ script:
+ - ./configure --disable-libssh
+ - make --output-sync -j`nproc`
+ - make --output-sync -j`nproc` check V=1
+
+ubuntu-18.04.3-x86_64-alldbg:
+ tags:
+ - ubuntu_18.04.3
+ - x86_64
+ rules:
+ - if: '$CI_COMMIT_REF_NAME == "staging"'
+ script:
+ - ./configure --enable-debug --disable-libssh
+ - make clean
+ - make --output-sync -j`nproc`
+ - make --output-sync -j`nproc` check V=1
+
+ubuntu-18.04.3-x86_64-clang:
+ tags:
+ - ubuntu_18.04.3
+ - x86_64
+ rules:
+ - if: '$CI_COMMIT_REF_NAME == "staging"'
+ script:
+ - ./configure --disable-libssh --cc=clang --cxx=clang++ --enable-sanitizers
+ - make --output-sync -j`nproc`
+ - make --output-sync -j`nproc` check V=1
+
+ubuntu-18.04.3-x86_64-tci:
+ tags:
+ - ubuntu_18.04.3
+ - x86_64
+ rules:
+ - if: '$CI_COMMIT_REF_NAME == "staging"'
+ script:
+ - ./configure --disable-libssh --enable-tcg-interpreter
+ - make --output-sync -j`nproc`
+
+ubuntu-18.04.3-x86_64-notcg:
+ tags:
+ - ubuntu_18.04.3
+ - x86_64
+ rules:
+ - if: '$CI_COMMIT_REF_NAME == "staging"'
+ script:
+ - ./configure --disable-libssh --disable-tcg
+ - make --output-sync -j`nproc`
+ - make --output-sync -j`nproc` check V=1
+
+# All fedora-30 jobs should run successfully in an environment
+# setup by the contrib/ci/orgs/qemu/build-environment.yml task
+# "Install basic packages to build QEMU on Fedora 30"
+fedora-30-x86_64-cross-w32:
+ tags:
+ - fedora_30
+ - x86_64
+ rules:
+ - if: '$CI_COMMIT_REF_NAME == "staging"'
+ script:
+ - ./configure --cross-prefix=i686-w64-mingw32-
+ - make --output-sync -j`nproc`
+
+fedora-30-x86_64-cross-w64:
+ tags:
+ - fedora_30
+ - x86_64
+ rules:
+ - if: '$CI_COMMIT_REF_NAME == "staging"'
+ script:
+ - ./configure --cross-prefix=x86_64-w64-mingw32-
+ - make --output-sync -j`nproc`
+
+# All freebsd_12.1 jobs should run successfully in an environment
+# setup by the contrib/ci/orgs/qemu/build-environment.yml task
+# "Install basic packages to build QEMU on FreeBSD 12.x"
+freebsd-12.1-x86_64-all:
+ tags:
+ - freebsd_12.1
+ - x86_64
+ rules:
+ - if: '$CI_COMMIT_REF_NAME == "staging"'
+ script:
+ - ./configure
+ - gmake --output-sync -j`sysctl -n hw.ncpu`
+ - gmake --output-sync -j`sysctl -n hw.ncpu` check V=1

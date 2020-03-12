@@ -1,7 +1,10 @@
 include:
   - local: '/.gitlab-ci-edk2.yml'
+  - local: '/.gitlab-ci-gating.yml'
 
 build-system1:
+ rules:
+ - if: '$CI_COMMIT_REF_NAME != "staging"'
  before_script: &before_scr_apt
  - apt-get update -qq
  - apt-get install -y -qq flex bison libglib2.0-dev libpixman-1-dev genisoimage
@@ -17,6 +20,8 @@ build-system1:
  - make -j2 check
 
 build-system2:
+ rules:
+ - if: '$CI_COMMIT_REF_NAME != "staging"'
  before_script:
   *before_scr_apt
  script:
@@ -32,6 +37,8 @@ build-system2:
  - make -j2 check
 
 build-disabled:
+ rules:
+ - if: '$CI_COMMIT_REF_NAME != "staging"'
  before_script:
   *before_scr_apt
  script:
@@ -48,6 +55,8 @@ build-disabled:
  - make -j2 check-qtest SPEED=slow
 
 build-tcg-disabled:
+ rules:
+ - if: '$CI_COMMIT_REF_NAME != "staging"'
  before_script:
   *before_scr_apt
  script:
@@ -68,6 +77,8 @@ build-tcg-disabled:
             260 261 262 263 264 270 272 273 277 279
 
 build-user:
+ rules:
+ - if: '$CI_COMMIT_REF_NAME != "staging"'
  before_script:
   *before_scr_apt
  script:
@@ -79,6 +90,8 @@ build-user:
  - make run-tcg-tests-i386-linux-user run-tcg-tests-x86_64-linux-user
 
 build-clang:
+ rules:
+ - if: '$CI_COMMIT_REF_NAME != "staging"'
  before_script:
   *before_scr_apt
  script:
@@ -93,6 +106,8 @@ build-clang:
  - make -j2 check
 
 build-tci:
+ rules:
+ - if: '$CI_COMMIT_REF_NAME != "staging"'
  before_script:
   *before_scr_apt
  script:

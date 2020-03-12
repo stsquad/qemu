@@ -896,3 +896,145 @@ exercise as many corner cases as possible. It is a useful test suite
 to run to exercise QEMU's linux-user code::
 
   https://linux-test-project.github.io/
+
+CI
+==
+
+QEMU has configurations enabled for a number of different CI services.
+The most update information about them and their status can be found
+at::
+
+   https://wiki.qemu.org/Testing/CI
+
+Gating CI
+----------
+
+A Pull Requests will only to be merged if they successfully go through
+a different set of CI jobs.  GitLab's CI is the service/framework used
+for executing the gating jobs.
+
+The architecture of GitLab's CI service allows different machines to be
+setup with GitLab's "agent", called gitlab-runner, which will take care
+of running jobs created by events such as a push to a branch.
+
+Even though gitlab-runner can execute jobs on environments such as
+containers, this initial implementation assumes the shell executor is
+used, effectively running jobs on the same machine (be them physical
+or virtual) the gitlab-runner agent is running.  This means those
+machines must be setup in advance, with the requirements matching the
+jobs expected to be executed there.
+
+Machine configuration for gating jobs
+-------------------------------------
+
+The GitLab's CI architecture allows different parties to provide
+different machines that will run different jobs.  At this point, QEMU
+will deploy a limited set of machines and jobs.  Documentation and/or
+scripts to setup those machines is located under::
+
+  contrib/ci/orgs/qemu
+
+Ansible playbooks have been provided to perform two different tasks
+related to setting gitlab-runner and the build environment.
+
+Other organizations involved in QEMU development may, in the near
+future, contribute their own setup documentation/scripts under
+``contrib/ci/orgs/$ORG_NAME`` directory.
+
+The GitLab CI jobs definition for the gating jobs are located under::
+
+  .gitlab-ci-gating.yml
+
+It's expected that these will be moved to a ``.gitlab-ci.d/``
+directory shortly.  Once the gating CI has proved mature with this set
+of initial jobs, other members in the community may provide their own
+machine configuration documentation/scripts, and accompanying job
+definitions.  Those contributed jobs should run as non-gating, until
+their reliability is verified.
+
+Machine Setup Howto
+-------------------
+
+For all Linux based systems, the setup can be mostly automated by the
+execution of two Ansible playbooks.  Start by adding your machines to
+the ``inventory`` file under ``contrib/ci/orgs/qemu``, such as this::
+
+  [local]
+  fully.qualified.domain
+  other.machine.hostname
+
+You may need to set some variables in the inventory file itself.  One
+very common need is to tell Ansible to use a Python 3 interpreter on
+those hosts.  This would look like::
+
+  [local]
+  fully.qualified.domain ansible_python_interpreter=/usr/bin/python3
+  other.machine.hostname ansible_python_interpreter=/usr/bin/python3
+
+Build environment
+~~~~~~~~~~~~~~~~~
+
+The ``contrib/ci/orgs/qemu/build-environment.yml`` Ansible playbook
+will setup machines with the environment needed to perform builds of
+QEMU and runs of the tests defined in the current gating jobs.  It
+covers a number of different Linux distributions and FreeBSD.
+
+To run the playbook, execute::
+
+  cd contrib/ci/orgs/qemu
+  ansible-playbook -i inventory build-environment.yml
+
+gitlab-runner setup and registration
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The gitlab-runner agent needs to be installed on each machine that
+will run jobs.  The association between a machine and a GitLab project
+happens with a registration token.  To find the registration token for
+your repository/project, navigate on GitLab's web UI to:
+
+ * Settings (the gears like icon), then
+ * CI/CD, then
+ * Runners, and click on the "Expand" button, then
+ * Under "Set up a specific Runner manually", look for the value under
+   "Use the following registration token during setup"
+
+Edit the ``contrib/ci/orgs/qemu/vars.yml`` file, setting the
+``gitlab_runner_registration_token`` variable to the value obtained
+earlier.
+
+To run the playbook, execute::
+
+  cd contrib/ci/orgs/qemu
+  ansible-playbook -i inventory gitlab-runner.yml
+
+.. note:: there are currently limitations to gitlab-runner itself when
+          setting up a service under FreeBSD systems.  You will need to
+          perform steps 4 to 10 manually, as described at
+          https://docs.gitlab.com/runner/install/freebsd.html
+
+Following the registration, it's necessary to configure the runner tags,
+and optionally other configurations on the GitLab UI.  Navigate to:
+
+ * Settings (the gears like icon), then
+ * CI/CD, then
+ * Runners, and click on the "Expand" button, then
+ * "Runners activated for this project", then
+ * Click on the "Edit" icon (next to the "Lock" Icon)
+
+Under tags, add values matching the jobs a runner should run.  For a
+FreeBSD 12.1 x86_64 system, the tags should be set as::
+
+  freebsd12.1,x86_64
+
+Because the job definition at ``.gitlab-ci-gating.yml`` contains::
+
+  freebsd-12.1-x86_64-all:
+   tags:
+   - freebsd_12.1
+   - x86_64
+
+It's also recommended to:
+
+ * increase the "Maximum job timeout" to something like ``2h``
+ * uncheck the "Run untagged jobs" check box
+ * give it a better Description
