@@ -1,11 +1,10 @@
 include:
   - local: '/.gitlab-ci-edk2.yml'
 
-before_script:
+build-system1:
+ before_script: &before_scr_apt
  - apt-get update -qq
  - apt-get install -y -qq flex bison libglib2.0-dev libpixman-1-dev genisoimage
-
-build-system1:
  script:
  - apt-get install -y -qq libgtk-3-dev libvte-dev nettle-dev libcacard-dev
       libusb-dev libvde-dev libspice-protocol-dev libgl1-mesa-dev libvdeplug-dev
@@ -18,6 +17,8 @@ build-system1:
  - make -j2 check
 
 build-system2:
+ before_script:
+  *before_scr_apt
  script:
  - apt-get install -y -qq libsdl2-dev libgcrypt-dev libbrlapi-dev libaio-dev
       libfdt-dev liblzo2-dev librdmacm-dev libibverbs-dev libibumad-dev
@@ -31,6 +32,8 @@ build-system2:
  - make -j2 check
 
 build-disabled:
+ before_script:
+  *before_scr_apt
  script:
  - mkdir build
  - cd build
@@ -45,6 +48,8 @@ build-disabled:
  - make -j2 check-qtest SPEED=slow
 
 build-tcg-disabled:
+ before_script:
+  *before_scr_apt
  script:
  - apt-get install -y -qq clang libgtk-3-dev libusb-dev
  - mkdir build
@@ -63,6 +68,8 @@ build-tcg-disabled:
             260 261 262 263 264 270 272 273 277 279
 
 build-user:
+ before_script:
+  *before_scr_apt
  script:
  - mkdir build
  - cd build
@@ -72,6 +79,8 @@ build-user:
  - make run-tcg-tests-i386-linux-user run-tcg-tests-x86_64-linux-user
 
 build-clang:
+ before_script:
+  *before_scr_apt
  script:
  - apt-get install -y -qq clang libsdl2-dev libattr1-dev libcap-ng-dev
       xfslibs-dev libiscsi-dev libnfs-dev libseccomp-dev gnutls-dev librbd-dev
@@ -84,6 +93,8 @@ build-clang:
  - make -j2 check
 
 build-tci:
+ before_script:
+  *before_scr_apt
  script:
  - TARGETS="aarch64 alpha arm hppa m68k microblaze moxie ppc64 s390x x86_64"
  - mkdir build
