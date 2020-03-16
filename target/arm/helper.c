@@ -2995,16 +2995,6 @@ static void gt_virt_ctl_write(CPUARMState *env, const ARMCPRegInfo *ri,
     gt_ctl_write(env, ri, GTIMER_VIRT, value);
 }
 
-static void gt_cntvoff_write(CPUARMState *env, const ARMCPRegInfo *ri,
-                              uint64_t value)
-{
-    ARMCPU *cpu = env_archcpu(env);
-
-    trace_arm_gt_cntvoff_write(value);
-    raw_write(env, ri, value);
-    gt_recalc_timer(cpu, GTIMER_VIRT);
-}
-
 static uint64_t gt_virt_redir_cval_read(CPUARMState *env,
                                         const ARMCPRegInfo *ri)
 {
@@ -3047,6 +3037,17 @@ static void gt_virt_redir_ctl_write(CPUARMState *env, const ARMCPRegInfo *ri,
     gt_ctl_write(env, ri, timeridx, value);
 }
 
+#if !defined(CONFIG_USER_ONLY) && defined(CONFIG_TCG)
+static void gt_cntvoff_write(CPUARMState *env, const ARMCPRegInfo *ri,
+                              uint64_t value)
+{
+    ARMCPU *cpu = env_archcpu(env);
+
+    trace_arm_gt_cntvoff_write(value);
+    raw_write(env, ri, value);
+    gt_recalc_timer(cpu, GTIMER_VIRT);
+}
+
 static void gt_hyp_timer_reset(CPUARMState *env, const ARMCPRegInfo *ri)
 {
     gt_timer_reset(env, ri, GTIMER_HYP);
@@ -3074,6 +3075,7 @@ static void gt_hyp_ctl_write(CPUARMState *env, const ARMCPRegInfo *ri,
 {
     gt_ctl_write(env, ri, GTIMER_HYP, value);
 }
+#endif /* !CONFIG_USER_ONLY && CONFIG_TCG */
 
 static void gt_sec_timer_reset(CPUARMState *env, const ARMCPRegInfo *ri)
 {
