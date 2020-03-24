@@ -1216,6 +1216,30 @@ DO_ZZZ_NTB(sve2_eoril_d, uint64_t,     , DO_EOR)
 
 #undef DO_ZZZ_NTB
 
+#define DO_ABAL(NAME, TYPE, TYPEN) \
+void HELPER(NAME)(void *vd, void *va, void *vn, void *vm, uint32_t desc) \
+{                                                              \
+    intptr_t i, opr_sz = simd_oprsz(desc);                     \
+    int sel1 = (simd_data(desc) & 1) * sizeof(TYPE);           \
+    int sel2 = (simd_data(desc) & 2) * (sizeof(TYPE) / 2);     \
+    for (i = 0; i < opr_sz; i += sizeof(TYPE)) {               \
+        TYPE nn = (TYPEN)(*(TYPE *)(vn + i) >> sel1);          \
+        TYPE mm = (TYPEN)(*(TYPE *)(vm + i) >> sel2);          \
+        TYPE aa = *(TYPE *)(va + i);                           \
+        *(TYPE *)(vd + i) = DO_ABD(nn, mm) + aa;               \
+    }                                                          \
+}
+
+DO_ABAL(sve2_sabal_h, int16_t, int8_t)
+DO_ABAL(sve2_sabal_s, int32_t, int16_t)
+DO_ABAL(sve2_sabal_d, int64_t, int32_t)
+
+DO_ABAL(sve2_uabal_h, uint16_t, uint8_t)
+DO_ABAL(sve2_uabal_s, uint32_t, uint16_t)
+DO_ABAL(sve2_uabal_d, uint64_t, uint32_t)
+
+#undef DO_ABAL
+
 #define DO_BITPERM(NAME, TYPE, OP) \
 void HELPER(NAME)(void *vd, void *vn, void *vm, uint32_t desc) \
 {                                                              \
