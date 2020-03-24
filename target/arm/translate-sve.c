@@ -6105,3 +6105,52 @@ DO_SVE2_ZZZ_WTB(UADDWB, uaddw, false)
 DO_SVE2_ZZZ_WTB(UADDWT, uaddw, true)
 DO_SVE2_ZZZ_WTB(USUBWB, usubw, false)
 DO_SVE2_ZZZ_WTB(USUBWT, usubw, true)
+
+static bool do_sve2_shll_tb(DisasContext *s, arg_rri_esz *a,
+                            bool sel, bool uns)
+{
+    static gen_helper_gvec_2 * const fns[2][3] = {
+        { gen_helper_sve2_sshll_h,
+          gen_helper_sve2_sshll_s,
+          gen_helper_sve2_sshll_d },
+        { gen_helper_sve2_ushll_h,
+          gen_helper_sve2_ushll_s,
+          gen_helper_sve2_ushll_d },
+    };
+
+    if (a->esz <= 0 || !dc_isar_feature(aa64_sve2, s)) {
+        /*
+         * For < 0, invalid tsz encoding -- see tszimm_esz.
+         * For = 0, not a widening operation; note this implies bit23 = 0.
+         */
+        return false;
+    }
+    if (sve_access_check(s)) {
+        unsigned vsz = vec_full_reg_size(s);
+        tcg_gen_gvec_2_ool(vec_full_reg_offset(s, a->rd),
+                           vec_full_reg_offset(s, a->rn),
+                           vsz, vsz, (a->imm << 1) | sel,
+                           fns[uns][a->esz - 1]);
+    }
+    return true;
+}
+
+static bool trans_SSHLLB(DisasContext *s, arg_rri_esz *a)
+{
+    return do_sve2_shll_tb(s, a, false, false);
+}
+
+static bool trans_SSHLLT(DisasContext *s, arg_rri_esz *a)
+{
+    return do_sve2_shll_tb(s, a, true, false);
+}
+
+static bool trans_USHLLB(DisasContext *s, arg_rri_esz *a)
+{
+    return do_sve2_shll_tb(s, a, false, true);
+}
+
+static bool trans_USHLLT(DisasContext *s, arg_rri_esz *a)
+{
+    return do_sve2_shll_tb(s, a, true, true);
+}
