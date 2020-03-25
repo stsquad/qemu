@@ -129,4 +129,13 @@ typedef void GVecGen3Fn(unsigned, uint32_t, uint32_t,
 typedef void GVecGen4Fn(unsigned, uint32_t, uint32_t, uint32_t,
                         uint32_t, uint32_t, uint32_t);
 
+void arm_gen_gvec_srshr(unsigned vece, uint32_t rd_ofs, uint32_t rm_ofs,
+                        int64_t shift, uint32_t opr_sz, uint32_t max_sz);
+void arm_gen_gvec_urshr(unsigned vece, uint32_t rd_ofs, uint32_t rm_ofs,
+                        int64_t shift, uint32_t opr_sz, uint32_t max_sz);
+void arm_gen_gvec_srsra(unsigned vece, uint32_t rd_ofs, uint32_t rm_ofs,
+                        int64_t shift, uint32_t opr_sz, uint32_t max_sz);
+void arm_gen_gvec_ursra(unsigned vece, uint32_t rd_ofs, uint32_t rm_ofs,
+                        int64_t shift, uint32_t opr_sz, uint32_t max_sz);
+
 #endif /* TARGET_ARM_TRANSLATE_A64_H */
