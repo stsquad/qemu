@@ -2692,8 +2692,11 @@ static void gt_recalc_timer(ARMCPU *cpu, int timeridx)
         qemu_set_irq(cpu->gt_timer_outputs[timeridx], irqstate);
 
         if (istatus) {
-            /* Next transition is when count rolls back over to zero */
-            nexttick = UINT64_MAX;
+            if (offset <= count) {
+                nexttick = UINT64_MAX;
+            } else {
+                nexttick = offset;
+            }
         } else {
             /* Next transition is when we hit cval */
             nexttick = gt->cval + offset;
