@@ -301,6 +301,9 @@ void *qemu_plugin_insn_haddr(const struct qemu_plugin_insn *insn);
  * The anonymous qemu_plugin_meminfo_t and qemu_plugin_hwaddr types
  * can be used in queries to QEMU to get more information about a
  * given memory access.
+ *
+ * The size_shift is the scale of access, e.g. << 3 is a 64 bit wide
+ * access.
  */
 typedef uint32_t qemu_plugin_meminfo_t;
 struct qemu_plugin_hwaddr;
