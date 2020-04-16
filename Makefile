@@ -356,6 +356,11 @@ HELPERS-y += virtiofsd$(EXESUF)
 vhost-user-json-y += tools/virtiofsd/50-qemu-virtiofsd.json
 endif
 
+ifeq ($(CONFIG_LINUX),y)
+HELPERS-y += vhost-user-rpmb$(EXESUF)
+vhost-user-json-y += tools/vhost-user-rpmb/50-qemu-rpmb.json
+endif
+
 # Sphinx does not allow building manuals into the same directory as
 # the source files, so if we're doing an in-tree QEMU build we must
 # build the manuals into a subdirectory (and then install them from
@@ -471,6 +476,7 @@ dummy := $(call unnest-vars,, \
                 vhost-user-blk-obj-y \
                 vhost-user-input-obj-y \
                 vhost-user-gpu-obj-y \
+                vhost-user-rpmb-obj-y \
                 qga-vss-dll-obj-y \
                 block-obj-y \
                 block-obj-m \
@@ -734,6 +740,11 @@ endif
 
 vhost-user-gpu$(EXESUF): $(vhost-user-gpu-obj-y) $(libvhost-user-obj-y) libqemuutil.a
 	$(call LINK, $^)
+
+ifeq ($(CONFIG_POSIX),y)
+vhost-user-rpmb$(EXESUF): $(vhost-user-rpmb-obj-y) libvhost-user.a $(COMMON_LDADDS)
+	$(call LINK, $^)
+endif
 
 ifdef CONFIG_VHOST_USER_INPUT
 ifdef CONFIG_LINUX
