@@ -1,0 +1,1 @@
+vhost-user-rpmb-obj-y = main.o
