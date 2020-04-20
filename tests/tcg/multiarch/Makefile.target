@@ -45,15 +45,14 @@ run-test-mmap-%: test-mmap
 ifneq ($(HAVE_GDB_BIN),)
 GDB_SCRIPT=$(SRC_PATH)/tests/guest-debug/run-test.py
 
-MULTIARCH_TESTS += gdbstub-sha1
-
-.PHONY: gdbstub-sha1
 run-gdbstub-sha1: sha1
 	$(call run-test, $@, $(GDB_SCRIPT) \
 		--gdb $(HAVE_GDB_BIN) \
 		--qemu $(QEMU) --qargs "$(QEMU_OPTS)" \
 		--bin $< --test $(MULTIARCH_SRC)/gdbstub/sha1.py, \
 	"basic gdbstub support")
+
+EXTRA_RUNS += run-gdbstub-sha1
 endif
 
 
