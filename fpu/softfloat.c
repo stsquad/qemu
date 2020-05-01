@@ -7117,6 +7117,11 @@ float128_compare_internal(float128 a, float128 b, bool is_quiet,
             return 1 - (2 * aSign);
         }
     } else {
+        /* Normalize pseudo-denormals before comparison.  */
+        if ((a.high & 0x7fff) == 0 && a.low & UINT64_C(0x8000000000000000))
+            ++a.high;
+        if ((b.high & 0x7fff) == 0 && b.low & UINT64_C(0x8000000000000000))
+            ++b.high;
         if (a.low == b.low && a.high == b.high) {
             return float_relation_equal;
         } else {
