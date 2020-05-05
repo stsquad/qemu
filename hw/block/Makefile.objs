@@ -14,6 +14,7 @@ common-obj-$(CONFIG_SH4) += tc58128.o
 obj-$(CONFIG_VIRTIO_BLK) += virtio-blk.o
 obj-$(CONFIG_VHOST_USER_BLK) += vhost-user-blk.o
 obj-$(CONFIG_VHOST_USER_RPMB) += vhost-user-rpmb.o
+obj-$(call land,$(CONFIG_VHOST_USER_RPMB),$(CONFIG_VIRTIO_PCI)) += vhost-user-rpmb-pci.o
 obj-$(CONFIG_NVME_PCI) += nvme.o
 
 obj-y += dataplane/
