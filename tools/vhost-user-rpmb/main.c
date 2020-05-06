@@ -12,6 +12,7 @@
 #include <glib.h>
 #include <gio/gio.h>
 #include <gio/gunixsocketaddress.h>
+#include <glib-unix.h>
 #include <stdio.h>
 #include <inttypes.h>
 
@@ -179,6 +180,9 @@ static const VuDevIface vuiface = {
 static void vrpmb_destroy(VuRpmb *r)
 {
     vug_deinit(&r->dev);
+    if (socket_path) {
+        unlink(socket_path);
+    }
 }
 
 /* Print vhost-user.json backend program capabilities */
@@ -187,6 +191,14 @@ static void print_capabilities(void)
     printf("{\n");
     printf("  \"type\": \"block\"\n");
     printf("}\n");
+}
+
+static gboolean hangup(gpointer user_data)
+{
+    GMainLoop *loop = (GMainLoop *) user_data;
+    g_info("%s: caught hangup/quit signal, quitting main loop", __func__);
+    g_main_loop_quit(loop);
+    return true;
 }
 
 int main (int argc, char *argv[])
@@ -260,15 +272,28 @@ int main (int argc, char *argv[])
         }
     }
 
+    /*
+     * Create the main loop first so all the various sources can be
+     * added. As well as catching signals we need to ensure vug_init
+     * can add it's GSource watches.
+     */
+
+    loop = g_main_loop_new(NULL, FALSE);
+    /* catch exit signals */
+    g_unix_signal_add(SIGHUP, hangup, loop);
+    g_unix_signal_add(SIGINT, hangup, loop);
+
     if (!vug_init(&rpmb.dev, VHOST_USER_RPMB_MAX_QUEUES, g_socket_get_fd(socket),
                   vrpmb_panic, &vuiface)) {
         g_printerr("Failed to initialize libvhost-user-glib.\n");
         exit(EXIT_FAILURE);
     }
 
-    loop = g_main_loop_new(NULL, FALSE);
-    g_main_loop_run(loop);
-    g_main_loop_unref(loop);
 
+    g_message("entering main loop, awaiting messages");
+    g_main_loop_run(loop);
+    g_message("finished main loop, cleaning up");
+
+    g_main_loop_unref(loop);
     vrpmb_destroy(&rpmb);
 }
