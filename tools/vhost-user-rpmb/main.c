@@ -103,6 +103,7 @@ static void vrpmb_panic(VuDev *dev, const char *msg)
 
 static uint64_t vrpmb_get_features(VuDev *dev)
 {
+    g_info("%s: replying", __func__);
     return 0;
 }
 
