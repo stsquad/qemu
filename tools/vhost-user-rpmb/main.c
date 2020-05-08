@@ -85,6 +85,7 @@ typedef struct VuRpmb {
     struct virtio_rpmb_config virtio_config;
     int flash_fd;
     void *flash_map;
+    GMainLoop *loop;
 } VuRpmb;
 
 struct virtio_rpmb_ctrl_command {
@@ -172,10 +173,22 @@ vrpmb_queue_set_started(VuDev *dev, int qidx, bool started)
     }
 }
 
-static int
-vrpmb_process_msg(VuDev *dev, VhostUserMsg *msg, int *do_reply)
+/*
+ * vrpmb_process_msg: process messages of vhost-user interface
+ *
+ * Any that are not handled here are processed by the libvhost library
+ * itself.
+ */
+static int vrpmb_process_msg(VuDev *dev, VhostUserMsg *msg, int *do_reply)
 {
+    VuRpmb *r = container_of(dev, VuRpmb, dev.parent);
+
+    g_info("%s: msg %#x", __func__, msg->request);
+
     switch (msg->request) {
+    case VHOST_USER_NONE:
+        g_main_loop_quit(r->loop);
+        return 1;
     default:
         return 0;
     }
@@ -255,7 +268,6 @@ int main(int argc, char *argv[])
 {
     GError *error = NULL;
     GOptionContext *context;
-    g_autoptr(GMainLoop) loop = NULL;
     g_autoptr(GSocket) socket = NULL;
     VuRpmb rpmb = {  };
 
@@ -335,10 +347,10 @@ int main(int argc, char *argv[])
      * can add it's GSource watches.
      */
 
-    loop = g_main_loop_new(NULL, FALSE);
+    rpmb.loop = g_main_loop_new(NULL, FALSE);
     /* catch exit signals */
-    g_unix_signal_add(SIGHUP, hangup, loop);
-    g_unix_signal_add(SIGINT, hangup, loop);
+    g_unix_signal_add(SIGHUP, hangup, rpmb.loop);
+    g_unix_signal_add(SIGINT, hangup, rpmb.loop);
 
     if (!vug_init(&rpmb.dev, VHOST_USER_RPMB_MAX_QUEUES, g_socket_get_fd(socket),
                   vrpmb_panic, &vuiface)) {
@@ -348,9 +360,9 @@ int main(int argc, char *argv[])
 
 
     g_message("entering main loop, awaiting messages");
-    g_main_loop_run(loop);
+    g_main_loop_run(rpmb.loop);
     g_message("finished main loop, cleaning up");
 
-    g_main_loop_unref(loop);
+    g_main_loop_unref(rpmb.loop);
     vrpmb_destroy(&rpmb);
 }
