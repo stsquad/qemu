@@ -280,7 +280,7 @@ static void vurpmb_device_realize(DeviceState *dev, Error **errp)
     return;
 }
 
-static void vurpmb_device_unrealize(DeviceState *dev, Error **errp)
+static void vurpmb_device_unrealize(DeviceState *dev)
 {
     VirtIODevice *vdev = VIRTIO_DEVICE(dev);
     VHostUserRPMB *rpmb = VHOST_USER_RPMB(dev);
