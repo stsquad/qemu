@@ -26,6 +26,8 @@ class ReplayKernel(LinuxKernelUtils):
     """
 
     timeout = 90
+    KERNEL_COMMON_COMMAND_LINE = 'printk.time=1 panic=-1 '
+
 
     def run_vm(self, kernel_path, kernel_command_line, console_pattern,
                record, shift, args):
@@ -39,6 +41,7 @@ class ReplayKernel(LinuxKernelUtils):
                     (shift, mode, os.path.join(self.workdir, 'replay.bin')),
                     '-kernel', kernel_path,
                     '-append', kernel_command_line,
+                    '--no-reboot',
                     '-net', 'none')
         if args:
             vm.add_args(*args)
@@ -68,7 +71,7 @@ class ReplayKernel(LinuxKernelUtils):
         kernel_path = self.fetch_asset(kernel_url, asset_hash=kernel_hash)
 
         kernel_command_line = self.KERNEL_COMMON_COMMAND_LINE + 'console=ttyS0'
-        console_pattern = 'Kernel command line: %s' % kernel_command_line
+        console_pattern = 'VFS: Cannot open root device'
 
         self.run_rr(kernel_path, kernel_command_line, console_pattern)
 
