@@ -389,7 +389,7 @@ static bool init_guest_commpage(void)
 {
     void *want = g2h(ARM_COMMPAGE & -qemu_host_page_size);
     void *addr = mmap(want, qemu_host_page_size, PROT_READ | PROT_WRITE,
-                      MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+                      MAP_ANONYMOUS | MAP_PRIVATE | MAP_FIXED, -1, 0);
 
     if (addr == MAP_FAILED) {
         perror("Allocating guest commpage");
@@ -2113,7 +2113,8 @@ static void pgb_have_guest_base(const char *image_name, abi_ulong guest_loaddr,
  * only dumbly iterate up the host address space seeing if the
  * allocation would work.
  */
-static uintptr_t pgd_find_hole_fallback(uintptr_t guest_size, uintptr_t brk, long align)
+static uintptr_t pgd_find_hole_fallback(uintptr_t guest_size, uintptr_t brk,
+                                        long align, uintptr_t offset)
 {
     uintptr_t base;
 
@@ -2123,7 +2124,7 @@ static uintptr_t pgd_find_hole_fallback(uintptr_t guest_size, uintptr_t brk, lon
     while (true) {
         uintptr_t align_start, end;
         align_start = ROUND_UP(base, align);
-        end = align_start + guest_size;
+        end = align_start + guest_size + offset;
 
         /* if brk is anywhere in the range give ourselves some room to grow. */
         if (align_start <= brk && brk < end) {
@@ -2138,7 +2139,7 @@ static uintptr_t pgd_find_hole_fallback(uintptr_t guest_size, uintptr_t brk, lon
                                      PROT_NONE, flags, -1, 0);
             if (mmap_start != MAP_FAILED) {
                 munmap((void *) align_start, guest_size);
-                return (uintptr_t) mmap_start;
+                return (uintptr_t) mmap_start + offset;
             }
             base += qemu_host_page_size;
         }
@@ -2161,7 +2162,7 @@ static uintptr_t pgb_find_hole(uintptr_t guest_loaddr, uintptr_t guest_size,
     brk = (uintptr_t)sbrk(0);
 
     if (!maps) {
-        return pgd_find_hole_fallback(guest_size, brk, align);
+        return pgd_find_hole_fallback(guest_size, brk, align, offset);
     }
 
     /* The first hole is before the first map entry. */
@@ -2243,9 +2244,9 @@ static void pgb_static(const char *image_name, abi_ulong orig_loaddr,
          * arithmetic wraps around.
          */
         if (sizeof(uintptr_t) == 8 || loaddr >= 0x80000000u) {
-            hiaddr = (uintptr_t)4 << 30;
+            hiaddr = (uintptr_t) 4 << 30;
         } else {
-            offset = (128 * KiB);
+            offset = -(ARM_COMMPAGE & -align);
         }
     }
 
