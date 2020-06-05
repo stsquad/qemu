@@ -2117,8 +2117,8 @@ static uintptr_t pgd_find_hole_fallback(uintptr_t guest_size, uintptr_t brk, lon
 {
     uintptr_t base;
 
-    /* Start at the bottom and work our way up */
-    base = mmap_min_addr;
+    /* Start (aligned) at the bottom and work our way up */
+    base = ROUND_UP(mmap_min_addr, align);
 
     while (true) {
         uintptr_t align_start, end;
@@ -2127,7 +2127,7 @@ static uintptr_t pgd_find_hole_fallback(uintptr_t guest_size, uintptr_t brk, lon
 
         /* if brk is anywhere in the range give ourselves some room to grow. */
         if (align_start <= brk && brk < end) {
-            base += 16 * MiB;
+            base = brk + (16 * MiB);
             continue;
         } else if (align_start + guest_size < align_start) {
             /* we have run out of space */
