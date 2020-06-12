@@ -22,6 +22,8 @@
 #include <sys/stat.h>
 #include <sys/mman.h>
 #include <unistd.h>
+#include <endian.h>
+#include <assert.h>
 
 #include "contrib/libvhost-user/libvhost-user-glib.h"
 #include "contrib/libvhost-user/libvhost-user.h"
@@ -58,6 +60,30 @@ enum {
 #define KiB     (1UL << 10)
 #define MAX_RPMB_SIZE (KiB * 128 * 256)
 
+/* RPMB Request Types */
+#define VIRTIO_RPMB_REQ_PROGRAM_KEY        0x0001
+#define VIRTIO_RPMB_REQ_GET_WRITE_COUNTER  0x0002
+#define VIRTIO_RPMB_REQ_DATA_WRITE         0x0003
+#define VIRTIO_RPMB_REQ_DATA_READ          0x0004
+#define VIRTIO_RPMB_REQ_RESULT_READ        0x0005
+
+/* RPMB Response Types */
+#define VIRTIO_RPMB_RESP_PROGRAM_KEY       0x0100
+#define VIRTIO_RPMB_RESP_GET_COUNTER       0x0200
+#define VIRTIO_RPMB_RESP_DATA_WRITE        0x0300
+#define VIRTIO_RPMB_RESP_DATA_READ         0x0400
+
+/* RPMB Operation Results */
+#define VIRTIO_RPMB_RES_OK                     0x0000
+#define VIRTIO_RPMB_RES_GENERAL_FAILURE        0x0001
+#define VIRTIO_RPMB_RES_AUTH_FAILURE           0x0002
+#define VIRTIO_RPMB_RES_COUNT_FAILURE          0x0003
+#define VIRTIO_RPMB_RES_ADDR_FAILURE           0x0004
+#define VIRTIO_RPMB_RES_WRITE_FAILURE          0x0005
+#define VIRTIO_RPMB_RES_READ_FAILURE           0x0006
+#define VIRTIO_RPMB_RES_NO_AUTH_KEY            0x0007
+#define VIRTIO_RPMB_RES_WRITE_COUNTER_EXPIRED  0x0080
+
 struct virtio_rpmb_config {
     uint8_t capacity;
     uint8_t max_wr_cnt;
@@ -87,6 +113,8 @@ typedef struct VuRpmb {
     GMainLoop *loop;
     int flash_fd;
     void *flash_map;
+    uint8_t *key;
+    uint16_t last_result;
 } VuRpmb;
 
 struct virtio_rpmb_ctrl_command {
@@ -96,6 +124,45 @@ struct virtio_rpmb_ctrl_command {
     uint32_t error;
     bool finished;
 };
+
+/* refer util/iov.c */
+static size_t vrpmb_iov_to_buf(const struct iovec *iov, const unsigned int iov_cnt,
+                               size_t offset, void *buf, size_t bytes)
+{
+    size_t done;
+    unsigned int i;
+    for (i = 0, done = 0; (offset || done < bytes) && i < iov_cnt; i++) {
+        if (offset < iov[i].iov_len) {
+            size_t len = MIN(iov[i].iov_len - offset, bytes - done);
+            memcpy(buf + done, iov[i].iov_base + offset, len);
+            done += len;
+            offset = 0;
+        } else {
+            offset -= iov[i].iov_len;
+        }
+    }
+    assert(offset == 0);
+    return done;
+}
+
+static size_t vrpmb_iov_from_buf(const struct iovec *iov, unsigned int iov_cnt,
+                                 size_t offset, const void *buf, size_t bytes)
+{
+    size_t done;
+    unsigned int i;
+    for (i = 0, done = 0; (offset || done < bytes) && i < iov_cnt; i++) {
+        if (offset < iov[i].iov_len) {
+            size_t len = MIN(iov[i].iov_len - offset, bytes - done);
+            memcpy(iov[i].iov_base + offset, buf + done, len);
+            done += len;
+            offset = 0;
+        } else {
+            offset -= iov[i].iov_len;
+        }
+    }
+    assert(offset == 0);
+    return done;
+}
 
 static void vrpmb_panic(VuDev *dev, const char *msg)
 {
@@ -142,11 +209,73 @@ vrpmb_set_config(VuDev *dev, const uint8_t *data,
     return 0;
 }
 
+/*
+ * Handlers for individual control messages
+ */
+
+/*
+ * vrpmb_handle_program_key:
+ *
+ * Program the device with our key. The spec is a little hazzy on if
+ * we respond straight away or we wait for the user to send a
+ * VIRTIO_RPMB_REQ_RESULT_READ request.
+ */
+static void vrpmb_handle_program_key(VuDev *dev, struct virtio_rpmb_frame *frame)
+{
+    VuRpmb *r = container_of(dev, VuRpmb, dev.parent);
+
+    /*
+     * Run the checks from:
+     * 5.12.6.1.1 Device Requirements: Device Operation: Program Key
+     */
+
+    /* Fail if already programmed */
+    if (r->key) {
+        g_debug("key already programmed");
+        r->last_result = VIRTIO_RPMB_RES_WRITE_FAILURE;
+        return;
+    }
+
+    if (frame->block_count != 1) {
+        g_debug("weird block counts (%d)", frame->block_count);
+        r->last_result = VIRTIO_RPMB_RES_GENERAL_FAILURE;
+        return;
+    }
+
+    r->key = g_memdup(&frame->key_mac[0], 32);
+    r->last_result = VIRTIO_RPMB_RESP_PROGRAM_KEY;
+
+    return;
+}
+
+/*
+ * Return the result of the last message. This is only valid if the
+ * previous message was VIRTIO_RPMB_REQ_PROGRAM_KEY or VIRTIO_RPMB_REQ_DATA_WRITE.
+ */
+static struct virtio_rpmb_frame *
+vrpmb_handle_result_read(VuDev *dev, struct virtio_rpmb_frame *frame)
+{
+    VuRpmb *r = container_of(dev, VuRpmb, dev.parent);
+
+    if (r->last_result) {
+        frame->req_resp = r->last_result;
+    } else {
+        frame->req_resp = VIRTIO_RPMB_RES_GENERAL_FAILURE;
+    }
+
+    /* calculate mac? */
+
+    return frame;
+}
+
+
 static void
 vrpmb_handle_ctrl(VuDev *dev, int qidx)
 {
     VuVirtq *vq = vu_get_queue(dev, qidx);
     struct virtio_rpmb_ctrl_command *cmd = NULL;
+    struct virtio_rpmb_frame *resp = NULL;
+    size_t len;
 
     for (;;) {
         cmd = vu_queue_pop(dev, vq, sizeof(struct virtio_rpmb_ctrl_command));
@@ -154,7 +283,43 @@ vrpmb_handle_ctrl(VuDev *dev, int qidx)
             break;
         }
 
-        g_debug("un-handled cmd: %p", cmd);
+        cmd->vq = vq;
+        cmd->error = 0;
+        cmd->finished = false;
+        resp = NULL;
+
+        len = vrpmb_iov_to_buf(cmd->elem.out_sg, cmd->elem.out_num,
+                               0, &cmd->frame, sizeof(cmd->frame));
+
+        if (len != sizeof(cmd->frame)) {
+            g_warning("%s: frame size incorrect %zu vs %zu\n",
+                      __func__, len, sizeof(cmd->frame));
+        }
+
+        switch (be16toh(cmd->frame.req_resp)) {
+        case VIRTIO_RPMB_REQ_PROGRAM_KEY:
+            vrpmb_handle_program_key(dev, &cmd->frame);
+            break;
+        case VIRTIO_RPMB_REQ_RESULT_READ:
+            resp = vrpmb_handle_result_read(dev, &cmd->frame);
+            break;
+        default:
+            g_debug("un-handled request: %x", cmd->frame.req_resp);
+            break;
+        }
+
+        /* do we have a frame to send back? */
+        if (resp) {
+            len = vrpmb_iov_from_buf(cmd->elem.in_sg,
+                                     cmd->elem.in_num, 0, resp, sizeof(*resp));
+            if (len != sizeof(*resp)) {
+                g_critical("%s: response size incorrect %zu vs %zu",
+                           __func__, len, sizeof(*resp));
+            }
+            vu_queue_push(dev, vq, &cmd->elem, len);
+            vu_queue_notify(dev, cmd->vq);
+        }
+        cmd->finished = true;
     }
 }
 
