@@ -1,4 +1,3 @@
-HOST_CC = gcc
 
 TESTS_PATH = $(SRC_PATH)/tests/tcg/tricore
 
