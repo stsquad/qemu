@@ -10931,7 +10931,7 @@ static abi_long do_syscall1(void *cpu_env, int num, abi_long arg1,
         return get_errno(fchown(arg1, low2highuid(arg2), low2highgid(arg3)));
 #if defined(TARGET_NR_fchownat)
     case TARGET_NR_fchownat:
-        p = lock_user_string(arg2)
+        p = lock_user_string(arg2);
         if (!p) {
             return -TARGET_EFAULT;
         }
