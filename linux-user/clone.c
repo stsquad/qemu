@@ -95,7 +95,7 @@ struct tls_manager {
  * should be whatever platform-specific address is used to represent the TLS
  * base address.
  */
-static void *tls_ptr()
+static void *tls_ptr(void)
 {
     void *ptr;
 #if defined(__x86_64__)
@@ -114,7 +114,7 @@ static void *tls_ptr()
  * clone_vm_supported returns true if clone_vm() is supported on this
  * platform.
  */
-static bool clone_vm_supported()
+static bool clone_vm_supported(void)
 {
 #if defined(__x86_64__)
     return true;
@@ -164,7 +164,7 @@ static void *tls_manager_thread(void *arg)
     return NULL;
 }
 
-static struct tls_manager *tls_manager_new()
+static struct tls_manager *tls_manager_new(void)
 {
     struct tls_manager *mgr = g_new0(struct tls_manager, 1);
     sigset_t block, oldmask;
