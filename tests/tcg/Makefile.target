@@ -40,7 +40,7 @@ quiet-command = $(if $(V),$1,$(if $(2),@printf "  %-7s %s\n" $2 $3 && $1, @$1))
 
 # $1 = test name, $2 = cmd, $3 = desc
 ifdef CONFIG_USER_ONLY
-run-test = $(call quiet-command, timeout --foreground $(TIMEOUT) $2 > $1.out \
+run-test = $(call quiet-command, timeout --foreground $(TIMEOUT) $2 > $1.out, \
 	"TEST",$3)
 else
 run-test = $(call quiet-command, timeout --foreground $(TIMEOUT) $2,"TEST",$3)
