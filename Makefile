@@ -356,7 +356,7 @@ HELPERS-y += virtiofsd$(EXESUF)
 vhost-user-json-y += tools/virtiofsd/50-qemu-virtiofsd.json
 endif
 
-ifeq ($(CONFIG_POSIX),y)
+ifeq ($(CONFIG_LINUX),y)
 HELPERS-y += vhost-user-rpmb$(EXESUF)
 vhost-user-json-y += tools/vhost-user-rpmb/50-qemu-rpmb.json
 endif
