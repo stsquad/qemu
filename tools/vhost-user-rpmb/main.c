@@ -90,6 +90,10 @@ struct virtio_rpmb_config {
     uint8_t max_rd_cnt;
 };
 
+/*
+ * This is based on the JDEC standard and not the currently not
+ * up-streamed NVME standard.
+ */
 struct virtio_rpmb_frame {
     uint8_t stuff[196];
     uint8_t key_mac[32];
@@ -131,9 +135,11 @@ static size_t vrpmb_iov_to_buf(const struct iovec *iov, const unsigned int iov_c
 {
     size_t done;
     unsigned int i;
+    g_debug("%s: %d elements to %p (%ld)", __func__, iov_cnt, buf, offset);
     for (i = 0, done = 0; (offset || done < bytes) && i < iov_cnt; i++) {
         if (offset < iov[i].iov_len) {
             size_t len = MIN(iov[i].iov_len - offset, bytes - done);
+            g_debug("%ld bytes from %p", len, iov[i].iov_base + offset);
             memcpy(buf + done, iov[i].iov_base + offset, len);
             done += len;
             offset = 0;
@@ -268,6 +274,28 @@ vrpmb_handle_result_read(VuDev *dev, struct virtio_rpmb_frame *frame)
     return frame;
 }
 
+static void fmt_bytes(GString *s, uint8_t *bytes, int len)
+{
+    int i;
+    for (i = 0; i < len; i++) {
+        if (i % 16 == 0) {
+            g_string_append_c(s, '\n');
+        }
+        g_string_append_printf(s, "%x ", bytes[i]);
+    }
+}
+
+static void vrpmb_dump_frame(struct virtio_rpmb_frame *frame)
+{
+    g_autoptr(GString) s = g_string_new("");
+
+    g_string_printf(s, "\nkey_mac:");
+    fmt_bytes(s, (uint8_t *) &frame->key_mac[0], 32);
+    g_string_append_printf(s, "\ndata:");
+    fmt_bytes(s, (uint8_t *) &frame->data, 256);
+    g_debug("%s: frame %p\n", __func__, frame);
+    g_debug("%s: %s\n", __func__, s->str);
+}
 
 static void
 vrpmb_handle_ctrl(VuDev *dev, int qidx)
@@ -288,12 +316,14 @@ vrpmb_handle_ctrl(VuDev *dev, int qidx)
         cmd->finished = false;
         resp = NULL;
 
-        len = vrpmb_iov_to_buf(cmd->elem.out_sg, cmd->elem.out_num,
+        len = vrpmb_iov_to_buf(cmd->elem.in_sg, cmd->elem.in_num,
                                0, &cmd->frame, sizeof(cmd->frame));
 
         if (len != sizeof(cmd->frame)) {
             g_warning("%s: frame size incorrect %zu vs %zu\n",
                       __func__, len, sizeof(cmd->frame));
+        } else if (debug) {
+            vrpmb_dump_frame(&cmd->frame);
         }
 
         switch (be16toh(cmd->frame.req_resp)) {
@@ -310,8 +340,8 @@ vrpmb_handle_ctrl(VuDev *dev, int qidx)
 
         /* do we have a frame to send back? */
         if (resp) {
-            len = vrpmb_iov_from_buf(cmd->elem.in_sg,
-                                     cmd->elem.in_num, 0, resp, sizeof(*resp));
+            len = vrpmb_iov_from_buf(cmd->elem.out_sg,
+                                     cmd->elem.out_num, 0, resp, sizeof(*resp));
             if (len != sizeof(*resp)) {
                 g_critical("%s: response size incorrect %zu vs %zu",
                            __func__, len, sizeof(*resp));
