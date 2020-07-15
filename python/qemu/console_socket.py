@@ -13,68 +13,76 @@ which can drain a socket and optionally dump the bytes to file.
 # the COPYING file in the top-level directory.
 #
 
-import asyncore
 import socket
 import threading
 from collections import deque
 import time
 
 
-class ConsoleSocket(asyncore.dispatcher):
+class ConsoleSocket(socket.socket):
     """
     ConsoleSocket represents a socket attached to a char device.
 
-    Drains the socket and places the bytes into an in memory buffer
-    for later processing.
+    Optionally (if drain==True), drains the socket and places the bytes
+    into an in memory buffer for later processing.
 
     Optionally a file path can be passed in and we will also
     dump the characters to this file for debugging purposes.
     """
-    def __init__(self, address, file=None):
+    def __init__(self, address, file=None, drain=False):
         self._recv_timeout_sec = 300
         self._sleep_time = 0.5
         self._buffer = deque()
-        self._asyncore_thread = None
-        self._sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        self._sock.connect(address)
+        self._drain_thread = None
+        socket.socket.__init__(self, socket.AF_UNIX, socket.SOCK_STREAM)
+        self.connect(address)
+        self._drain = drain
         self._logfile = None
         if file:
             self._logfile = open(file, "w")
-        asyncore.dispatcher.__init__(self, sock=self._sock)
         self._open = True
-        self._thread_start()
+        if drain:
+            self._thread_start()
+
+    def _drain_fn(self):
+        """Drains the socket and runs while the socket is open."""
+        while self._open:
+            try:
+                self._drain_socket()
+            except socket.timeout:
+                # The socket is expected to timeout since we set a
+                # short timeout to allow the thread to exit when
+                # self._open is set to False.
+                time.sleep(self._sleep_time)
 
     def _thread_start(self):
-        """Kick off a thread to wait on the asyncore.loop"""
-        if self._asyncore_thread is not None:
+        """Kick off a thread to drain the socket."""
+        if self._drain_thread is not None:
             return
-        self._asyncore_thread = threading.Thread(target=asyncore.loop,
-                                                 kwargs={'timeout':1})
-        self._asyncore_thread.daemon = True
-        self._asyncore_thread.start()
-
-    def handle_close(self):
-        """redirect close to base class"""
-        # Call the base class close, but not self.close() since
-        # handle_close() occurs in the context of the thread which
-        # self.close() attempts to join.
-        asyncore.dispatcher.close(self)
+        # Configure socket to not block and timeout.
+        # This allows our drain thread to not block
+        # on recieve and exit smoothly.
+        socket.socket.setblocking(self, 0)
+        socket.socket.settimeout(self, 1)
+        self._drain_thread = threading.Thread(target=self._drain_fn)
+        self._drain_thread.daemon = True
+        self._drain_thread.start()
 
     def close(self):
         """Close the base object and wait for the thread to terminate"""
         if self._open:
             self._open = False
-            asyncore.dispatcher.close(self)
-            if self._asyncore_thread is not None:
-                thread, self._asyncore_thread = self._asyncore_thread, None
+            if self._drain and self._drain_thread is not None:
+                thread, self._drain_thread = self._drain_thread, None
                 thread.join()
+            socket.socket.close(self)
             if self._logfile:
                 self._logfile.close()
                 self._logfile = None
 
-    def handle_read(self):
+    def _drain_socket(self):
         """process arriving characters into in memory _buffer"""
-        data = asyncore.dispatcher.recv(self, 1)
+        data = socket.socket.recv(self, 1)
         # latin1 is needed since there are some chars
         # we are receiving that cannot be encoded to utf-8
         # such as 0xe2, 0x80, 0xA6.
@@ -89,6 +97,9 @@ class ConsoleSocket(asyncore.dispatcher):
         """Return chars from in memory buffer.
            Maintains the same API as socket.socket.recv.
         """
+        if not self._drain:
+            # Not buffering the socket, pass thru to socket.
+            return socket.socket.recv(self, buffer_size)
         start_time = time.time()
         while len(self._buffer) < buffer_size:
             time.sleep(self._sleep_time)
@@ -102,9 +113,17 @@ class ConsoleSocket(asyncore.dispatcher):
         # socket w/o our intervention.
         return chars.encode("latin1")
 
-    def set_blocking(self):
-        """Maintain compatibility with socket API"""
+    def setblocking(self, value):
+        """When not draining we pass thru to the socket,
+           since when draining we control socket blocking.
+        """
+        if not self._drain:
+            socket.socket.setblocking(self, value)
 
     def settimeout(self, seconds):
-        """Set current timeout on recv"""
+        """When not draining we pass thru to the socket,
+           since when draining we control the timeout.
+        """
         self._recv_timeout_sec = seconds
+        if not self._drain:
+            socket.socket.settimeout(self, seconds)
