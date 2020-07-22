@@ -121,15 +121,21 @@ typedef struct VuRpmb {
     uint16_t last_result;
 } VuRpmb;
 
-struct virtio_rpmb_ctrl_command {
-    VuVirtqElement elem;
-    VuVirtq *vq;
-    struct virtio_rpmb_frame frame;
-    uint32_t error;
-    bool finished;
-};
-
 /* refer util/iov.c */
+static size_t vrpmb_iov_size(const struct iovec *iov,
+                             const unsigned int iov_cnt)
+{
+    size_t len;
+    unsigned int i;
+
+    len = 0;
+    for (i = 0; i < iov_cnt; i++) {
+        len += iov[i].iov_len;
+    }
+    return len;
+}
+
+
 static size_t vrpmb_iov_to_buf(const struct iovec *iov, const unsigned int iov_cnt,
                                size_t offset, void *buf, size_t bytes)
 {
@@ -301,55 +307,60 @@ static void
 vrpmb_handle_ctrl(VuDev *dev, int qidx)
 {
     VuVirtq *vq = vu_get_queue(dev, qidx);
-    struct virtio_rpmb_ctrl_command *cmd = NULL;
-    struct virtio_rpmb_frame *resp = NULL;
-    size_t len;
+    struct virtio_rpmb_frame *frames = NULL;
 
     for (;;) {
-        cmd = vu_queue_pop(dev, vq, sizeof(struct virtio_rpmb_ctrl_command));
-        if (!cmd) {
+        VuVirtqElement *elem;
+        size_t len, frame_sz = sizeof(struct virtio_rpmb_frame);
+        int n;
+
+        elem = vu_queue_pop(dev, vq, sizeof(VuVirtqElement));
+        if (!elem) {
             break;
         }
 
-        cmd->vq = vq;
-        cmd->error = 0;
-        cmd->finished = false;
-        resp = NULL;
+        len = vrpmb_iov_size(elem->in_sg, elem->in_num);
+        frames = g_realloc(frames, len);
+        vrpmb_iov_to_buf(elem->in_sg, elem->in_num, 0, frames, len);
 
-        len = vrpmb_iov_to_buf(cmd->elem.in_sg, cmd->elem.in_num,
-                               0, &cmd->frame, sizeof(cmd->frame));
-
-        if (len != sizeof(cmd->frame)) {
-            g_warning("%s: frame size incorrect %zu vs %zu\n",
-                      __func__, len, sizeof(cmd->frame));
-        } else if (debug) {
-            vrpmb_dump_frame(&cmd->frame);
+        if (len % frame_sz != 0) {
+            g_warning("%s: incomplete frames %zu/%zu != 0\n",
+                      __func__, len, frame_sz);
         }
 
-        switch (be16toh(cmd->frame.req_resp)) {
-        case VIRTIO_RPMB_REQ_PROGRAM_KEY:
-            vrpmb_handle_program_key(dev, &cmd->frame);
-            break;
-        case VIRTIO_RPMB_REQ_RESULT_READ:
-            resp = vrpmb_handle_result_read(dev, &cmd->frame);
-            break;
-        default:
-            g_debug("un-handled request: %x", cmd->frame.req_resp);
-            break;
-        }
+        for (n = 0; n < len / frame_sz; n++)
+        {
+            struct virtio_rpmb_frame *f = &frames[n];
+            struct virtio_rpmb_frame *resp = NULL;
 
-        /* do we have a frame to send back? */
-        if (resp) {
-            len = vrpmb_iov_from_buf(cmd->elem.out_sg,
-                                     cmd->elem.out_num, 0, resp, sizeof(*resp));
-            if (len != sizeof(*resp)) {
-                g_critical("%s: response size incorrect %zu vs %zu",
-                           __func__, len, sizeof(*resp));
+            if (debug) {
+                vrpmb_dump_frame(f);
             }
-            vu_queue_push(dev, vq, &cmd->elem, len);
-            vu_queue_notify(dev, cmd->vq);
+
+            switch (be16toh(f->req_resp)) {
+            case VIRTIO_RPMB_REQ_PROGRAM_KEY:
+                vrpmb_handle_program_key(dev, f);
+                break;
+            case VIRTIO_RPMB_REQ_RESULT_READ:
+                resp = vrpmb_handle_result_read(dev, f);
+                break;
+            default:
+                g_debug("un-handled request: %x", f->req_resp);
+                break;
+            }
+
+            /* do we have a frame to send back? */
+            if (resp) {
+                len = vrpmb_iov_from_buf(elem->out_sg,
+                                         elem->out_num, 0, resp, sizeof(*resp));
+                if (len != sizeof(*resp)) {
+                    g_critical("%s: response size incorrect %zu vs %zu",
+                               __func__, len, sizeof(*resp));
+                }
+                vu_queue_push(dev, vq, elem, len);
+                vu_queue_notify(dev, vq);
+            }
         }
-        cmd->finished = true;
     }
 }
 
