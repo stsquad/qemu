@@ -834,7 +834,7 @@ size_t qemu_get_host_physmem(void)
     MEMORYSTATUSEX statex;
     statex.dwLength = sizeof(statex);
 
-    if (!GlobalMemoryStatusEx(&statex)) {
+    if (GlobalMemoryStatusEx(&statex)) {
         return statex.ullTotalPhys;
     }
     return 0;
