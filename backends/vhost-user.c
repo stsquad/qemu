@@ -18,13 +18,19 @@
 #include "qom/object_interfaces.h"
 #include "sysemu/vhost-user-backend.h"
 #include "sysemu/kvm.h"
+#include "sysemu/tcg.h"
 #include "io/channel-command.h"
 #include "hw/virtio/virtio-bus.h"
 
 static bool
 ioeventfd_enabled(void)
 {
-    return kvm_enabled() && kvm_eventfds_enabled();
+    if (kvm_enabled()) {
+        return kvm_eventfds_enabled();
+    } else {
+        return tcg_enabled();
+    }
+    return false;
 }
 
 int
