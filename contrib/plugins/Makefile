@@ -10,13 +10,13 @@ BUILD_DIR := $(CURDIR)/../..
 
 include $(BUILD_DIR)/config-host.mak
 
-VPATH += $(SRC_PATH)/tests/plugin
+VPATH += $(SRC_PATH)/contrib/plugins
 
 NAMES :=
-NAMES += bb
-NAMES += empty
-NAMES += insn
-NAMES += mem
+NAMES += hotblocks
+NAMES += hotpages
+NAMES += howvec
+NAMES += lockstep
 
 SONAMES := $(addsuffix .so,$(addprefix lib,$(NAMES)))
 
