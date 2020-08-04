@@ -332,6 +332,7 @@ vrpmb_handle_ctrl(VuDev *dev, int qidx)
         {
             struct virtio_rpmb_frame *f = &frames[n];
             struct virtio_rpmb_frame *resp = NULL;
+            bool responded = false;
 
             if (debug) {
                 vrpmb_dump_frame(f);
@@ -342,23 +343,36 @@ vrpmb_handle_ctrl(VuDev *dev, int qidx)
                 vrpmb_handle_program_key(dev, f);
                 break;
             case VIRTIO_RPMB_REQ_RESULT_READ:
-                resp = vrpmb_handle_result_read(dev, f);
+                if (!responded) {
+                    resp = vrpmb_handle_result_read(dev, f);
+                } else {
+                    g_warning("%s: already sent a response in this set of frames",
+                              __func__);
+                }
                 break;
             default:
                 g_debug("un-handled request: %x", f->req_resp);
                 break;
             }
 
-            /* do we have a frame to send back? */
+            /*
+             * Do we have a frame to send back? If so we re-use the
+             * ring buffer entries messages were sent to us in. To
+             * avoid complications in working out how much of the
+             * buffers are left we only do this once per set of
+             * frames.
+             */
             if (resp) {
-                len = vrpmb_iov_from_buf(elem->out_sg,
-                                         elem->out_num, 0, resp, sizeof(*resp));
+                len = vrpmb_iov_from_buf(elem->in_sg,
+                                         elem->in_num, 0, resp, sizeof(*resp));
                 if (len != sizeof(*resp)) {
                     g_critical("%s: response size incorrect %zu vs %zu",
                                __func__, len, sizeof(*resp));
+                } else {
+                    vu_queue_push(dev, vq, elem, len);
+                    vu_queue_notify(dev, vq);
+                    responded = true;
                 }
-                vu_queue_push(dev, vq, elem, len);
-                vu_queue_notify(dev, vq);
             }
         }
     }
