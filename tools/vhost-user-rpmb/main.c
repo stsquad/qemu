@@ -248,7 +248,7 @@ static void vrpmb_handle_program_key(VuDev *dev, struct virtio_rpmb_frame *frame
         return;
     }
 
-    if (frame->block_count != 1) {
+    if (be16toh(frame->block_count) != 1) {
         g_debug("weird block counts (%d)", frame->block_count);
         r->last_result = VIRTIO_RPMB_RES_GENERAL_FAILURE;
         return;
