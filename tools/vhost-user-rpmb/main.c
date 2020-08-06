@@ -270,9 +270,9 @@ vrpmb_handle_result_read(VuDev *dev, struct virtio_rpmb_frame *frame)
     VuRpmb *r = container_of(dev, VuRpmb, dev.parent);
 
     if (r->last_result) {
-        frame->req_resp = r->last_result;
+        frame->req_resp = htobe16(r->last_result);
     } else {
-        frame->req_resp = VIRTIO_RPMB_RES_GENERAL_FAILURE;
+        frame->req_resp = htobe16(VIRTIO_RPMB_RES_GENERAL_FAILURE);
     }
 
     /* calculate mac? */
