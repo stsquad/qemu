@@ -28,6 +28,8 @@
 #include "contrib/libvhost-user/libvhost-user-glib.h"
 #include "contrib/libvhost-user/libvhost-user.h"
 
+#include "hmac_sha256.h"
+
 #ifndef container_of
 #define container_of(ptr, type, member) ({                      \
         const typeof(((type *) 0)->member) *__mptr = (ptr);     \
@@ -222,6 +224,40 @@ vrpmb_set_config(VuDev *dev, const uint8_t *data,
 }
 
 /*
+ * vrpmb_update_mac_in_frame:
+ *
+ * From the spec:
+ *   The MAC is calculated using HMAC SHA-256. It takes
+ *   as input a key and a message. The key used for the MAC calculation
+ *   is always the 256-bit RPMB authentication key. The message used as
+ *   input to the MAC calculation is the concatenation of the fields in
+ *   the RPMB frames excluding stuff bytes and the MAC itself.
+ *
+ * The code to do this has been lifted from the optee supplicant code
+ * which itself uses a 3 clause BSD chunk of code.
+ */
+
+#define CUC(x) ((const unsigned char *)(x))
+static void calculate_hmac(hmac_sha256_ctx *ctx, struct virtio_rpmb_frame *frm)
+{
+    hmac_sha256_update(ctx, CUC(frm->data), 256);
+    hmac_sha256_update(ctx, CUC(frm->nonce), 16);
+    hmac_sha256_update(ctx, CUC(&frm->write_counter), 4);
+    hmac_sha256_update(ctx, CUC(&frm->address), 2);
+    hmac_sha256_update(ctx, CUC(&frm->block_count), 2);
+    hmac_sha256_update(ctx, CUC(&frm->req_resp), 2);
+}
+
+static void vrpmb_update_mac_in_frame(VuRpmb *r, struct virtio_rpmb_frame *frm)
+{
+    hmac_sha256_ctx ctx;
+
+    hmac_sha256_init(&ctx, r->key, sizeof(r->key));
+    calculate_hmac(&ctx, frm);
+    hmac_sha256_final(&ctx, &frm->key_mac[0], 32);
+}
+
+/*
  * Handlers for individual control messages
  */
 
@@ -270,13 +306,17 @@ vrpmb_handle_result_read(VuDev *dev, struct virtio_rpmb_frame *frame)
     VuRpmb *r = container_of(dev, VuRpmb, dev.parent);
 
     if (r->last_result) {
-        frame->req_resp = htobe16(r->last_result);
+        frame->result = htobe16(r->last_result);
     } else {
-        frame->req_resp = htobe16(VIRTIO_RPMB_RES_GENERAL_FAILURE);
+        frame->result = htobe16(VIRTIO_RPMB_RES_GENERAL_FAILURE);
     }
 
-    /* calculate mac? */
+    /* calculate HMAC */
+    vrpmb_update_mac_in_frame(r, frame);
 
+    g_info("%s: result = %x req_resp = %x", __func__,
+           be16toh(frame->result),
+           be16toh(frame->req_resp));
     return frame;
 }
 
