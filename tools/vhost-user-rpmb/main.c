@@ -121,6 +121,7 @@ typedef struct VuRpmb {
     void *flash_map;
     uint8_t *key;
     uint16_t last_result;
+    uint16_t last_reqresp;
     uint32_t write_count;
 } VuRpmb;
 
@@ -277,23 +278,21 @@ static void vrpmb_handle_program_key(VuDev *dev, struct virtio_rpmb_frame *frame
      * Run the checks from:
      * 5.12.6.1.1 Device Requirements: Device Operation: Program Key
      */
+    r->last_reqresp = VIRTIO_RPMB_RESP_PROGRAM_KEY;
 
     /* Fail if already programmed */
     if (r->key) {
         g_debug("key already programmed");
         r->last_result = VIRTIO_RPMB_RES_WRITE_FAILURE;
-        return;
-    }
-
-    if (be16toh(frame->block_count) != 1) {
+    } else if (be16toh(frame->block_count) != 1) {
         g_debug("weird block counts (%d)", frame->block_count);
         r->last_result = VIRTIO_RPMB_RES_GENERAL_FAILURE;
-        return;
+    } else {
+        r->key = g_memdup(&frame->key_mac[0], 32);
+        r->last_result = VIRTIO_RPMB_RES_OK;
     }
 
-    r->key = g_memdup(&frame->key_mac[0], 32);
-    r->last_result = VIRTIO_RPMB_RESP_PROGRAM_KEY;
-
+    g_info("%s: req_resp = %x, result = %x", __func__, r->reqresp, r->last_result);
     return;
 }
 
@@ -306,51 +305,62 @@ static struct virtio_rpmb_frame *
 vrpmb_handle_get_write_counter(VuDev *dev, struct virtio_rpmb_frame *frame)
 {
     VuRpmb *r = container_of(dev, VuRpmb, dev.parent);
+    struct virtio_rpmb_frame *resp = g_new0(struct virtio_rpmb_frame, 1);
 
     /*
      * Run the checks from:
      * 5.12.6.1.2 Device Requirements: Device Operation: Get Write Counter
      */
 
+    frame->req_resp = htobe16(VIRTIO_RPMB_RESP_GET_COUNTER);
     if (!r->key) {
         g_debug("no key programmed");
-        frame->result = htobe16(VIRTIO_RPMB_RES_NO_AUTH_KEY);
+        resp->result = htobe16(VIRTIO_RPMB_RES_NO_AUTH_KEY);
+        return resp;
     } else if (be16toh(frame->block_count) != 1) {
         g_debug("invalid block count (%d)", be16toh(frame->block_count));
-        frame->result = htobe16(VIRTIO_RPMB_RES_GENERAL_FAILURE);
+        resp->result = htobe16(VIRTIO_RPMB_RES_GENERAL_FAILURE);
     } else {
-        frame->write_counter = htobe32(r->write_count);
+        resp->write_counter = htobe32(r->write_count);
     }
-    frame->req_resp = htobe16(VIRTIO_RPMB_RESP_GET_COUNTER);
 
     /* calculate MAC */
-    vrpmb_update_mac_in_frame(r, frame);
+    vrpmb_update_mac_in_frame(r, resp);
 
-    return frame;
+    return resp;
 }
 
 /*
  * Return the result of the last message. This is only valid if the
- * previous message was VIRTIO_RPMB_REQ_PROGRAM_KEY or VIRTIO_RPMB_REQ_DATA_WRITE.
+ * previous message was VIRTIO_RPMB_REQ_PROGRAM_KEY or
+ * VIRTIO_RPMB_REQ_DATA_WRITE.
+ *
+ * The frame should be freed once sent.
  */
-static struct virtio_rpmb_frame *
-vrpmb_handle_result_read(VuDev *dev, struct virtio_rpmb_frame *frame)
+static struct virtio_rpmb_frame * vrpmb_handle_result_read(VuDev *dev)
 {
     VuRpmb *r = container_of(dev, VuRpmb, dev.parent);
+    struct virtio_rpmb_frame *resp = g_new0(struct virtio_rpmb_frame, 1);
 
-    if (r->last_result) {
-        frame->result = htobe16(r->last_result);
+    if (r->last_reqresp == VIRTIO_RPMB_RESP_PROGRAM_KEY ||
+        r->last_reqresp == VIRTIO_RPMB_REQ_DATA_WRITE) {
+        resp->result = htobe16(r->last_result);
+        resp->req_resp = htobe16(r->last_reqresp);
     } else {
-        frame->result = htobe16(VIRTIO_RPMB_RES_GENERAL_FAILURE);
+        resp->result = htobe16(VIRTIO_RPMB_RES_GENERAL_FAILURE);
     }
 
     /* calculate HMAC */
-    vrpmb_update_mac_in_frame(r, frame);
+    if (r->key) {
+        resp->result = htobe16(VIRTIO_RPMB_RES_GENERAL_FAILURE);
+    } else {
+        vrpmb_update_mac_in_frame(r, resp);
+    }
 
     g_info("%s: result = %x req_resp = %x", __func__,
-           be16toh(frame->result),
-           be16toh(frame->req_resp));
-    return frame;
+           be16toh(resp->result),
+           be16toh(resp->req_resp));
+    return resp;
 }
 
 static void fmt_bytes(GString *s, uint8_t *bytes, int len)
@@ -391,10 +401,12 @@ vrpmb_handle_ctrl(VuDev *dev, int qidx)
         if (!elem) {
             break;
         }
+        g_debug("%s: got queue (in %d, out %d)", __func__,
+                elem->in_num, elem->out_num);
 
-        len = vrpmb_iov_size(elem->in_sg, elem->in_num);
+        len = vrpmb_iov_size(elem->out_sg, elem->out_num);
         frames = g_realloc(frames, len);
-        vrpmb_iov_to_buf(elem->in_sg, elem->in_num, 0, frames, len);
+        vrpmb_iov_to_buf(elem->out_sg, elem->out_num, 0, frames, len);
 
         if (len % frame_sz != 0) {
             g_warning("%s: incomplete frames %zu/%zu != 0\n",
@@ -405,13 +417,15 @@ vrpmb_handle_ctrl(VuDev *dev, int qidx)
         {
             struct virtio_rpmb_frame *f = &frames[n];
             struct virtio_rpmb_frame *resp = NULL;
+            uint16_t req_resp = be16toh(f->req_resp);
             bool responded = false;
 
             if (debug) {
+                g_info("req_resp=%x", req_resp);
                 vrpmb_dump_frame(f);
             }
 
-            switch (be16toh(f->req_resp)) {
+            switch (req_resp) {
             case VIRTIO_RPMB_REQ_PROGRAM_KEY:
                 vrpmb_handle_program_key(dev, f);
                 break;
@@ -420,7 +434,7 @@ vrpmb_handle_ctrl(VuDev *dev, int qidx)
                 break;
             case VIRTIO_RPMB_REQ_RESULT_READ:
                 if (!responded) {
-                    resp = vrpmb_handle_result_read(dev, f);
+                    resp = vrpmb_handle_result_read(dev);
                 } else {
                     g_warning("%s: already sent a response in this set of frames",
                               __func__);
@@ -439,6 +453,10 @@ vrpmb_handle_ctrl(VuDev *dev, int qidx)
              * frames.
              */
             if (resp) {
+                g_debug("sending response frame: %p", resp);
+                if (debug) {
+                    vrpmb_dump_frame(resp);
+                }
                 len = vrpmb_iov_from_buf(elem->in_sg,
                                          elem->in_num, 0, resp, sizeof(*resp));
                 if (len != sizeof(*resp)) {
@@ -449,6 +467,8 @@ vrpmb_handle_ctrl(VuDev *dev, int qidx)
                     vu_queue_notify(dev, vq);
                     responded = true;
                 }
+
+                g_free(resp);
             }
         }
     }
