@@ -739,7 +739,7 @@ if capstone_opt == 'disabled'
   capstone_opt = false
 elif capstone_opt in ['enabled', 'auto', 'system']
   have_internal = fs.exists('capstone/Makefile')
-  capstone = dependency('capstone', static: enable_static,
+  capstone = dependency('capstone', version: '>=4.0', static: enable_static,
                         required: capstone_opt == 'system' or
                                   capstone_opt == 'enabled' and not have_internal)
   if capstone.found()
