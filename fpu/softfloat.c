@@ -705,6 +705,15 @@ static void ADD128(uint64_t *r, const uint64_t *a, const uint64_t *b)
 
 static void ADD256(uint64_t *r, const uint64_t *a, const uint64_t *b)
 {
+#if defined(__x86_64__)
+    asm("add %7, %3\n\t"
+        "adc %6, %2\n\t"
+        "adc %5, %1\n\t"
+        "adc %4, %0"
+        : "=&r"(r[0]), "=&r"(r[1]), "=&r"(r[2]), "=&r"(r[3])
+        : "rme"(b[0]), "rme"(b[1]), "rme"(b[2]), "rme"(b[3]),
+            "0"(a[0]),   "1"(a[1]),   "2"(a[2]),   "3"(a[3]));
+#else
     uint64_t r0, r1, r2, r3, c;
 
     c  = __builtin_add_overflow(a[3], b[3], &r3);
@@ -715,6 +724,7 @@ static void ADD256(uint64_t *r, const uint64_t *a, const uint64_t *b)
     r0 = a[0] + b[0] + c;
 
     r[0] = r0, r[1] = r1, r[2] = r2, r[3] = r3;
+#endif
 }
 
 static void ADDI64(uint64_t *r, const uint64_t *a, uint64_t c)
@@ -804,6 +814,15 @@ static void NEG128(uint64_t *r, const uint64_t *a)
 
 static void NEG256(uint64_t *r, const uint64_t *a)
 {
+#if defined(__x86_64__)
+    asm("negq %3\n\t"
+        "sbb %6, %2\n\t"
+        "sbb %5, %1\n\t"
+        "sbb %4, %0"
+        : "=&r"(r[0]), "=&r"(r[1]), "=&r"(r[2]), "+rm"(r[3])
+        : "rme"(a[0]), "rme"(a[1]), "rme"(a[2]),
+          "0"(0), "1"(0), "2"(0));
+#else
     uint64_t a0 = a[0], a1 = a[1], a2 = a[2], a3 = a[3];
 
     /*
@@ -831,6 +850,7 @@ static void NEG256(uint64_t *r, const uint64_t *a)
     r[1] = ~a1;
  not0:
     r[0] = ~a0;
+#endif
 }
 
 static void SHL64(uint64_t *r, uint64_t *a, int c)
@@ -946,6 +966,15 @@ static void SUB128(uint64_t *r, const uint64_t *a, const uint64_t *b)
 
 static void SUB256(uint64_t *r, const uint64_t *a, const uint64_t *b)
 {
+#if defined(__x86_64__)
+    asm("sub %7, %3\n\t"
+        "sbb %6, %2\n\t"
+        "sbb %5, %1\n\t"
+        "sbb %4, %0"
+        : "=&r"(r[0]), "=&r"(r[1]), "=&r"(r[2]), "=&r"(r[3])
+        : "rme"(b[0]), "rme"(b[1]), "rme"(b[2]), "rme"(b[3]),
+            "0"(a[0]),   "1"(a[1]),   "2"(a[2]),   "3"(a[3]));
+#else
     uint64_t r0, r1, r2, r3, c;
 
     c  = __builtin_sub_overflow(a[3], b[3], &r3);
@@ -956,6 +985,7 @@ static void SUB256(uint64_t *r, const uint64_t *a, const uint64_t *b)
     r0 = a[0] - b[0] - c;
 
     r[0] = r0, r[1] = r1, r[2] = r2, r[3] = r3;
+#endif
 }
 
 static void TRUNCJAM64(uint64_t *r, const uint64_t *a)
