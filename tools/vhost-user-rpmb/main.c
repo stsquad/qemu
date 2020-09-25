@@ -39,6 +39,7 @@
 static gchar *socket_path;
 static char *flash_path;
 static char *key_path;
+static gint initial_counter;
 static gint socket_fd = -1;
 static gboolean print_cap;
 static gboolean verbose;
@@ -56,6 +57,9 @@ static GOptionEntry options[] =
     { "key-path", 0, 0, G_OPTION_ARG_FILENAME, &key_path,
       "Location of persistent keyfile",
       "KEY"},
+    { "initial-counter", 0, 0, G_OPTION_ARG_INT, &initial_counter,
+      "Set initial value of write counter",
+      NULL},
     { "key-set", 0, 0, G_OPTION_ARG_NONE, &key_set,
       "Is the key already programmed",
       NULL},
@@ -829,6 +833,10 @@ int main(int argc, char *argv[])
 
     if (key_path && key_set) {
         vrpmb_set_key(&rpmb, key_path);
+    }
+
+    if (initial_counter) {
+        rpmb.write_count = initial_counter;
     }
 
     if (!socket_path && socket_fd < 0) {
