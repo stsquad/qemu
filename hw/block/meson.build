@@ -19,5 +19,7 @@ softmmu_ss.add(when: 'CONFIG_TC58128', if_true: files('tc58128.c'))
 specific_ss.add(when: 'CONFIG_VIRTIO_BLK', if_true: files('virtio-blk.c'))
 specific_ss.add(when: 'CONFIG_VHOST_USER_BLK', if_true: files('vhost-user-blk.c'))
 specific_ss.add(when: 'CONFIG_VHOST_USER_RPMB', if_true: files('vhost-user-rpmb.c'))
+specific_ss.add(when: ['CONFIG_VHOST_USER_RPMB', 'CONFIG_VIRTIO_PCI' ],
+                if_true: files('vhost-user-rpmb-pci.c'))
 
 subdir('dataplane')
