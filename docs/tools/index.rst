@@ -15,3 +15,4 @@ command line utilities and other standalone programs.
    qemu-trace-stap
    virtfs-proxy-helper
    virtiofsd
+   vhost-user-rpmb
