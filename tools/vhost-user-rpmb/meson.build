@@ -1,6 +1,6 @@
 executable('vhost-user-rpmb', files(
   'main.c'),
-  dependencies: [glib, vhost_user],
+  dependencies: [qemuutil, glib, gio, vhost_user],
   install: true,
   install_dir: get_option('libexecdir'))
 
