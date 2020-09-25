@@ -7,6 +7,7 @@
  */
 
 #include <glib.h>
+#include <stdio.h>
 
 static gchar *socket_path;
 static gint socket_fd;
@@ -26,6 +27,14 @@ static GOptionEntry options[] =
     { NULL }
 };
 
+/* Print vhost-user.json backend program capabilities */
+static void print_capabilities(void)
+{
+    printf("{\n");
+    printf("  \"type\": \"block\"\n");
+    printf("}\n");
+}
+
 int main (int argc, char *argv[])
 {
     GError *error = NULL;
@@ -39,5 +48,9 @@ int main (int argc, char *argv[])
         exit (1);
     }
 
+    if (print_cap) {
+        print_capabilities();
+        exit(0);
+    }
 
 }
