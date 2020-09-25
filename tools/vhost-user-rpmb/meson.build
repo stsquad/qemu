@@ -1,5 +1,6 @@
 executable('vhost-user-rpmb', files(
-  'main.c'),
+  'main.c',
+  'hmac_sha256.c'),
   dependencies: [qemuutil, glib, gio, vhost_user],
   install: true,
   install_dir: get_option('libexecdir'))
