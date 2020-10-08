@@ -394,3 +394,47 @@ check-crypto-only-gnutls:
   variables:
     IMAGE: centos7
     MAKE_CHECK_ARGS: check
+
+build-gcov:
+  <<: *native_build_job_definition
+  variables:
+    IMAGE: ubuntu2004
+    TARGETS: aarch64-softmmu mips64-softmmu ppc64-softmmu riscv64-softmmu s390x-softmmu x86_64-softmmu
+    CONFIGURE_ARGS: --enable-gcov --disable-libssh
+    MAKE_CHECK_ARGS: check-build
+  artifacts:
+    expire_in: 2 days
+    paths:
+      - build
+
+check-gov:
+    <<: *native_test_job_definition
+  needs:
+    - job: build-gcov
+      artifacts: true
+  variables:
+    IMAGE: ubuntu2004
+    MAKE_CHECK_ARGS: check
+  after_script:
+    - ${SRC_DIR}/scripts/ci/coverage-summary.sh
+
+build-gprof:
+  <<: *native_build_job_definition
+  variables:
+    IMAGE: ubuntu2004
+    TARGETS: aarch64-softmmu mips64-softmmu ppc64-softmmu riscv64-softmmu s390x-softmmu x86_64-softmmu
+    CONFIGURE_ARGS: --enable-gprof --disable-libssh
+    MAKE_CHECK_ARGS: check-build
+  artifacts:
+    expire_in: 2 days
+    paths:
+      - build
+
+check-gprof:
+    <<: *native_test_job_definition
+  needs:
+    - job: build-gprof
+      artifacts: true
+  variables:
+    IMAGE: ubuntu2004
+    MAKE_CHECK_ARGS: check
