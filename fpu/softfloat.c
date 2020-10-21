@@ -527,10 +527,6 @@ typedef struct {
  *   exp_max: the maximum normalised exponent
  *   frac_size: the size of the fraction field
  *   frac_shift: shift to normalise the fraction with DECOMPOSED_BINARY_POINT
- * The following are computed based the size of fraction
- *   frac_lsb: least significant bit of fraction
- *   frac_lsbm1: the bit below the least significant bit (for rounding)
- *   round_mask/roundeven_mask: masks used for rounding
  * The following optional modifiers are available:
  *   arm_althp: handle ARM Alternative Half Precision
  */
@@ -540,10 +536,6 @@ typedef struct {
     int exp_max;
     int frac_size;
     int frac_shift;
-    uint64_t frac_lsb;
-    uint64_t frac_lsbm1;
-    uint64_t round_mask;
-    uint64_t roundeven_mask;
     bool arm_althp;
 } FloatFmt;
 
@@ -553,11 +545,7 @@ typedef struct {
     .exp_bias       = ((1 << E) - 1) >> 1,                           \
     .exp_max        = (1 << E) - 1,                                  \
     .frac_size      = F,                                             \
-    .frac_shift     = DECOMPOSED_BINARY_POINT - F,                   \
-    .frac_lsb       = 1ull << (DECOMPOSED_BINARY_POINT - F),         \
-    .frac_lsbm1     = 1ull << ((DECOMPOSED_BINARY_POINT - F) - 1),   \
-    .round_mask     = (1ull << (DECOMPOSED_BINARY_POINT - F)) - 1,   \
-    .roundeven_mask = (2ull << (DECOMPOSED_BINARY_POINT - F)) - 1
+    .frac_shift     = DECOMPOSED_BINARY_POINT - F
 
 static const FloatFmt float16_params = {
     FLOAT_PARAMS(5, 10)
@@ -693,12 +681,12 @@ static FloatParts sf_canonicalize(FloatParts part, const FloatFmt *parm,
 static FloatParts round_canonical(FloatParts p, float_status *s,
                                   const FloatFmt *parm)
 {
-    const uint64_t frac_lsb = parm->frac_lsb;
-    const uint64_t frac_lsbm1 = parm->frac_lsbm1;
-    const uint64_t round_mask = parm->round_mask;
-    const uint64_t roundeven_mask = parm->roundeven_mask;
     const int exp_max = parm->exp_max;
     const int frac_shift = parm->frac_shift;
+    const uint64_t frac_lsb = 1ull << frac_shift;
+    const uint64_t frac_lsbm1 = 1ull << (frac_shift - 1);
+    const uint64_t round_mask = frac_lsb - 1;
+    const uint64_t roundeven_mask = round_mask | frac_lsb;
     uint64_t frac, inc;
     int exp, flags = 0;
     bool overflow_norm;
