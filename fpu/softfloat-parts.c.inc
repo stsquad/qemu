@@ -299,3 +299,66 @@ static void glue(parts_round_uncanonicalize,N)(glue(FloatParts,N) *p,
     }
     float_raise(flags, s);
 }
+
+/*
+ * Returns the result of adding or subtracting the values of the
+ * floating-point values `a' and `b'. The operation is performed
+ * according to the IEC/IEEE Standard for Binary Floating-Point
+ * Arithmetic.
+ */
+
+static glue(FloatParts,N) *
+glue(parts_addsub,N)(glue(FloatParts,N) *a, glue(FloatParts,N) *b,
+                     float_status *s, bool subtract)
+{
+    bool b_sign = b->sign ^ subtract;
+    int ab_mask = float_cmask(a->cls) | float_cmask(b->cls);
+
+    if (a->sign != b_sign) {
+        /* Subtraction */
+        if (likely(ab_mask == float_cmask_normal)) {
+            return glue(parts_sub_normal,N)(a, b, s);
+        }
+
+        if (ab_mask == float_cmask_zero) {
+            a->sign = s->float_rounding_mode == float_round_down;
+            return a;
+        }
+
+        if (unlikely(ab_mask == float_cmask_inf)) {
+            float_raise(float_flag_invalid, s);
+            glue(parts_default_nan,N)(a, s);
+            return a;
+        }
+
+        if (unlikely(ab_mask & float_cmask_anynan)) {
+            return glue(pick_nan,N)(a, b, s);
+        }
+
+        if (a->cls == float_class_zero || b->cls == float_class_inf) {
+            b->sign = a->sign ^ 1;
+            return b;
+        }
+        if (b->cls == float_class_zero || a->cls == float_class_inf) {
+            return a;
+        }
+    } else {
+        /* Addition */
+        if (likely(ab_mask == float_cmask_normal)) {
+            return glue(parts_add_normal,N)(a, b, s);
+        }
+
+        if (unlikely(ab_mask & float_cmask_anynan)) {
+            return glue(pick_nan,N)(a, b, s);
+        }
+
+        if (a->cls == float_class_inf || b->cls == float_class_zero) {
+            return a;
+        }
+        if (b->cls == float_class_inf || a->cls == float_class_zero) {
+            b->sign = b_sign;
+            return b;
+        }
+    }
+    g_assert_not_reached();
+}

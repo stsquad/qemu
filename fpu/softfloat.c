@@ -680,6 +680,11 @@ static float128 float128_pack_raw(const FloatParts128 *p)
  * Helper functions for softfloat-parts.c.inc, per-size operations.
  */
 
+static void ADD64(uint64_t *r, const uint64_t *a, const uint64_t *b)
+{
+    *r = *a + *b;
+}
+
 static void ADDI64(uint64_t *r, const uint64_t *a, uint64_t c)
 {
     *r = *a + c;
@@ -698,6 +703,11 @@ static int CMP64(const uint64_t *a, const uint64_t *b)
 static bool EQZ64(const uint64_t *a)
 {
     return *a == 0;
+}
+
+static void NEG64(uint64_t *r, const uint64_t *a)
+{
+    *r = -*a;
 }
 
 static void SHL64(uint64_t *r, uint64_t *a, int c)
@@ -725,6 +735,11 @@ static void SHRJAM64(uint64_t *r, const uint64_t *a, int c)
     shift64RightJamming(*a, c, r);
 }
 
+static void SUB64(uint64_t *r, const uint64_t *a, const uint64_t *b)
+{
+    *r = *a - *b;
+}
+
 /*----------------------------------------------------------------------------
 | Functions and definitions to determine:  (1) whether tininess for underflow
 | is detected before or after rounding by default, (2) what (if anything)
@@ -737,6 +752,7 @@ static void SHRJAM64(uint64_t *r, const uint64_t *a, int c)
 
 #define N 64
 
+#include "softfloat-parts-addsub.c.inc"
 #include "softfloat-parts.c.inc"
 
 /*
@@ -813,164 +829,75 @@ static float64 float64_round_pack_canonical(FloatParts64 *p,
 }
 
 /*
- * Returns the result of adding or subtracting the values of the
- * floating-point values `a' and `b'. The operation is performed
- * according to the IEC/IEEE Standard for Binary Floating-Point
- * Arithmetic.
- */
-
-static FloatParts64 addsub_floats(FloatParts64 a, FloatParts64 b, bool subtract,
-                                float_status *s)
-{
-    bool a_sign = a.sign;
-    bool b_sign = b.sign ^ subtract;
-
-    if (a_sign != b_sign) {
-        /* Subtraction */
-
-        if (a.cls == float_class_normal && b.cls == float_class_normal) {
-            if (a.exp > b.exp || (a.exp == b.exp && a.frac[0] >= b.frac[0])) {
-                shift64RightJamming(b.frac[0], a.exp - b.exp, &b.frac[0]);
-                a.frac[0] = a.frac[0] - b.frac[0];
-            } else {
-                shift64RightJamming(a.frac[0], b.exp - a.exp, &a.frac[0]);
-                a.frac[0] = b.frac[0] - a.frac[0];
-                a.exp = b.exp;
-                a_sign ^= 1;
-            }
-
-            if (a.frac[0] == 0) {
-                a.cls = float_class_zero;
-                a.sign = s->float_rounding_mode == float_round_down;
-            } else {
-                int shift = clz64(a.frac[0]) - 1;
-                a.frac[0] <<= shift;
-                a.exp -= shift;
-                a.sign = a_sign;
-            }
-            return a;
-        }
-        if (is_nan(a.cls) || is_nan(b.cls)) {
-            return *pick_nan64(&a, &b, s);
-        }
-        if (a.cls == float_class_inf) {
-            if (b.cls == float_class_inf) {
-                float_raise(float_flag_invalid, s);
-                parts_default_nan64(&a, s);
-            }
-            return a;
-        }
-        if (a.cls == float_class_zero && b.cls == float_class_zero) {
-            a.sign = s->float_rounding_mode == float_round_down;
-            return a;
-        }
-        if (a.cls == float_class_zero || b.cls == float_class_inf) {
-            b.sign = a_sign ^ 1;
-            return b;
-        }
-        if (b.cls == float_class_zero) {
-            return a;
-        }
-    } else {
-        /* Addition */
-        if (a.cls == float_class_normal && b.cls == float_class_normal) {
-            if (a.exp > b.exp) {
-                shift64RightJamming(b.frac[0], a.exp - b.exp, &b.frac[0]);
-            } else if (a.exp < b.exp) {
-                shift64RightJamming(a.frac[0], b.exp - a.exp, &a.frac[0]);
-                a.exp = b.exp;
-            }
-            a.frac[0] += b.frac[0];
-            if (a.frac[0] & DECOMPOSED_OVERFLOW_BIT) {
-                shift64RightJamming(a.frac[0], 1, &a.frac[0]);
-                a.exp += 1;
-            }
-            return a;
-        }
-        if (is_nan(a.cls) || is_nan(b.cls)) {
-            return *pick_nan64(&a, &b, s);
-        }
-        if (a.cls == float_class_inf || b.cls == float_class_zero) {
-            return a;
-        }
-        if (b.cls == float_class_inf || a.cls == float_class_zero) {
-            b.sign = b_sign;
-            return b;
-        }
-    }
-    g_assert_not_reached();
-}
-
-/*
  * Returns the result of adding or subtracting the floating-point
  * values `a' and `b'. The operation is performed according to the
  * IEC/IEEE Standard for Binary Floating-Point Arithmetic.
  */
 
-float16 QEMU_FLATTEN float16_add(float16 a, float16 b, float_status *status)
+static float16 QEMU_FLATTEN
+float16_addsub(float16 a, float16 b, float_status *status, bool subtract)
 {
-    FloatParts64 pa, pb, pr;
+    FloatParts64 pa, pb, *pr;
 
     float16_unpack_canonical(&pa, a, status);
     float16_unpack_canonical(&pb, b, status);
-    pr = addsub_floats(pa, pb, false, status);
+    pr = parts_addsub64(&pa, &pb, status, subtract);
 
-    return float16_round_pack_canonical(&pr, status);
+    return float16_round_pack_canonical(pr, status);
 }
 
-float16 QEMU_FLATTEN float16_sub(float16 a, float16 b, float_status *status)
+float16 float16_add(float16 a, float16 b, float_status *status)
 {
-    FloatParts64 pa, pb, pr;
+    return float16_addsub(a, b, status, false);
+}
 
-    float16_unpack_canonical(&pa, a, status);
-    float16_unpack_canonical(&pb, b, status);
-    pr = addsub_floats(pa, pb, true, status);
-
-    return float16_round_pack_canonical(&pr, status);
+float16 float16_sub(float16 a, float16 b, float_status *status)
+{
+    return float16_addsub(a, b, status, true);
 }
 
 static float32 QEMU_SOFTFLOAT_ATTR
-soft_f32_addsub(float32 a, float32 b, bool subtract, float_status *status)
+soft_f32_addsub(float32 a, float32 b, float_status *status, bool subtract)
 {
-    FloatParts64 pa, pb, pr;
+    FloatParts64 pa, pb, *pr;
 
     float32_unpack_canonical(&pa, a, status);
     float32_unpack_canonical(&pb, b, status);
-    pr = addsub_floats(pa, pb, subtract, status);
+    pr = parts_addsub64(&pa, &pb, status, subtract);
 
-    return float32_round_pack_canonical(&pr, status);
+    return float32_round_pack_canonical(pr, status);
 }
 
-static inline float32 soft_f32_add(float32 a, float32 b, float_status *status)
+static float32 soft_f32_add(float32 a, float32 b, float_status *status)
 {
-    return soft_f32_addsub(a, b, false, status);
+    return soft_f32_addsub(a, b, status, false);
 }
 
-static inline float32 soft_f32_sub(float32 a, float32 b, float_status *status)
+static float32 soft_f32_sub(float32 a, float32 b, float_status *status)
 {
-    return soft_f32_addsub(a, b, true, status);
+    return soft_f32_addsub(a, b, status, true);
 }
 
 static float64 QEMU_SOFTFLOAT_ATTR
-soft_f64_addsub(float64 a, float64 b, bool subtract, float_status *status)
+soft_f64_addsub(float64 a, float64 b, float_status *status, bool subtract)
 {
-    FloatParts64 pa, pb, pr;
+    FloatParts64 pa, pb, *pr;
 
     float64_unpack_canonical(&pa, a, status);
     float64_unpack_canonical(&pb, b, status);
-    pr = addsub_floats(pa, pb, subtract, status);
+    pr = parts_addsub64(&pa, &pb, status, subtract);
 
-    return float64_round_pack_canonical(&pr, status);
+    return float64_round_pack_canonical(pr, status);
 }
 
-static inline float64 soft_f64_add(float64 a, float64 b, float_status *status)
+static float64 soft_f64_add(float64 a, float64 b, float_status *status)
 {
-    return soft_f64_addsub(a, b, false, status);
+    return soft_f64_addsub(a, b, status, false);
 }
 
-static inline float64 soft_f64_sub(float64 a, float64 b, float_status *status)
+static float64 soft_f64_sub(float64 a, float64 b, float_status *status)
 {
-    return soft_f64_addsub(a, b, true, status);
+    return soft_f64_addsub(a, b, status, true);
 }
 
 static float hard_f32_add(float a, float b)
@@ -1052,26 +979,26 @@ float64_sub(float64 a, float64 b, float_status *s)
  * Returns the result of adding or subtracting the bfloat16
  * values `a' and `b'.
  */
-bfloat16 QEMU_FLATTEN bfloat16_add(bfloat16 a, bfloat16 b, float_status *status)
+static bfloat16 QEMU_FLATTEN
+bfloat16_addsub(bfloat16 a, bfloat16 b, float_status *status, bool subtract)
 {
-    FloatParts64 pa, pb, pr;
+    FloatParts64 pa, pb, *pr;
 
     bfloat16_unpack_canonical(&pa, a, status);
     bfloat16_unpack_canonical(&pb, b, status);
-    pr = addsub_floats(pa, pb, false, status);
+    pr = parts_addsub64(&pa, &pb, status, subtract);
 
-    return bfloat16_round_pack_canonical(&pr, status);
+    return bfloat16_round_pack_canonical(pr, status);
 }
 
-bfloat16 QEMU_FLATTEN bfloat16_sub(bfloat16 a, bfloat16 b, float_status *status)
+bfloat16 bfloat16_add(bfloat16 a, bfloat16 b, float_status *status)
 {
-    FloatParts64 pa, pb, pr;
+    return bfloat16_addsub(a, b, status, false);
+}
 
-    bfloat16_unpack_canonical(&pa, a, status);
-    bfloat16_unpack_canonical(&pb, b, status);
-    pr = addsub_floats(pa, pb, true, status);
-
-    return bfloat16_round_pack_canonical(&pr, status);
+bfloat16 bfloat16_sub(bfloat16 a, bfloat16 b, float_status *status)
+{
+    return bfloat16_addsub(a, b, status, true);
 }
 
 /*
