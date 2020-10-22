@@ -2066,13 +2066,7 @@ static FloatParts64 float_to_float(FloatParts64 a, const FloatFmt *dstf,
             break;
         }
     } else if (is_nan(a.cls)) {
-        if (is_snan(a.cls)) {
-            float_raise(float_flag_invalid, s);
-            parts_silence_nan64(&a, s);
-        }
-        if (s->default_nan_mode) {
-            parts_default_nan64(&a, s);
-        }
+        return return_nan(a, s);
     }
     return a;
 }
