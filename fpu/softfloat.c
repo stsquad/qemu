@@ -886,25 +886,6 @@ static FloatParts64 round_canonical(FloatParts64 p, float_status *s,
     return p;
 }
 
-static FloatParts64 return_nan(FloatParts64 a, float_status *s)
-{
-    switch (a.cls) {
-    case float_class_snan:
-        float_raise(float_flag_invalid, s);
-        parts_silence_nan64(&a, s);
-        /* fall through */
-    case float_class_qnan:
-        if (s->default_nan_mode) {
-            parts_default_nan64(&a, s);
-        }
-        break;
-
-    default:
-        g_assert_not_reached();
-    }
-    return a;
-}
-
 static FloatParts64 pick_nan(FloatParts64 a, FloatParts64 b, float_status *s)
 {
     if (is_snan(a.cls) || is_snan(b.cls)) {
@@ -965,6 +946,10 @@ static FloatParts64 pick_nan_muladd(FloatParts64 a, FloatParts64 b, FloatParts64
     }
     return a;
 }
+
+#define N 64
+
+#include "softfloat-parts.c.inc"
 
 /*
  * Pack/unpack routines with a specific FloatFmt.
@@ -2066,7 +2051,7 @@ static FloatParts64 float_to_float(FloatParts64 a, const FloatFmt *dstf,
             break;
         }
     } else if (is_nan(a.cls)) {
-        return return_nan(a, s);
+        return_nan64(&a, s);
     }
     return a;
 }
@@ -2195,7 +2180,8 @@ static FloatParts64 round_to_int(FloatParts64 a, FloatRoundMode rmode,
     switch (a.cls) {
     case float_class_qnan:
     case float_class_snan:
-        return return_nan(a, s);
+        return_nan64(&a, s);
+        break;
 
     case float_class_zero:
     case float_class_inf:
@@ -3601,7 +3587,7 @@ FloatRelation bfloat16_compare_quiet(bfloat16 a, bfloat16 b, float_status *s)
 static FloatParts64 scalbn_decomposed(FloatParts64 a, int n, float_status *s)
 {
     if (unlikely(is_nan(a.cls))) {
-        return return_nan(a, s);
+        return_nan64(&a, s);
     }
     if (a.cls == float_class_normal) {
         /* The largest float type (even though not supported by FloatParts64)
@@ -3669,7 +3655,8 @@ static FloatParts64 sqrt_float(FloatParts64 a, float_status *s, const FloatFmt *
     int bit, last_bit;
 
     if (is_nan(a.cls)) {
-        return return_nan(a, s);
+        return_nan64(&a, s);
+        return a;
     }
     if (a.cls == float_class_zero) {
         return a;  /* sqrt(+-0) = +-0 */
