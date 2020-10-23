@@ -511,10 +511,10 @@ static inline __attribute__((unused)) bool is_qnan(FloatClass c)
  */
 
 typedef struct {
-    uint64_t frac;
-    int32_t  exp;
     FloatClass cls;
     bool sign;
+    int32_t exp;
+    uint64_t frac[1];
 } FloatParts64;
 
 #define DECOMPOSED_BINARY_POINT    (64 - 2)
@@ -577,7 +577,7 @@ static inline FloatParts64 unpack_raw(FloatFmt fmt, uint64_t raw)
         .cls = float_class_unclassified,
         .sign = extract64(raw, sign_pos, 1),
         .exp = extract64(raw, fmt.frac_size, fmt.exp_size),
-        .frac = extract64(raw, 0, fmt.frac_size),
+        .frac[0] = extract64(raw, 0, fmt.frac_size),
     };
 }
 
@@ -605,7 +605,7 @@ static inline FloatParts64 float64_unpack_raw(float64 f)
 static inline uint64_t pack_raw(FloatFmt fmt, FloatParts64 p)
 {
     const int sign_pos = fmt.frac_size + fmt.exp_size;
-    uint64_t ret = deposit64(p.frac, fmt.frac_size, fmt.exp_size, p.exp);
+    uint64_t ret = deposit64(p.frac[0], fmt.frac_size, fmt.exp_size, p.exp);
     return deposit64(ret, sign_pos, 1, p.sign);
 }
 
@@ -644,30 +644,31 @@ static FloatParts64 sf_canonicalize(FloatParts64 part, const FloatFmt *parm,
                                   float_status *status)
 {
     if (part.exp == parm->exp_max && !parm->arm_althp) {
-        if (part.frac == 0) {
+        if (part.frac[0] == 0) {
             part.cls = float_class_inf;
         } else {
-            part.frac <<= parm->frac_shift;
-            part.cls = (parts_is_snan_frac(part.frac, status)
+            part.frac[0] <<= parm->frac_shift;
+            part.cls = (parts_is_snan_frac(part.frac[0], status)
                         ? float_class_snan : float_class_qnan);
         }
     } else if (part.exp == 0) {
-        if (likely(part.frac == 0)) {
+        if (likely(part.frac[0] == 0)) {
             part.cls = float_class_zero;
         } else if (status->flush_inputs_to_zero) {
             float_raise(float_flag_input_denormal, status);
             part.cls = float_class_zero;
-            part.frac = 0;
+            part.frac[0] = 0;
         } else {
-            int shift = clz64(part.frac) - 1;
+            int shift = clz64(part.frac[0]) - 1;
             part.cls = float_class_normal;
             part.exp = parm->frac_shift - parm->exp_bias - shift + 1;
-            part.frac <<= shift;
+            part.frac[0] <<= shift;
         }
     } else {
         part.cls = float_class_normal;
         part.exp -= parm->exp_bias;
-        part.frac = DECOMPOSED_IMPLICIT_BIT + (part.frac << parm->frac_shift);
+        part.frac[0] = (DECOMPOSED_IMPLICIT_BIT +
+                        (part.frac[0] << parm->frac_shift));
     }
     return part;
 }
@@ -691,7 +692,7 @@ static FloatParts64 round_canonical(FloatParts64 p, float_status *s,
     int exp, flags = 0;
     bool overflow_norm;
 
-    frac = p.frac;
+    frac = p.frac[0];
     exp = p.exp;
 
     switch (p.cls) {
@@ -820,7 +821,7 @@ static FloatParts64 round_canonical(FloatParts64 p, float_status *s,
 
     float_raise(flags, s);
     p.exp = exp;
-    p.frac = frac;
+    p.frac[0] = frac;
     return p;
 }
 
@@ -906,8 +907,8 @@ static FloatParts64 pick_nan(FloatParts64 a, FloatParts64 b, float_status *s)
         return parts_default_nan(s);
     } else {
         if (pickNaN(a.cls, b.cls,
-                    a.frac > b.frac ||
-                    (a.frac == b.frac && a.sign < b.sign), s)) {
+                    a.frac[0] > b.frac[0] ||
+                    (a.frac[0] == b.frac[0] && a.sign < b.sign), s)) {
             a = b;
         }
         if (is_snan(a.cls)) {
@@ -973,23 +974,23 @@ static FloatParts64 addsub_floats(FloatParts64 a, FloatParts64 b, bool subtract,
         /* Subtraction */
 
         if (a.cls == float_class_normal && b.cls == float_class_normal) {
-            if (a.exp > b.exp || (a.exp == b.exp && a.frac >= b.frac)) {
-                shift64RightJamming(b.frac, a.exp - b.exp, &b.frac);
-                a.frac = a.frac - b.frac;
+            if (a.exp > b.exp || (a.exp == b.exp && a.frac[0] >= b.frac[0])) {
+                shift64RightJamming(b.frac[0], a.exp - b.exp, &b.frac[0]);
+                a.frac[0] = a.frac[0] - b.frac[0];
             } else {
-                shift64RightJamming(a.frac, b.exp - a.exp, &a.frac);
-                a.frac = b.frac - a.frac;
+                shift64RightJamming(a.frac[0], b.exp - a.exp, &a.frac[0]);
+                a.frac[0] = b.frac[0] - a.frac[0];
                 a.exp = b.exp;
                 a_sign ^= 1;
             }
 
-            if (a.frac == 0) {
+            if (a.frac[0] == 0) {
                 a.cls = float_class_zero;
                 a.sign = s->float_rounding_mode == float_round_down;
             } else {
-                int shift = clz64(a.frac) - 1;
-                a.frac = a.frac << shift;
-                a.exp = a.exp - shift;
+                int shift = clz64(a.frac[0]) - 1;
+                a.frac[0] <<= shift;
+                a.exp -= shift;
                 a.sign = a_sign;
             }
             return a;
@@ -1019,14 +1020,14 @@ static FloatParts64 addsub_floats(FloatParts64 a, FloatParts64 b, bool subtract,
         /* Addition */
         if (a.cls == float_class_normal && b.cls == float_class_normal) {
             if (a.exp > b.exp) {
-                shift64RightJamming(b.frac, a.exp - b.exp, &b.frac);
+                shift64RightJamming(b.frac[0], a.exp - b.exp, &b.frac[0]);
             } else if (a.exp < b.exp) {
-                shift64RightJamming(a.frac, b.exp - a.exp, &a.frac);
+                shift64RightJamming(a.frac[0], b.exp - a.exp, &a.frac[0]);
                 a.exp = b.exp;
             }
-            a.frac += b.frac;
-            if (a.frac & DECOMPOSED_OVERFLOW_BIT) {
-                shift64RightJamming(a.frac, 1, &a.frac);
+            a.frac[0] += b.frac[0];
+            if (a.frac[0] & DECOMPOSED_OVERFLOW_BIT) {
+                shift64RightJamming(a.frac[0], 1, &a.frac[0]);
                 a.exp += 1;
             }
             return a;
@@ -1220,7 +1221,7 @@ static FloatParts64 mul_floats(FloatParts64 a, FloatParts64 b, float_status *s)
         uint64_t hi, lo;
         int exp = a.exp + b.exp;
 
-        mul64To128(a.frac, b.frac, &hi, &lo);
+        mul64To128(a.frac[0], b.frac[0], &hi, &lo);
         shift128RightJamming(hi, lo, DECOMPOSED_BINARY_POINT, &hi, &lo);
         if (lo & DECOMPOSED_OVERFLOW_BIT) {
             shift64RightJamming(lo, 1, &lo);
@@ -1230,7 +1231,7 @@ static FloatParts64 mul_floats(FloatParts64 a, FloatParts64 b, float_status *s)
         /* Re-use a */
         a.exp = exp;
         a.sign = sign;
-        a.frac = lo;
+        a.frac[0] = lo;
         return a;
     }
     /* handle all the NaN cases */
@@ -1418,7 +1419,7 @@ static FloatParts64 muladd_floats(FloatParts64 a, FloatParts64 b, FloatParts64 c
     /* Multiply of 2 62-bit numbers produces a (2*62) == 124-bit
      * result.
      */
-    mul64To128(a.frac, b.frac, &hi, &lo);
+    mul64To128(a.frac[0], b.frac[0], &hi, &lo);
     /* binary point now at bit 124 */
 
     /* check for overflow */
@@ -1439,12 +1440,12 @@ static FloatParts64 muladd_floats(FloatParts64 a, FloatParts64 b, FloatParts64 c
                 shift128RightJamming(hi, lo,
                                      DECOMPOSED_BINARY_POINT - exp_diff,
                                      &hi, &lo);
-                lo += c.frac;
+                lo += c.frac[0];
                 p_exp = c.exp;
             } else {
                 uint64_t c_hi, c_lo;
                 /* shift c to the same binary point as the product (124) */
-                c_hi = c.frac >> 2;
+                c_hi = c.frac[0] >> 2;
                 c_lo = 0;
                 shift128RightJamming(c_hi, c_lo,
                                      exp_diff,
@@ -1463,7 +1464,7 @@ static FloatParts64 muladd_floats(FloatParts64 a, FloatParts64 b, FloatParts64 c
             /* Subtraction */
             uint64_t c_hi, c_lo;
             /* make C binary point match product at bit 124 */
-            c_hi = c.frac >> 2;
+            c_hi = c.frac[0] >> 2;
             c_lo = 0;
 
             if (exp_diff <= 0) {
@@ -1522,7 +1523,7 @@ static FloatParts64 muladd_floats(FloatParts64 a, FloatParts64 b, FloatParts64 c
     a.cls = float_class_normal;
     a.sign = p_sign ^ sign_flip;
     a.exp = p_exp;
-    a.frac = lo;
+    a.frac[0] = lo;
 
     return a;
 }
@@ -1750,13 +1751,13 @@ static FloatParts64 div_floats(FloatParts64 a, FloatParts64 b, float_status *s)
          * DECOMPOSED_BINARY_POINT is msb-1, the inputs must be shifted left
          * by one (more), and the remainder must be shifted right by one.
          */
-        if (a.frac < b.frac) {
+        if (a.frac[0] < b.frac[0]) {
             exp -= 1;
-            shift128Left(0, a.frac, DECOMPOSED_BINARY_POINT + 2, &n1, &n0);
+            shift128Left(0, a.frac[0], DECOMPOSED_BINARY_POINT + 2, &n1, &n0);
         } else {
-            shift128Left(0, a.frac, DECOMPOSED_BINARY_POINT + 1, &n1, &n0);
+            shift128Left(0, a.frac[0], DECOMPOSED_BINARY_POINT + 1, &n1, &n0);
         }
-        q = udiv_qrnnd(&r, n1, n0, b.frac << 1);
+        q = udiv_qrnnd(&r, n1, n0, b.frac[0] << 1);
 
         /*
          * Set lsb if there is a remainder, to set inexact.
@@ -1765,7 +1766,7 @@ static FloatParts64 div_floats(FloatParts64 a, FloatParts64 b, float_status *s)
          * non-zero-ness, and (2) the remainder will always be even because
          * both inputs to the division primitive are even.
          */
-        a.frac = q | (r != 0);
+        a.frac[0] = q | (r != 0);
         a.sign = sign;
         a.exp = exp;
         return a;
@@ -1926,7 +1927,7 @@ static FloatParts64 float_to_float(FloatParts64 a, const FloatFmt *dstf,
              */
             float_raise(float_flag_invalid, s);
             a.cls = float_class_zero;
-            a.frac = 0;
+            a.frac[0] = 0;
             a.exp = 0;
             break;
 
@@ -1937,7 +1938,7 @@ static FloatParts64 float_to_float(FloatParts64 a, const FloatFmt *dstf,
             float_raise(float_flag_invalid, s);
             a.cls = float_class_normal;
             a.exp = dstf->exp_max;
-            a.frac = ((1ull << dstf->frac_size) - 1) << dstf->frac_shift;
+            a.frac[0] = ((1ull << dstf->frac_size) - 1) << dstf->frac_shift;
             break;
 
         default:
@@ -2080,10 +2081,10 @@ static FloatParts64 round_to_int(FloatParts64 a, FloatRoundMode rmode,
             float_raise(float_flag_inexact, s);
             switch (rmode) {
             case float_round_nearest_even:
-                one = a.exp == -1 && a.frac > DECOMPOSED_IMPLICIT_BIT;
+                one = a.exp == -1 && a.frac[0] > DECOMPOSED_IMPLICIT_BIT;
                 break;
             case float_round_ties_away:
-                one = a.exp == -1 && a.frac >= DECOMPOSED_IMPLICIT_BIT;
+                one = a.exp == -1 && a.frac[0] >= DECOMPOSED_IMPLICIT_BIT;
                 break;
             case float_round_to_zero:
                 one = false;
@@ -2102,7 +2103,7 @@ static FloatParts64 round_to_int(FloatParts64 a, FloatRoundMode rmode,
             }
 
             if (one) {
-                a.frac = DECOMPOSED_IMPLICIT_BIT;
+                a.frac[0] = DECOMPOSED_IMPLICIT_BIT;
                 a.exp = 0;
             } else {
                 a.cls = float_class_zero;
@@ -2116,7 +2117,8 @@ static FloatParts64 round_to_int(FloatParts64 a, FloatRoundMode rmode,
 
             switch (rmode) {
             case float_round_nearest_even:
-                inc = ((a.frac & rnd_even_mask) != frac_lsbm1 ? frac_lsbm1 : 0);
+                inc = ((a.frac[0] & rnd_even_mask) != frac_lsbm1
+                       ? frac_lsbm1 : 0);
                 break;
             case float_round_ties_away:
                 inc = frac_lsbm1;
@@ -2131,18 +2133,18 @@ static FloatParts64 round_to_int(FloatParts64 a, FloatRoundMode rmode,
                 inc = a.sign ? rnd_mask : 0;
                 break;
             case float_round_to_odd:
-                inc = a.frac & frac_lsb ? 0 : rnd_mask;
+                inc = a.frac[0] & frac_lsb ? 0 : rnd_mask;
                 break;
             default:
                 g_assert_not_reached();
             }
 
-            if (a.frac & rnd_mask) {
+            if (a.frac[0] & rnd_mask) {
                 float_raise(float_flag_inexact, s);
-                a.frac += inc;
-                a.frac &= ~rnd_mask;
-                if (a.frac & DECOMPOSED_OVERFLOW_BIT) {
-                    a.frac >>= 1;
+                a.frac[0] += inc;
+                a.frac[0] &= ~rnd_mask;
+                if (a.frac[0] & DECOMPOSED_OVERFLOW_BIT) {
+                    a.frac[0] >>= 1;
                     a.exp++;
                 }
             }
@@ -2218,9 +2220,9 @@ static int64_t round_to_int_and_pack(FloatParts64 in, FloatRoundMode rmode,
         return 0;
     case float_class_normal:
         if (p.exp < DECOMPOSED_BINARY_POINT) {
-            r = p.frac >> (DECOMPOSED_BINARY_POINT - p.exp);
+            r = p.frac[0] >> (DECOMPOSED_BINARY_POINT - p.exp);
         } else if (p.exp - DECOMPOSED_BINARY_POINT < 2) {
-            r = p.frac << (p.exp - DECOMPOSED_BINARY_POINT);
+            r = p.frac[0] << (p.exp - DECOMPOSED_BINARY_POINT);
         } else {
             r = UINT64_MAX;
         }
@@ -2503,9 +2505,9 @@ static uint64_t round_to_uint_and_pack(FloatParts64 in, FloatRoundMode rmode,
         }
 
         if (p.exp < DECOMPOSED_BINARY_POINT) {
-            r = p.frac >> (DECOMPOSED_BINARY_POINT - p.exp);
+            r = p.frac[0] >> (DECOMPOSED_BINARY_POINT - p.exp);
         } else if (p.exp - DECOMPOSED_BINARY_POINT < 2) {
-            r = p.frac << (p.exp - DECOMPOSED_BINARY_POINT);
+            r = p.frac[0] << (p.exp - DECOMPOSED_BINARY_POINT);
         } else {
             s->float_exception_flags = orig_flags | float_flag_invalid;
             return max;
@@ -2773,7 +2775,7 @@ static FloatParts64 int_to_float(int64_t a, int scale, float_status *status)
         scale = MIN(MAX(scale, -0x10000), 0x10000);
 
         r.exp = DECOMPOSED_BINARY_POINT - shift + scale;
-        r.frac = (shift < 0 ? DECOMPOSED_IMPLICIT_BIT : f << shift);
+        r.frac[0] = (shift < 0 ? DECOMPOSED_IMPLICIT_BIT : f << shift);
     }
 
     return r;
@@ -2933,11 +2935,11 @@ static FloatParts64 uint_to_float(uint64_t a, int scale, float_status *status)
         if ((int64_t)a < 0) {
             r.exp = DECOMPOSED_BINARY_POINT + 1 + scale;
             shift64RightJamming(a, 1, &a);
-            r.frac = a;
+            r.frac[0] = a;
         } else {
             int shift = clz64(a) - 1;
             r.exp = DECOMPOSED_BINARY_POINT - shift + scale;
-            r.frac = a << shift;
+            r.frac[0] = a << shift;
         }
     }
 
@@ -3145,10 +3147,10 @@ static FloatParts64 minmax_floats(FloatParts64 a, FloatParts64 b, bool ismin,
             break;
         }
 
-        if (ismag && (a_exp != b_exp || a.frac != b.frac)) {
+        if (ismag && (a_exp != b_exp || a.frac[0] != b.frac[0])) {
             bool a_less = a_exp < b_exp;
             if (a_exp == b_exp) {
-                a_less = a.frac < b.frac;
+                a_less = a.frac[0] < b.frac[0];
             }
             return a_less ^ ismin ? b : a;
         }
@@ -3156,7 +3158,7 @@ static FloatParts64 minmax_floats(FloatParts64 a, FloatParts64 b, bool ismin,
         if (a.sign == b.sign) {
             bool a_less = a_exp < b_exp;
             if (a_exp == b_exp) {
-                a_less = a.frac < b.frac;
+                a_less = a.frac[0] < b.frac[0];
             }
             return a.sign ^ a_less ^ ismin ? b : a;
         } else {
@@ -3257,14 +3259,14 @@ static FloatRelation compare_floats(FloatParts64 a, FloatParts64 b, bool is_quie
     }
 
     if (a.exp == b.exp) {
-        if (a.frac == b.frac) {
+        if (a.frac[0] == b.frac[0]) {
             return float_relation_equal;
         }
         if (a.sign) {
-            return a.frac > b.frac ?
+            return a.frac[0] > b.frac[0] ?
                 float_relation_less : float_relation_greater;
         } else {
-            return a.frac > b.frac ?
+            return a.frac[0] > b.frac[0] ?
                 float_relation_greater : float_relation_less;
         }
     } else {
@@ -3481,7 +3483,7 @@ static FloatParts64 sqrt_float(FloatParts64 a, float_status *s, const FloatFmt *
      * by multiplying the fraction by 2; that's a left shift. Combine
      * those and we shift right if the exponent is even.
      */
-    a_frac = a.frac;
+    a_frac = a.frac[0];
     if (!(a.exp & 1)) {
         a_frac >>= 1;
     }
@@ -3511,7 +3513,7 @@ static FloatParts64 sqrt_float(FloatParts64 a, float_status *s, const FloatFmt *
     /* Undo the right shift done above. If there is any remaining
      * fraction, the result is inexact. Set the sticky bit.
      */
-    a.frac = (r_frac << 1) + (a_frac != 0);
+    a.frac[0] = (r_frac << 1) + (a_frac != 0);
 
     return a;
 }
@@ -3607,21 +3609,21 @@ bfloat16 QEMU_FLATTEN bfloat16_sqrt(bfloat16 a, float_status *status)
 float16 float16_default_nan(float_status *status)
 {
     FloatParts64 p = parts_default_nan(status);
-    p.frac >>= float16_params.frac_shift;
+    p.frac[0] >>= float16_params.frac_shift;
     return float16_pack_raw(p);
 }
 
 float32 float32_default_nan(float_status *status)
 {
     FloatParts64 p = parts_default_nan(status);
-    p.frac >>= float32_params.frac_shift;
+    p.frac[0] >>= float32_params.frac_shift;
     return float32_pack_raw(p);
 }
 
 float64 float64_default_nan(float_status *status)
 {
     FloatParts64 p = parts_default_nan(status);
-    p.frac >>= float64_params.frac_shift;
+    p.frac[0] >>= float64_params.frac_shift;
     return float64_pack_raw(p);
 }
 
@@ -3634,8 +3636,8 @@ float128 float128_default_nan(float_status *status)
      * in the quad-floating format.  If the low bit is set, assume we
      * want to set all non-snan bits.
      */
-    r.low = -(p.frac & 1);
-    r.high = p.frac >> (DECOMPOSED_BINARY_POINT - 48);
+    r.low = -(p.frac[0] & 1);
+    r.high = p.frac[0] >> (DECOMPOSED_BINARY_POINT - 48);
     r.high |= UINT64_C(0x7FFF000000000000);
     r.high |= (uint64_t)p.sign << 63;
 
@@ -3645,7 +3647,7 @@ float128 float128_default_nan(float_status *status)
 bfloat16 bfloat16_default_nan(float_status *status)
 {
     FloatParts64 p = parts_default_nan(status);
-    p.frac >>= bfloat16_params.frac_shift;
+    p.frac[0] >>= bfloat16_params.frac_shift;
     return bfloat16_pack_raw(p);
 }
 
@@ -3656,36 +3658,36 @@ bfloat16 bfloat16_default_nan(float_status *status)
 float16 float16_silence_nan(float16 a, float_status *status)
 {
     FloatParts64 p = float16_unpack_raw(a);
-    p.frac <<= float16_params.frac_shift;
+    p.frac[0] <<= float16_params.frac_shift;
     p = parts_silence_nan(p, status);
-    p.frac >>= float16_params.frac_shift;
+    p.frac[0] >>= float16_params.frac_shift;
     return float16_pack_raw(p);
 }
 
 float32 float32_silence_nan(float32 a, float_status *status)
 {
     FloatParts64 p = float32_unpack_raw(a);
-    p.frac <<= float32_params.frac_shift;
+    p.frac[0] <<= float32_params.frac_shift;
     p = parts_silence_nan(p, status);
-    p.frac >>= float32_params.frac_shift;
+    p.frac[0] >>= float32_params.frac_shift;
     return float32_pack_raw(p);
 }
 
 float64 float64_silence_nan(float64 a, float_status *status)
 {
     FloatParts64 p = float64_unpack_raw(a);
-    p.frac <<= float64_params.frac_shift;
+    p.frac[0] <<= float64_params.frac_shift;
     p = parts_silence_nan(p, status);
-    p.frac >>= float64_params.frac_shift;
+    p.frac[0] >>= float64_params.frac_shift;
     return float64_pack_raw(p);
 }
 
 bfloat16 bfloat16_silence_nan(bfloat16 a, float_status *status)
 {
     FloatParts64 p = bfloat16_unpack_raw(a);
-    p.frac <<= bfloat16_params.frac_shift;
+    p.frac[0] <<= bfloat16_params.frac_shift;
     p = parts_silence_nan(p, status);
-    p.frac >>= bfloat16_params.frac_shift;
+    p.frac[0] >>= bfloat16_params.frac_shift;
     return bfloat16_pack_raw(p);
 }
 
@@ -3696,7 +3698,7 @@ bfloat16 bfloat16_silence_nan(bfloat16 a, float_status *status)
 
 static bool parts_squash_denormal(FloatParts64 p, float_status *status)
 {
-    if (p.exp == 0 && p.frac != 0) {
+    if (p.exp == 0 && p.frac[0] != 0) {
         float_raise(float_flag_input_denormal, status);
         return true;
     }
