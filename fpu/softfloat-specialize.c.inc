@@ -169,6 +169,17 @@ static void parts_default_nan64(FloatParts64 *p, float_status *status)
     };
 }
 
+static void parts_default_nan128(FloatParts128 *p, float_status *status)
+{
+    /*
+     * Extrapolate from the choices made by parts_default_nan64 to fill
+     * in the quad-floating format.  If the low bit is set, assume we
+     * want to set all non-snan bits.
+     */
+    parts_default_nan64((FloatParts64 *)p, status);
+    p->frac[1] = -(p->frac[0] & 1);
+}
+
 /*----------------------------------------------------------------------------
 | Returns a quiet NaN from a signalling NaN for the deconstructed
 | floating-point parts.

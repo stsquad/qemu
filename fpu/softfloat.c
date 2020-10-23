@@ -3856,20 +3856,11 @@ float64 float64_default_nan(float_status *status)
 
 float128 float128_default_nan(float_status *status)
 {
-    FloatParts64 p;
-    float128 r;
+    FloatParts128 p;
 
-    parts_default_nan64(&p, status);
-    /* Extrapolate from the choices made by parts_default_nan64 to fill
-     * in the quad-floating format.  If the low bit is set, assume we
-     * want to set all non-snan bits.
-     */
-    r.low = -(p.frac[0] & 1);
-    r.high = p.frac[0] >> (DECOMPOSED_BINARY_POINT - 48);
-    r.high |= UINT64_C(0x7FFF000000000000);
-    r.high |= (uint64_t)p.sign << 63;
-
-    return r;
+    parts_default_nan128(&p, status);
+    SHR128(p.frac, p.frac, float128_params.frac_shift);
+    return float128_pack_raw(&p);
 }
 
 bfloat16 bfloat16_default_nan(float_status *status)
