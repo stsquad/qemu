@@ -500,14 +500,12 @@ static inline __attribute__((unused)) bool is_qnan(FloatClass c)
 }
 
 /*
- * Structure holding all of the decomposed parts of a float. The
- * exponent is unbiased and the fraction is normalized. All
- * calculations are done with a 64 bit fraction and then rounded as
- * appropriate for the final format.
+ * Structure holding all of the decomposed parts of a float.
+ * The exponent is unbiased and the fraction is normalized.
  *
- * Thanks to the packed FloatClass a decent compiler should be able to
- * fit the whole structure into registers and avoid using the stack
- * for parameter passing.
+ * The fraction words are stored in big-endian word ordering,
+ * so that truncation from a larger format to a smaller format
+ * can be done simply by ignoring subsequent elements.
  */
 
 typedef struct {
@@ -517,6 +515,14 @@ typedef struct {
     uint64_t frac[1];
 } FloatParts64;
 
+typedef struct {
+    FloatClass cls;
+    bool sign;
+    int32_t exp;
+    uint64_t frac[2];
+} FloatParts128;
+
+/* These apply to the most significant word of each FloatPartsN. */
 #define DECOMPOSED_BINARY_POINT    (64 - 2)
 #define DECOMPOSED_IMPLICIT_BIT    (1ull << DECOMPOSED_BINARY_POINT)
 #define DECOMPOSED_OVERFLOW_BIT    (DECOMPOSED_IMPLICIT_BIT << 1)
@@ -540,12 +546,19 @@ typedef struct {
 } FloatFmt;
 
 /* Expand fields based on the size of exponent and fraction */
-#define FLOAT_PARAMS(E, F)                                           \
-    .exp_size       = E,                                             \
-    .exp_bias       = ((1 << E) - 1) >> 1,                           \
-    .exp_max        = (1 << E) - 1,                                  \
-    .frac_size      = F,                                             \
+#define FLOAT_PARAMS_(E, F)                             \
+    .exp_size       = E,                                \
+    .exp_bias       = ((1 << E) - 1) >> 1,              \
+    .exp_max        = (1 << E) - 1,                     \
+    .frac_size      = F
+
+#define FLOAT_PARAMS(E, F)                              \
+    FLOAT_PARAMS_(E, F),                                \
     .frac_shift     = DECOMPOSED_BINARY_POINT - F
+
+#define FLOAT128_PARAMS(E, F)                           \
+    FLOAT_PARAMS_(E, F),                                \
+    .frac_shift     = DECOMPOSED_BINARY_POINT + 64 - F
 
 static const FloatFmt float16_params = {
     FLOAT_PARAMS(5, 10)
@@ -566,6 +579,10 @@ static const FloatFmt float32_params = {
 
 static const FloatFmt float64_params = {
     FLOAT_PARAMS(11, 52)
+};
+
+static const FloatFmt float128_params = {
+    FLOAT128_PARAMS(15, 112)
 };
 
 /* Unpack a float to parts, but do not canonicalize.  */
@@ -602,6 +619,20 @@ static inline void float64_unpack_raw(FloatParts64 *p, float64 f)
     unpack_raw64(p, &float64_params, f);
 }
 
+static void float128_unpack_raw(FloatParts128 *p, float128 f)
+{
+    const int f_size = float128_params.frac_size - 64;
+    const int e_size = float128_params.exp_size;
+
+    *p = (FloatParts128) {
+        .cls = float_class_unclassified,
+        .sign = extract64(f.high, f_size + e_size, 1),
+        .exp = extract64(f.high, f_size, e_size),
+        .frac[0] = extract64(f.high, 0, f_size),
+        .frac[1] = f.low,
+    };
+}
+
 /* Pack a float from parts, but do not canonicalize.  */
 static uint64_t pack_raw64(const FloatParts64 *p, const FloatFmt *fmt)
 {
@@ -632,6 +663,31 @@ static inline float32 float32_pack_raw(const FloatParts64 *p)
 static inline float64 float64_pack_raw(const FloatParts64 *p)
 {
     return make_float64(pack_raw64(p, &float64_params));
+}
+
+static float128 float128_pack_raw(const FloatParts128 *p)
+{
+    const int f_size = float128_params.frac_size - 64;
+    const int e_size = float128_params.exp_size;
+    uint64_t h = p->frac[0];
+
+    h = deposit64(h, f_size, e_size, p->exp);
+    h = deposit64(h, f_size + e_size, 1, p->sign);
+    return make_float128(h, p->frac[1]);
+}
+
+/*
+ * Helper functions for softfloat-parts.c.inc, per-size operations.
+ */
+
+static void SHL128(uint64_t *r, uint64_t *a, int c)
+{
+    shift128Left(a[0], a[1], c, r + 0, r + 1);
+}
+
+static void SHR128(uint64_t *r, uint64_t *a, int c)
+{
+    shift128Right(a[0], a[1], c, r + 0, r + 1);
 }
 
 /*----------------------------------------------------------------------------
@@ -3871,6 +3927,17 @@ bfloat16 bfloat16_silence_nan(bfloat16 a, float_status *status)
     parts_silence_nan64(&p, status);
     p.frac[0] >>= bfloat16_params.frac_shift;
     return bfloat16_pack_raw(&p);
+}
+
+float128 float128_silence_nan(float128 a, float_status *status)
+{
+    FloatParts128 p;
+
+    float128_unpack_raw(&p, a);
+    SHL128(p.frac, p.frac, float128_params.frac_shift);
+    parts_silence_nan128(&p, status);
+    SHR128(p.frac, p.frac, float128_params.frac_shift);
+    return float128_pack_raw(&p);
 }
 
 /*----------------------------------------------------------------------------
