@@ -106,3 +106,38 @@ glue(pick_nan_muladd,N)(glue(FloatParts,N) *a, glue(FloatParts,N) *b,
     }
     return a;
 }
+
+/*
+ * Canonicalize the FloatParts structure.  Determine the class,
+ * unbias the exponent, and normalize the fraction.
+ */
+static void glue(parts_canonicalize,N)(glue(FloatParts,N) *p,
+                                       float_status *status,
+                                       const FloatFmt *fmt)
+{
+    if (p->exp == 0) {
+        if (likely(glue(EQZ,N)(p->frac))) {
+            p->cls = float_class_zero;
+        } else if (status->flush_inputs_to_zero) {
+            float_raise(float_flag_input_denormal, status);
+            p->cls = float_class_zero;
+            memset(p->frac, 0, N / 8);
+        } else {
+            int shift = glue(CLZ,N)(p->frac) - 1;
+            p->cls = float_class_normal;
+            p->exp = fmt->frac_shift - fmt->exp_bias - shift + 1;
+            glue(SHL,N)(p->frac, p->frac, shift);
+        }
+    } else if (p->exp < fmt->exp_max || fmt->arm_althp) {
+        p->cls = float_class_normal;
+        p->exp -= fmt->exp_bias;
+        glue(SHL,N)(p->frac, p->frac, fmt->frac_shift);
+        p->frac[0] |= DECOMPOSED_IMPLICIT_BIT;
+    } else if (likely(glue(EQZ,N)(p->frac))) {
+        p->cls = float_class_inf;
+    } else {
+        glue(SHL,N)(p->frac, p->frac, fmt->frac_shift);
+        p->cls = (parts_is_snan_frac(p->frac[0], status)
+                  ? float_class_snan : float_class_qnan);
+    }
+}

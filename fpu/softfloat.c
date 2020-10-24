@@ -680,9 +680,24 @@ static float128 float128_pack_raw(const FloatParts128 *p)
  * Helper functions for softfloat-parts.c.inc, per-size operations.
  */
 
+static int CLZ64(const uint64_t *a)
+{
+    return clz64(*a);
+}
+
 static int CMP64(const uint64_t *a, const uint64_t *b)
 {
     return *a > *b ? 1 : *a < *b ? -1 : 0;
+}
+
+static bool EQZ64(const uint64_t *a)
+{
+    return *a == 0;
+}
+
+static void SHL64(uint64_t *r, uint64_t *a, int c)
+{
+    *r = *a << c;
 }
 
 static void SHL128(uint64_t *r, uint64_t *a, int c)
@@ -704,40 +719,6 @@ static void SHR128(uint64_t *r, uint64_t *a, int c)
 | specific.
 *----------------------------------------------------------------------------*/
 #include "softfloat-specialize.c.inc"
-
-/* Canonicalize EXP and FRAC, setting CLS.  */
-static FloatParts64 sf_canonicalize(FloatParts64 part, const FloatFmt *parm,
-                                  float_status *status)
-{
-    if (part.exp == parm->exp_max && !parm->arm_althp) {
-        if (part.frac[0] == 0) {
-            part.cls = float_class_inf;
-        } else {
-            part.frac[0] <<= parm->frac_shift;
-            part.cls = (parts_is_snan_frac(part.frac[0], status)
-                        ? float_class_snan : float_class_qnan);
-        }
-    } else if (part.exp == 0) {
-        if (likely(part.frac[0] == 0)) {
-            part.cls = float_class_zero;
-        } else if (status->flush_inputs_to_zero) {
-            float_raise(float_flag_input_denormal, status);
-            part.cls = float_class_zero;
-            part.frac[0] = 0;
-        } else {
-            int shift = clz64(part.frac[0]) - 1;
-            part.cls = float_class_normal;
-            part.exp = parm->frac_shift - parm->exp_bias - shift + 1;
-            part.frac[0] <<= shift;
-        }
-    } else {
-        part.cls = float_class_normal;
-        part.exp -= parm->exp_bias;
-        part.frac[0] = (DECOMPOSED_IMPLICIT_BIT +
-                        (part.frac[0] << parm->frac_shift));
-    }
-    return part;
-}
 
 /* Round and uncanonicalize a floating-point number by parts. There
  * are FRAC_SHIFT bits that may require rounding at the bottom of the
@@ -903,7 +884,7 @@ static void float16a_unpack_canonical(FloatParts64 *p, float16 f,
                                       float_status *s, const FloatFmt *params)
 {
     float16_unpack_raw(p, f);
-    *p = sf_canonicalize(*p, params, s);
+    parts_canonicalize64(p, s, params);
 }
 
 static void float16_unpack_canonical(FloatParts64 *p, float16 f,
@@ -916,7 +897,7 @@ static void bfloat16_unpack_canonical(FloatParts64 *p, bfloat16 f,
                                       float_status *s)
 {
     bfloat16_unpack_raw(p, f);
-    *p = sf_canonicalize(*p, &bfloat16_params, s);
+    parts_canonicalize64(p, s, &bfloat16_params);
 }
 
 static float16 float16a_round_pack_canonical(FloatParts64 *p,
@@ -944,7 +925,7 @@ static void float32_unpack_canonical(FloatParts64 *p, float32 f,
                                      float_status *s)
 {
     float32_unpack_raw(p, f);
-    *p = sf_canonicalize(*p, &float32_params, s);
+    parts_canonicalize64(p, s, &float32_params);
 }
 
 static float32 float32_round_pack_canonical(FloatParts64 *p,
@@ -958,7 +939,7 @@ static void float64_unpack_canonical(FloatParts64 *p, float64 f,
                                      float_status *s)
 {
     float64_unpack_raw(p, f);
-    *p = sf_canonicalize(*p, &float64_params, s);
+    parts_canonicalize64(p, s, &float64_params);
 }
 
 static float64 float64_round_pack_canonical(FloatParts64 *p,
