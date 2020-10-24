@@ -15,8 +15,11 @@
  * indicated otherwise.
  */
 
+#define PARTSN  glue(FloatParts,N)
+#define PARTSW  glue(FloatParts,W)
+
 static void __attribute__((unused))
-glue(return_nan,N)(glue(FloatParts,N) *a, float_status *s)
+glue(return_nan,N)(PARTSN *a, float_status *s)
 {
     switch (a->cls) {
     case float_class_snan:
@@ -37,8 +40,8 @@ glue(return_nan,N)(glue(FloatParts,N) *a, float_status *s)
     }
 }
 
-static glue(FloatParts,N) *
-glue(pick_nan,N)(glue(FloatParts,N) *a, glue(FloatParts,N) *b, float_status *s)
+static PARTSN *
+glue(pick_nan,N)(PARTSN *a, PARTSN *b, float_status *s)
 {
     int cmp;
 
@@ -65,10 +68,9 @@ glue(pick_nan,N)(glue(FloatParts,N) *a, glue(FloatParts,N) *b, float_status *s)
     return a;
 }
 
-static  __attribute__((unused)) glue(FloatParts,N) *
-glue(pick_nan_muladd,N)(glue(FloatParts,N) *a, glue(FloatParts,N) *b,
-                        glue(FloatParts,N) *c, float_status *s,
-                        int ab_mask, int abc_mask)
+static PARTSN *
+glue(pick_nan_muladd,N)(PARTSN *a, PARTSN *b, PARTSN *c,
+                        float_status *s, int ab_mask, int abc_mask)
 {
     int which;
 
@@ -112,8 +114,7 @@ glue(pick_nan_muladd,N)(glue(FloatParts,N) *a, glue(FloatParts,N) *b,
  * Canonicalize the FloatParts structure.  Determine the class,
  * unbias the exponent, and normalize the fraction.
  */
-static void glue(parts_canonicalize,N)(glue(FloatParts,N) *p,
-                                       float_status *status,
+static void glue(parts_canonicalize,N)(PARTSN *p, float_status *status,
                                        const FloatFmt *fmt)
 {
     if (p->exp == 0) {
@@ -149,8 +150,7 @@ static void glue(parts_canonicalize,N)(glue(FloatParts,N) *p,
  * fraction; these bits will be removed. The exponent will be biased
  * by EXP_BIAS and must be bounded by [EXP_MAX-1, 0].
  */
-static void glue(parts_round_uncanonicalize,N)(glue(FloatParts,N) *p,
-                                               float_status *s,
+static void glue(parts_round_uncanonicalize,N)(PARTSN *p, float_status *s,
                                                const FloatFmt *fmt)
 {
     const int exp_max = fmt->exp_max;
@@ -308,9 +308,8 @@ static void glue(parts_round_uncanonicalize,N)(glue(FloatParts,N) *p,
  * Arithmetic.
  */
 
-static glue(FloatParts,N) *
-glue(parts_addsub,N)(glue(FloatParts,N) *a, glue(FloatParts,N) *b,
-                     float_status *s, bool subtract)
+static PARTSN *
+glue(parts_addsub,N)(PARTSN *a, PARTSN *b, float_status *s, bool subtract)
 {
     bool b_sign = b->sign ^ subtract;
     int ab_mask = float_cmask(a->cls) | float_cmask(b->cls);
@@ -369,9 +368,8 @@ glue(parts_addsub,N)(glue(FloatParts,N) *a, glue(FloatParts,N) *b,
  * `b'. The operation is performed according to the IEC/IEEE Standard
  * for Binary Floating-Point Arithmetic.
  */
-static glue(FloatParts,N) *
-glue(parts_mul,N)(glue(FloatParts,N) *a, glue(FloatParts,N) *b,
-                  float_status *s)
+static PARTSN *
+glue(parts_mul,N)(PARTSN *a, PARTSN *b, float_status *s)
 {
     int ab_mask = float_cmask(a->cls) | float_cmask(b->cls);
     bool sign = a->sign ^ b->sign;
@@ -419,3 +417,125 @@ glue(parts_mul,N)(glue(FloatParts,N) *a, glue(FloatParts,N) *b,
     }
     g_assert_not_reached();
 }
+
+/*
+ * Returns the result of multiplying the floating-point values `a' and
+ * `b' then adding 'c', with no intermediate rounding step after the
+ * multiplication. The operation is performed according to the
+ * IEC/IEEE Standard for Binary Floating-Point Arithmetic 754-2008.
+ * The flags argument allows the caller to select negation of the
+ * addend, the intermediate product, or the final result. (The
+ * difference between this and having the caller do a separate
+ * negation is that negating externally will flip the sign bit on NaNs.)
+ *
+ * Requires A and C extracted into a double-sized structure to provide the
+ * extra space for the widening multiply.
+ */
+static PARTSN *
+glue(parts_muladd,N)(PARTSW *a, PARTSN *b, PARTSW *c,
+                     int flags, float_status *s)
+{
+    int ab_mask, abc_mask, shift;
+
+    ab_mask = float_cmask(a->cls) | float_cmask(b->cls);
+    abc_mask = float_cmask(c->cls) | ab_mask;
+
+    /*
+     * It is implementation-defined whether the cases of (0,inf,qnan)
+     * and (inf,0,qnan) raise InvalidOperation or not (and what QNaN
+     * they return if they do), so we have to hand this information
+     * off to the target-specific pick-a-NaN routine.
+     */
+    if (unlikely(abc_mask & float_cmask_anynan)) {
+        return glue(pick_nan_muladd,N)((PARTSN *)a, b, (PARTSN *)c,
+                                       s, ab_mask, abc_mask);
+    }
+
+    if (flags & float_muladd_negate_c) {
+        c->sign ^= 1;
+    }
+
+    /* Compute the sign of the product into A. */
+    a->sign ^= b->sign;
+    if (flags & float_muladd_negate_product) {
+        a->sign ^= 1;
+    }
+
+    if (unlikely(ab_mask != float_cmask_normal)) {
+        if (ab_mask == float_cmask_infzero) {
+            goto return_dnan;
+        }
+
+        if (ab_mask & float_cmask_inf) {
+            if (c->cls == float_class_inf && a->sign != c->sign) {
+                goto return_dnan;
+            }
+            a->cls = float_class_inf;
+            goto return_a_sign;
+        }
+
+        if (ab_mask & float_cmask_zero) {
+            if (c->cls == float_class_zero) {
+                if (a->sign != c->sign) {
+                    c->sign = s->float_rounding_mode == float_round_down;
+                }
+                a = c;
+                goto return_a_sign;
+            }
+            a = c;
+            goto return_a_sign_exp;
+        }
+        g_assert_not_reached();
+    }
+
+    if (unlikely(c->cls == float_class_inf)) {
+        a = c;
+        goto return_a_sign;
+    }
+
+    /*
+     * Perform the multiplication step.
+     */
+    glue(MULW,N)(a->frac, a->frac, b->frac);
+
+    /*
+     * N-bit multiplication produces an N*2-bit result, so e.g. 63-bit inputs
+     * produce a 126-bit result, so some of the above left-shift is expected
+     * in order to place the result at the binary point.
+     */
+    shift = clz64(a->frac[0]) - 1;
+    glue(SHL,W)(a->frac, a->frac, shift);
+    a->exp += b->exp + 2 - shift;
+
+    /* Perform the addition step.  */
+    if (c->cls != float_class_zero) {
+        /* Zero-extend C */
+        memset(c->frac + N / 64, 0, N / 8);
+
+        if (a->sign != c->sign) {
+            glue(parts_sub_normal,W)(a, c, s);
+        } else {
+            glue(parts_add_normal,W)(a, c, s);
+        }
+    }
+
+    glue(TRUNCJAM,N)(a->frac, a->frac);
+
+ return_a_sign_exp:
+    if (flags & float_muladd_halve_result) {
+        a->exp -= 1;
+    }
+ return_a_sign:
+    if (flags & float_muladd_negate_result) {
+        a->sign ^= 1;
+    }
+    return (PARTSN *)a;
+
+ return_dnan:
+    float_raise(float_flag_invalid, s);
+    glue(parts_default_nan,N)(b, s);
+    return b;
+}
+
+#undef PARTSN
+#undef PARTSW
