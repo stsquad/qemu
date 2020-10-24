@@ -141,3 +141,161 @@ static void glue(parts_canonicalize,N)(glue(FloatParts,N) *p,
                   ? float_class_snan : float_class_qnan);
     }
 }
+
+/*
+ * Round and uncanonicalize a floating-point number by parts. There
+ * are FRAC_SHIFT bits that may require rounding at the bottom of the
+ * fraction; these bits will be removed. The exponent will be biased
+ * by EXP_BIAS and must be bounded by [EXP_MAX-1, 0].
+ */
+static void glue(parts_round_uncanonicalize,N)(glue(FloatParts,N) *p,
+                                               float_status *s,
+                                               const FloatFmt *fmt)
+{
+    const int exp_max = fmt->exp_max;
+    const int frac_shift = fmt->frac_shift;
+    const uint64_t frac_lsb = 1ull << frac_shift;
+    const uint64_t frac_lsbm1 = 1ull << (frac_shift - 1);
+    const uint64_t round_mask = frac_lsb - 1;
+    const uint64_t roundeven_mask = round_mask | frac_lsb;
+    int flags = 0;
+
+    switch (p->cls) {
+    case float_class_normal:
+        {
+            uint64_t frac_lo, inc;
+            bool overflow_norm;
+
+            frac_lo = p->frac[N / 64 - 1];
+
+            switch (s->float_rounding_mode) {
+            case float_round_nearest_even:
+                overflow_norm = false;
+                inc = ((frac_lo & roundeven_mask) != frac_lsbm1
+                       ? frac_lsbm1 : 0);
+                break;
+            case float_round_ties_away:
+                overflow_norm = false;
+                inc = frac_lsbm1;
+                break;
+            case float_round_to_zero:
+                overflow_norm = true;
+                inc = 0;
+                break;
+            case float_round_up:
+                inc = p->sign ? 0 : round_mask;
+                overflow_norm = p->sign;
+                break;
+            case float_round_down:
+                inc = p->sign ? round_mask : 0;
+                overflow_norm = !p->sign;
+                break;
+            case float_round_to_odd:
+                overflow_norm = true;
+                inc = frac_lo & frac_lsb ? 0 : round_mask;
+                break;
+            default:
+                g_assert_not_reached();
+            }
+
+            int exp = p->exp + fmt->exp_bias;
+            if (likely(exp > 0)) {
+                if (frac_lo & round_mask) {
+                    flags |= float_flag_inexact;
+                    glue(ADDI,N)(p->frac, p->frac, inc);
+                    if (p->frac[0] & DECOMPOSED_OVERFLOW_BIT) {
+                        glue(SHR,N)(p->frac, p->frac, 1);
+                        exp++;
+                    }
+                }
+                glue(SHR,N)(p->frac, p->frac, frac_shift);
+
+                if (fmt->arm_althp) {
+                    /* ARM Alt HP eschews Inf and NaN for a wider exponent.  */
+                    if (unlikely(exp > exp_max)) {
+                        /* Overflow.  Return the maximum normal.  */
+                        flags = float_flag_invalid;
+                        exp = exp_max;
+                        memset(p->frac, -1, N / 8);
+                    }
+                } else if (unlikely(exp >= exp_max)) {
+                    flags |= float_flag_overflow | float_flag_inexact;
+                    if (overflow_norm) {
+                        exp = exp_max - 1;
+                        memset(p->frac, -1, N / 8);
+                    } else {
+                        p->cls = float_class_inf;
+                        goto do_inf;
+                    }
+                }
+            } else if (s->flush_to_zero) {
+                flags |= float_flag_output_denormal;
+                p->cls = float_class_zero;
+                goto do_zero;
+            } else {
+                bool is_tiny = s->tininess_before_rounding || exp < 0;
+
+                if (!is_tiny) {
+                    uint64_t tmp[N / 64];
+                    glue(ADDI,N)(tmp, p->frac, inc);
+                    is_tiny = !(tmp[0] & DECOMPOSED_OVERFLOW_BIT);
+                }
+                glue(SHRJAM,N)(p->frac, p->frac, 1 - exp);
+                frac_lo = p->frac[N / 64 - 1];
+
+                if (frac_lo & round_mask) {
+                    /* Need to recompute round-to-even/round-to-odd. */
+                    switch (s->float_rounding_mode) {
+                    case float_round_nearest_even:
+                        inc = ((frac_lo & roundeven_mask) != frac_lsbm1
+                               ? frac_lsbm1 : 0);
+                        break;
+                    case float_round_to_odd:
+                        inc = frac_lo & frac_lsb ? 0 : round_mask;
+                        break;
+                    default:
+                        break;
+                    }
+                    flags |= float_flag_inexact;
+                    glue(ADDI,N)(p->frac, p->frac, inc);
+                }
+
+                exp = (p->frac[0] & DECOMPOSED_IMPLICIT_BIT) != 0;
+                glue(SHR,N)(p->frac, p->frac, frac_shift);
+
+                if (is_tiny && (flags & float_flag_inexact)) {
+                    flags |= float_flag_underflow;
+                }
+                if (exp == 0 && glue(EQZ,N)(p->frac)) {
+                    p->cls = float_class_zero;
+                }
+            }
+            p->exp = exp;
+        }
+        break;
+
+    case float_class_zero:
+    do_zero:
+        p->exp = 0;
+        memset(p->frac, 0, N / 8);
+        break;
+
+    case float_class_inf:
+    do_inf:
+        g_assert(!fmt->arm_althp);
+        p->exp = exp_max;
+        memset(p->frac, 0, N / 8);
+        break;
+
+    case float_class_qnan:
+    case float_class_snan:
+        g_assert(!fmt->arm_althp);
+        p->exp = exp_max;
+        glue(SHR,N)(p->frac, p->frac, frac_shift);
+        break;
+
+    default:
+        g_assert_not_reached();
+    }
+    float_raise(flags, s);
+}
