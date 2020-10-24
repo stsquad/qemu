@@ -749,6 +749,16 @@ static bool EQZ128(const uint64_t *a)
     return (a[0] | a[1]) == 0;
 }
 
+static void MULW64(uint64_t *r, const uint64_t *a, const uint64_t *b)
+{
+    mulu64(r + 1, r + 0, *a, *b);
+}
+
+static void MULW128(uint64_t *r, const uint64_t *a, const uint64_t *b)
+{
+    mul128To256(a[0], a[1], b[0], b[1], r + 0, r + 1, r + 2, r + 3);
+}
+
 static void NEG64(uint64_t *r, const uint64_t *a)
 {
     *r = -*a;
@@ -806,6 +816,17 @@ static void SUB128(uint64_t *r, const uint64_t *a, const uint64_t *b)
     ai = int128_sub(ai, bi);
     r[0] = int128_gethi(ai);
     r[1] = int128_getlo(ai);
+}
+
+static void TRUNCJAM64(uint64_t *r, const uint64_t *a)
+{
+    *r = a[0] | (a[1] != 0);
+}
+
+static void TRUNCJAM128(uint64_t *r, const uint64_t *a)
+{
+    r[0] = a[0];
+    r[1] = a[1] | ((a[2] | a[3]) != 0);
 }
 
 /*----------------------------------------------------------------------------
@@ -1113,89 +1134,39 @@ float128 float128_sub(float128 a, float128 b, float_status *status)
     return float128_addsub(a, b, status, true);
 }
 
-/*
- * Returns the result of multiplying the floating-point values `a' and
- * `b'. The operation is performed according to the IEC/IEEE Standard
- * for Binary Floating-Point Arithmetic.
- */
-
-static FloatParts64 mul_floats(FloatParts64 a, FloatParts64 b, float_status *s)
-{
-    bool sign = a.sign ^ b.sign;
-
-    if (a.cls == float_class_normal && b.cls == float_class_normal) {
-        uint64_t hi, lo;
-        int exp = a.exp + b.exp;
-
-        mul64To128(a.frac[0], b.frac[0], &hi, &lo);
-        shift128RightJamming(hi, lo, DECOMPOSED_BINARY_POINT, &hi, &lo);
-        if (lo & DECOMPOSED_OVERFLOW_BIT) {
-            shift64RightJamming(lo, 1, &lo);
-            exp += 1;
-        }
-
-        /* Re-use a */
-        a.exp = exp;
-        a.sign = sign;
-        a.frac[0] = lo;
-        return a;
-    }
-    /* handle all the NaN cases */
-    if (is_nan(a.cls) || is_nan(b.cls)) {
-        return *pick_nan64(&a, &b, s);
-    }
-    /* Inf * Zero == NaN */
-    if ((a.cls == float_class_inf && b.cls == float_class_zero) ||
-        (a.cls == float_class_zero && b.cls == float_class_inf)) {
-        float_raise(float_flag_invalid, s);
-        parts_default_nan64(&a, s);
-        return a;
-    }
-    /* Multiply by 0 or Inf */
-    if (a.cls == float_class_inf || a.cls == float_class_zero) {
-        a.sign = sign;
-        return a;
-    }
-    if (b.cls == float_class_inf || b.cls == float_class_zero) {
-        b.sign = sign;
-        return b;
-    }
-    g_assert_not_reached();
-}
-
 float16 QEMU_FLATTEN float16_mul(float16 a, float16 b, float_status *status)
 {
-    FloatParts64 pa, pb, pr;
+    FloatParts64 pa, pb, *pr;
 
     float16_unpack_canonical(&pa, a, status);
     float16_unpack_canonical(&pb, b, status);
-    pr = mul_floats(pa, pb, status);
+    pr = parts_mul64(&pa, &pb, status);
 
-    return float16_round_pack_canonical(&pr, status);
+    return float16_round_pack_canonical(pr, status);
 }
 
 static float32 QEMU_SOFTFLOAT_ATTR
 soft_f32_mul(float32 a, float32 b, float_status *status)
 {
-    FloatParts64 pa, pb, pr;
+    FloatParts64 pa, pb, *pr;
 
     float32_unpack_canonical(&pa, a, status);
     float32_unpack_canonical(&pb, b, status);
-    pr = mul_floats(pa, pb, status);
+    pr = parts_mul64(&pa, &pb, status);
 
-    return float32_round_pack_canonical(&pr, status);
+    return float32_round_pack_canonical(pr, status);
 }
 
 static float64 QEMU_SOFTFLOAT_ATTR
 soft_f64_mul(float64 a, float64 b, float_status *status)
 {
-    FloatParts64 pa, pb, pr;
+    FloatParts64 pa, pb, *pr;
 
     float64_unpack_canonical(&pa, a, status);
     float64_unpack_canonical(&pb, b, status);
-    pr = mul_floats(pa, pb, status);
+    pr = parts_mul64(&pa, &pb, status);
 
-    return float64_round_pack_canonical(&pr, status);
+    return float64_round_pack_canonical(pr, status);
 }
 
 static float hard_f32_mul(float a, float b)
@@ -1227,15 +1198,28 @@ float64_mul(float64 a, float64 b, float_status *s)
  * values `a' and `b'.
  */
 
-bfloat16 QEMU_FLATTEN bfloat16_mul(bfloat16 a, bfloat16 b, float_status *status)
+bfloat16 QEMU_FLATTEN
+bfloat16_mul(bfloat16 a, bfloat16 b, float_status *status)
 {
-    FloatParts64 pa, pb, pr;
+    FloatParts64 pa, pb, *pr;
 
     bfloat16_unpack_canonical(&pa, a, status);
     bfloat16_unpack_canonical(&pb, b, status);
-    pr = mul_floats(pa, pb, status);
+    pr = parts_mul64(&pa, &pb, status);
 
-    return bfloat16_round_pack_canonical(&pr, status);
+    return bfloat16_round_pack_canonical(pr, status);
+}
+
+float128 QEMU_FLATTEN
+float128_mul(float128 a, float128 b, float_status *status)
+{
+    FloatParts128 pa, pb, *pr;
+
+    float128_unpack_canonical(&pa, a, status);
+    float128_unpack_canonical(&pb, b, status);
+    pr = parts_mul128(&pa, &pb, status);
+
+    return float128_round_pack_canonical(pr, status);
 }
 
 /*
@@ -6969,69 +6953,6 @@ float128 float128_round_to_int(float128 a, float_status *status)
         float_raise(float_flag_inexact, status);
     }
     return z;
-
-}
-
-/*----------------------------------------------------------------------------
-| Returns the result of multiplying the quadruple-precision floating-point
-| values `a' and `b'.  The operation is performed according to the IEC/IEEE
-| Standard for Binary Floating-Point Arithmetic.
-*----------------------------------------------------------------------------*/
-
-float128 float128_mul(float128 a, float128 b, float_status *status)
-{
-    bool aSign, bSign, zSign;
-    int32_t aExp, bExp, zExp;
-    uint64_t aSig0, aSig1, bSig0, bSig1, zSig0, zSig1, zSig2, zSig3;
-
-    aSig1 = extractFloat128Frac1( a );
-    aSig0 = extractFloat128Frac0( a );
-    aExp = extractFloat128Exp( a );
-    aSign = extractFloat128Sign( a );
-    bSig1 = extractFloat128Frac1( b );
-    bSig0 = extractFloat128Frac0( b );
-    bExp = extractFloat128Exp( b );
-    bSign = extractFloat128Sign( b );
-    zSign = aSign ^ bSign;
-    if ( aExp == 0x7FFF ) {
-        if (    ( aSig0 | aSig1 )
-             || ( ( bExp == 0x7FFF ) && ( bSig0 | bSig1 ) ) ) {
-            return propagateFloat128NaN(a, b, status);
-        }
-        if ( ( bExp | bSig0 | bSig1 ) == 0 ) goto invalid;
-        return packFloat128( zSign, 0x7FFF, 0, 0 );
-    }
-    if ( bExp == 0x7FFF ) {
-        if (bSig0 | bSig1) {
-            return propagateFloat128NaN(a, b, status);
-        }
-        if ( ( aExp | aSig0 | aSig1 ) == 0 ) {
- invalid:
-            float_raise(float_flag_invalid, status);
-            return float128_default_nan(status);
-        }
-        return packFloat128( zSign, 0x7FFF, 0, 0 );
-    }
-    if ( aExp == 0 ) {
-        if ( ( aSig0 | aSig1 ) == 0 ) return packFloat128( zSign, 0, 0, 0 );
-        normalizeFloat128Subnormal( aSig0, aSig1, &aExp, &aSig0, &aSig1 );
-    }
-    if ( bExp == 0 ) {
-        if ( ( bSig0 | bSig1 ) == 0 ) return packFloat128( zSign, 0, 0, 0 );
-        normalizeFloat128Subnormal( bSig0, bSig1, &bExp, &bSig0, &bSig1 );
-    }
-    zExp = aExp + bExp - 0x4000;
-    aSig0 |= UINT64_C(0x0001000000000000);
-    shortShift128Left( bSig0, bSig1, 16, &bSig0, &bSig1 );
-    mul128To256( aSig0, aSig1, bSig0, bSig1, &zSig0, &zSig1, &zSig2, &zSig3 );
-    add128( zSig0, zSig1, aSig0, aSig1, &zSig0, &zSig1 );
-    zSig2 |= ( zSig3 != 0 );
-    if (UINT64_C( 0x0002000000000000) <= zSig0 ) {
-        shift128ExtraRightJamming(
-            zSig0, zSig1, zSig2, 1, &zSig0, &zSig1, &zSig2 );
-        ++zExp;
-    }
-    return roundAndPackFloat128(zSign, zExp, zSig0, zSig1, zSig2, status);
 
 }
 

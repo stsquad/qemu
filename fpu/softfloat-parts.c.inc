@@ -363,3 +363,59 @@ glue(parts_addsub,N)(glue(FloatParts,N) *a, glue(FloatParts,N) *b,
     }
     g_assert_not_reached();
 }
+
+/*
+ * Returns the result of multiplying the floating-point values `a' and
+ * `b'. The operation is performed according to the IEC/IEEE Standard
+ * for Binary Floating-Point Arithmetic.
+ */
+static glue(FloatParts,N) *
+glue(parts_mul,N)(glue(FloatParts,N) *a, glue(FloatParts,N) *b,
+                  float_status *s)
+{
+    int ab_mask = float_cmask(a->cls) | float_cmask(b->cls);
+    bool sign = a->sign ^ b->sign;
+
+    if (likely(ab_mask == float_cmask_normal)) {
+        uint64_t tmp[N / 32];
+        int shift;
+
+        glue(MULW,N)(tmp, a->frac, b->frac);
+        glue(TRUNCJAM,N)(a->frac, tmp);
+
+        /*
+         * N-bit multiplication produces an N*2-bit result, so e.g.
+         * 63-bit inputs produce a 126-bit result, so some of the above
+         * left-shift is expected in order to place the result at the
+         * binary point.  Shift will be either 1 or 2.
+         */
+        shift = clz64(a->frac[0]) - 1;
+        glue(SHL,N)(a->frac, a->frac, shift);
+
+        a->exp += b->exp + 2 - shift;
+        a->sign = sign;
+        return a;
+    }
+
+    /* Inf * Zero == NaN */
+    if (unlikely(ab_mask == float_cmask_infzero)) {
+        float_raise(float_flag_invalid, s);
+        glue(parts_default_nan,N)(a, s);
+        return a;
+    }
+
+    if (unlikely(ab_mask & float_cmask_anynan)) {
+        return glue(pick_nan,N)(a, b, s);
+    }
+
+    /* Multiply by 0 or Inf */
+    if (a->cls == float_class_inf || a->cls == float_class_zero) {
+        a->sign = sign;
+        return a;
+    }
+    if (b->cls == float_class_inf || b->cls == float_class_zero) {
+        b->sign = sign;
+        return b;
+    }
+    g_assert_not_reached();
+}
