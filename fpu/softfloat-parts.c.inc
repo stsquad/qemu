@@ -15,7 +15,8 @@
  * indicated otherwise.
  */
 
-static void glue(return_nan,N)(glue(FloatParts,N) *a, float_status *s)
+static void __attribute__((unused))
+glue(return_nan,N)(glue(FloatParts,N) *a, float_status *s)
 {
     switch (a->cls) {
     case float_class_snan:
@@ -64,7 +65,7 @@ glue(pick_nan,N)(glue(FloatParts,N) *a, glue(FloatParts,N) *b, float_status *s)
     return a;
 }
 
-static glue(FloatParts,N) *
+static  __attribute__((unused)) glue(FloatParts,N) *
 glue(pick_nan_muladd,N)(glue(FloatParts,N) *a, glue(FloatParts,N) *b,
                         glue(FloatParts,N) *c, float_status *s,
                         int ab_mask, int abc_mask)
