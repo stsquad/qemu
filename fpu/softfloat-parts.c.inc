@@ -35,3 +35,31 @@ static void glue(return_nan,N)(glue(FloatParts,N) *a, float_status *s)
         g_assert_not_reached();
     }
 }
+
+static glue(FloatParts,N) *
+glue(pick_nan,N)(glue(FloatParts,N) *a, glue(FloatParts,N) *b, float_status *s)
+{
+    int cmp;
+
+    if (is_snan(a->cls) || is_snan(b->cls)) {
+        float_raise(float_flag_invalid, s);
+    }
+
+    if (s->default_nan_mode) {
+        glue(parts_default_nan,N)(a, s);
+        return a;
+    }
+
+    cmp = glue(CMP,N)(a->frac, b->frac);
+    if (cmp == 0) {
+        cmp = a->sign < b->sign;
+    }
+    if (pickNaN(a->cls, b->cls, cmp > 0, s)) {
+        a = b;
+    }
+
+    if (is_snan(a->cls)) {
+        glue(parts_silence_nan,N)(a, s);
+    }
+    return a;
+}

@@ -680,6 +680,11 @@ static float128 float128_pack_raw(const FloatParts128 *p)
  * Helper functions for softfloat-parts.c.inc, per-size operations.
  */
 
+static int CMP64(const uint64_t *a, const uint64_t *b)
+{
+    return *a > *b ? 1 : *a < *b ? -1 : 0;
+}
+
 static void SHL128(uint64_t *r, uint64_t *a, int c)
 {
     shift128Left(a[0], a[1], c, r + 0, r + 1);
@@ -886,27 +891,6 @@ static FloatParts64 round_canonical(FloatParts64 p, float_status *s,
     return p;
 }
 
-static FloatParts64 pick_nan(FloatParts64 a, FloatParts64 b, float_status *s)
-{
-    if (is_snan(a.cls) || is_snan(b.cls)) {
-        float_raise(float_flag_invalid, s);
-    }
-
-    if (s->default_nan_mode) {
-        parts_default_nan64(&a, s);
-    } else {
-        if (pickNaN(a.cls, b.cls,
-                    a.frac[0] > b.frac[0] ||
-                    (a.frac[0] == b.frac[0] && a.sign < b.sign), s)) {
-            a = b;
-        }
-        if (is_snan(a.cls)) {
-            parts_silence_nan64(&a, s);
-        }
-    }
-    return a;
-}
-
 static FloatParts64 pick_nan_muladd(FloatParts64 a, FloatParts64 b, FloatParts64 c,
                                   bool inf_zero, float_status *s)
 {
@@ -1063,7 +1047,7 @@ static FloatParts64 addsub_floats(FloatParts64 a, FloatParts64 b, bool subtract,
             return a;
         }
         if (is_nan(a.cls) || is_nan(b.cls)) {
-            return pick_nan(a, b, s);
+            return *pick_nan64(&a, &b, s);
         }
         if (a.cls == float_class_inf) {
             if (b.cls == float_class_inf) {
@@ -1100,7 +1084,7 @@ static FloatParts64 addsub_floats(FloatParts64 a, FloatParts64 b, bool subtract,
             return a;
         }
         if (is_nan(a.cls) || is_nan(b.cls)) {
-            return pick_nan(a, b, s);
+            return *pick_nan64(&a, &b, s);
         }
         if (a.cls == float_class_inf || b.cls == float_class_zero) {
             return a;
@@ -1315,7 +1299,7 @@ static FloatParts64 mul_floats(FloatParts64 a, FloatParts64 b, float_status *s)
     }
     /* handle all the NaN cases */
     if (is_nan(a.cls) || is_nan(b.cls)) {
-        return pick_nan(a, b, s);
+        return *pick_nan64(&a, &b, s);
     }
     /* Inf * Zero == NaN */
     if ((a.cls == float_class_inf && b.cls == float_class_zero) ||
@@ -1870,7 +1854,7 @@ static FloatParts64 div_floats(FloatParts64 a, FloatParts64 b, float_status *s)
     }
     /* handle all the NaN cases */
     if (is_nan(a.cls) || is_nan(b.cls)) {
-        return pick_nan(a, b, s);
+        return *pick_nan64(&a, &b, s);
     }
     /* 0/0 or Inf/Inf */
     if (a.cls == b.cls
@@ -3288,14 +3272,14 @@ static FloatParts64 minmax_floats(FloatParts64 a, FloatParts64 b, bool ismin,
              * the invalid exception is raised.
              */
             if (is_snan(a.cls) || is_snan(b.cls)) {
-                return pick_nan(a, b, s);
+                return *pick_nan64(&a, &b, s);
             } else if (is_nan(a.cls) && !is_nan(b.cls)) {
                 return b;
             } else if (is_nan(b.cls) && !is_nan(a.cls)) {
                 return a;
             }
         }
-        return pick_nan(a, b, s);
+        return *pick_nan64(&a, &b, s);
     } else {
         int a_exp, b_exp;
 
