@@ -63,3 +63,46 @@ glue(pick_nan,N)(glue(FloatParts,N) *a, glue(FloatParts,N) *b, float_status *s)
     }
     return a;
 }
+
+static glue(FloatParts,N) *
+glue(pick_nan_muladd,N)(glue(FloatParts,N) *a, glue(FloatParts,N) *b,
+                        glue(FloatParts,N) *c, float_status *s,
+                        int ab_mask, int abc_mask)
+{
+    int which;
+
+    if (unlikely(abc_mask & float_cmask_snan)) {
+        float_raise(float_flag_invalid, s);
+    }
+
+    which = pickNaNMulAdd(a->cls, b->cls, c->cls,
+                          ab_mask == float_cmask_infzero, s);
+
+    if (s->default_nan_mode) {
+        /*
+         * Note that this check is after pickNaNMulAdd so that function
+         * has an opportunity to set the Invalid flag for infzero.
+         */
+        which = 3;
+    }
+
+    switch (which) {
+    case 0:
+        break;
+    case 1:
+        a = b;
+        break;
+    case 2:
+        a = c;
+        break;
+    case 3:
+        glue(parts_default_nan,N)(a, s);
+        return a;
+    default:
+        g_assert_not_reached();
+    }
+    if (is_snan(a->cls)) {
+        glue(parts_silence_nan,N)(a, s);
+    }
+    return a;
+}

@@ -891,46 +891,6 @@ static FloatParts64 round_canonical(FloatParts64 p, float_status *s,
     return p;
 }
 
-static FloatParts64 pick_nan_muladd(FloatParts64 a, FloatParts64 b, FloatParts64 c,
-                                  bool inf_zero, float_status *s)
-{
-    int which;
-
-    if (is_snan(a.cls) || is_snan(b.cls) || is_snan(c.cls)) {
-        float_raise(float_flag_invalid, s);
-    }
-
-    which = pickNaNMulAdd(a.cls, b.cls, c.cls, inf_zero, s);
-
-    if (s->default_nan_mode) {
-        /* Note that this check is after pickNaNMulAdd so that function
-         * has an opportunity to set the Invalid flag.
-         */
-        which = 3;
-    }
-
-    switch (which) {
-    case 0:
-        break;
-    case 1:
-        a = b;
-        break;
-    case 2:
-        a = c;
-        break;
-    case 3:
-        parts_default_nan64(&a, s);
-        break;
-    default:
-        g_assert_not_reached();
-    }
-
-    if (is_snan(a.cls)) {
-        parts_silence_nan64(&a, s);
-    }
-    return a;
-}
-
 #define N 64
 
 #include "softfloat-parts.c.inc"
@@ -1427,7 +1387,7 @@ static FloatParts64 muladd_floats(FloatParts64 a, FloatParts64 b, FloatParts64 c
      * off to the target-specific pick-a-NaN routine.
      */
     if (unlikely(abc_mask & float_cmask_anynan)) {
-        return pick_nan_muladd(a, b, c, inf_zero, s);
+        return *pick_nan_muladd64(&a, &b, &c, s, ab_mask, abc_mask);
     }
 
     if (inf_zero) {
