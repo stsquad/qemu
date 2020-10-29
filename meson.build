@@ -75,9 +75,14 @@ endif
 
 accelerator_targets = { 'CONFIG_KVM': kvm_targets }
 if cpu in ['x86', 'x86_64', 'arm', 'aarch64']
-  # i368 emulator provides xenpv machine type for multiple architectures
+  # i368 emulator provides xenpv machine type for multiple
+  # architectures
+  targets = ['i386-softmmu', 'x86_64-softmmu']
+  if cpu in ['arm', 'aarch64']
+    targets += 'aarch64-softmmu'
+  endif
   accelerator_targets += {
-    'CONFIG_XEN': ['i386-softmmu', 'x86_64-softmmu'],
+    'CONFIG_XEN': targets
   }
 endif
 if cpu in ['x86', 'x86_64']
