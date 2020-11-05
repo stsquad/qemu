@@ -2446,6 +2446,14 @@ if have_system
   summary_info += {'WHPX support':      config_all.has_key('CONFIG_WHPX')}
   summary_info += {'Xen support':       config_host.has_key('CONFIG_XEN_BACKEND')}
   if config_host.has_key('CONFIG_XEN_BACKEND')
+    xen_features = ['backend']
+    if config_all.has_key('CONFIG_XEN_HVM')
+      xen_features += 'HVM'
+    endif
+    if config_all.has_key('CONFIG_XEN_PCI_PASSTHROUGH')
+      xen_features += 'PCI Passthrough'
+    endif
+    summary_info += {'xen features':      ' '.join(xen_features)}
     summary_info += {'xen ctrl version':  config_host['CONFIG_XEN_CTRL_INTERFACE_VERSION']}
   endif
 endif
