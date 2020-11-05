@@ -28,6 +28,4 @@ i386_ss.add(when: 'CONFIG_PC', if_true: files(
 subdir('kvm')
 subdir('xen')
 
-i386_ss.add_all(xenpv_ss)
-
 hw_arch += {'i386': i386_ss}
