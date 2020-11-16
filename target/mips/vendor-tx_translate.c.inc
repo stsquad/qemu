@@ -41,6 +41,8 @@
 
 #if defined(TARGET_MIPS64)
 
+#include "vendor-tx-mmi_translate.c.inc"
+
 /* Copy GPR to and from TX79 HI1/LO1 register. */
 static void gen_HILO1_tx79(DisasContext *ctx, uint32_t opc, int reg)
 {
