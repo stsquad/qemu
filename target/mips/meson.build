@@ -8,6 +8,7 @@ mips_ss.add(files(
   'op_helper.c',
   'mod-mips-dsp_helper.c',
   'mod-mips-msa_helper.c',
+  'vendor-vr54xx_helper.c',
 
   'translate.c',
 ))
