@@ -243,6 +243,7 @@ K: ^Subject:.*(?i)mips
 MIPS TCG CPUs (nanoMIPS ISA)
 S: Orphan
 F: disas/nanomips.*
+F: target/mips/isa-nanomips*
 
 Moxie TCG CPUs
 M: Anthony Green <green@moxielogic.com>
