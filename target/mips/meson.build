@@ -10,6 +10,7 @@ mips_ss.add(files(
   'mod-msa_helper.c',
 
   'translate.c',
+  'mod-msa_translate.c',
 ))
 mips_ss.add(when: 'CONFIG_KVM', if_true: files('kvm.c'))
 
