@@ -181,14 +181,6 @@ DEF_HELPER_2(dmtc0_entrylo1, void, env, i64)
 
 #endif /* !CONFIG_USER_ONLY */
 
-/* microMIPS functions */
-DEF_HELPER_4(lwm, void, env, tl, tl, i32)
-DEF_HELPER_4(swm, void, env, tl, tl, i32)
-#ifdef TARGET_MIPS64
-DEF_HELPER_4(ldm, void, env, tl, tl, i32)
-DEF_HELPER_4(sdm, void, env, tl, tl, i32)
-#endif
-
 /* CP1 functions */
 DEF_HELPER_2(cfc1, tl, env, i32)
 DEF_HELPER_4(ctc1, void, env, tl, i32, i32)
@@ -426,6 +418,8 @@ DEF_HELPER_FLAGS_1(biadd, TCG_CALL_NO_RWG_SE, i64, i64)
 DEF_HELPER_FLAGS_1(pmovmskb, TCG_CALL_NO_RWG_SE, i64, i64)
 
 DEF_HELPER_3(cache, void, env, tl, i32)
+
+#include "isa-micromips_helper.h.inc"
 
 #include "mod-mips-dsp_helper.h.inc"
 #include "mod-mips-msa_helper.h.inc"
