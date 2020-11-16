@@ -179,25 +179,6 @@ DEF_HELPER_2(dmtc0_entrylo0, void, env, i64)
 DEF_HELPER_2(dmtc0_entrylo1, void, env, i64)
 #endif
 
-/* MIPS MT functions */
-DEF_HELPER_2(mftgpr, tl, env, i32)
-DEF_HELPER_2(mftlo, tl, env, i32)
-DEF_HELPER_2(mfthi, tl, env, i32)
-DEF_HELPER_2(mftacx, tl, env, i32)
-DEF_HELPER_1(mftdsp, tl, env)
-DEF_HELPER_3(mttgpr, void, env, tl, i32)
-DEF_HELPER_3(mttlo, void, env, tl, i32)
-DEF_HELPER_3(mtthi, void, env, tl, i32)
-DEF_HELPER_3(mttacx, void, env, tl, i32)
-DEF_HELPER_2(mttdsp, void, env, tl)
-DEF_HELPER_0(dmt, tl)
-DEF_HELPER_0(emt, tl)
-DEF_HELPER_1(dvpe, tl, env)
-DEF_HELPER_1(evpe, tl, env)
-
-/* R6 Multi-threading */
-DEF_HELPER_1(dvp, tl, env)
-DEF_HELPER_1(evp, tl, env)
 #endif /* !CONFIG_USER_ONLY */
 
 /* microMIPS functions */
@@ -207,9 +188,6 @@ DEF_HELPER_4(swm, void, env, tl, tl, i32)
 DEF_HELPER_4(ldm, void, env, tl, tl, i32)
 DEF_HELPER_4(sdm, void, env, tl, tl, i32)
 #endif
-
-DEF_HELPER_2(fork, void, tl, tl)
-DEF_HELPER_2(yield, tl, env, tl)
 
 /* CP1 functions */
 DEF_HELPER_2(cfc1, tl, env, i32)
@@ -451,4 +429,4 @@ DEF_HELPER_3(cache, void, env, tl, i32)
 
 #include "mod-mips-dsp_helper.h.inc"
 #include "mod-mips-msa_helper.h.inc"
-
+#include "mod-mips-mt_helper.h.inc"
