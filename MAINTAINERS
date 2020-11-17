@@ -253,6 +253,12 @@ R: Craig Janeczek <jancraig@amazon.com>
 S: Odd Fixes
 F: target/mips/vendor-xburst*
 
+MIPS TCG CPUs (Toshiba TX)
+M: Philippe Mathieu-Daudé <f4bug@amsat.org>
+R: Fredrik Noring <noring@nocrew.org>
+S: Odd Fixes
+F: target/mips/vendor-tx*
+
 MIPS TCG CPUs (nanoMIPS ISA)
 S: Orphan
 F: disas/nanomips.*
