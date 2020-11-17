@@ -247,6 +247,12 @@ R: Jiaxun Yang <jiaxun.yang@flygoat.com>
 S: Odd Fixes
 F: target/mips/vendor-loong*
 
+MIPS TCG CPUs (Ingenic Xburst)
+M: Philippe Mathieu-Daudé <f4bug@amsat.org>
+R: Craig Janeczek <jancraig@amazon.com>
+S: Odd Fixes
+F: target/mips/vendor-xburst*
+
 MIPS TCG CPUs (nanoMIPS ISA)
 S: Orphan
 F: disas/nanomips.*
