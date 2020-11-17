@@ -240,6 +240,13 @@ F: include/hw/timer/mips_gictimer.h
 F: tests/tcg/mips/
 K: ^Subject:.*(?i)mips
 
+MIPS TCG CPUs (Loongson)
+M: Philippe Mathieu-Daudé <f4bug@amsat.org>
+R: Huacai Chen <chenhc@lemote.com>
+R: Jiaxun Yang <jiaxun.yang@flygoat.com>
+S: Odd Fixes
+F: target/mips/vendor-loong*
+
 MIPS TCG CPUs (nanoMIPS ISA)
 S: Orphan
 F: disas/nanomips.*
