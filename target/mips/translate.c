@@ -330,6 +330,19 @@ enum {
     OPC_MUL      = 0x02 | OPC_SPECIAL2,
     OPC_MSUB     = 0x04 | OPC_SPECIAL2,
     OPC_MSUBU    = 0x05 | OPC_SPECIAL2,
+
+    /* Multiply Instructions for Pipeline 1 */
+    OPC_MFHI1    = 0x10 | OPC_SPECIAL2,
+    OPC_MTHI1    = 0x11 | OPC_SPECIAL2,
+    OPC_MFLO1    = 0x12 | OPC_SPECIAL2,
+    OPC_MTLO1    = 0x13 | OPC_SPECIAL2,
+    OPC_MULT1    = 0x18 | OPC_SPECIAL2,
+    OPC_MULTU1   = 0x19 | OPC_SPECIAL2,
+    OPC_DIV1     = 0x1A | OPC_SPECIAL2,
+    OPC_DIVU1    = 0x1B | OPC_SPECIAL2,
+    OPC_MADD1    = 0x20 | OPC_SPECIAL2,
+    OPC_MADDU1   = 0x21 | OPC_SPECIAL2,
+
     /* Misc */
     OPC_CLZ      = 0x20 | OPC_SPECIAL2,
     OPC_CLO      = 0x21 | OPC_SPECIAL2,
@@ -933,21 +946,9 @@ enum {
 
 #define MASK_MMI(op) (MASK_OP_MAJOR(op) | ((op) & 0x3F))
 enum {
-    MMI_OPC_MADD       = 0x00 | MMI_OPC_CLASS_MMI, /* Same as OPC_MADD */
-    MMI_OPC_MADDU      = 0x01 | MMI_OPC_CLASS_MMI, /* Same as OPC_MADDU */
     MMI_OPC_PLZCW      = 0x04 | MMI_OPC_CLASS_MMI,
     MMI_OPC_CLASS_MMI0 = 0x08 | MMI_OPC_CLASS_MMI,
     MMI_OPC_CLASS_MMI2 = 0x09 | MMI_OPC_CLASS_MMI,
-    MMI_OPC_MFHI1      = 0x10 | MMI_OPC_CLASS_MMI, /* Same minor as OPC_MFHI */
-    MMI_OPC_MTHI1      = 0x11 | MMI_OPC_CLASS_MMI, /* Same minor as OPC_MTHI */
-    MMI_OPC_MFLO1      = 0x12 | MMI_OPC_CLASS_MMI, /* Same minor as OPC_MFLO */
-    MMI_OPC_MTLO1      = 0x13 | MMI_OPC_CLASS_MMI, /* Same minor as OPC_MTLO */
-    MMI_OPC_MULT1      = 0x18 | MMI_OPC_CLASS_MMI, /* Same minor as OPC_MULT */
-    MMI_OPC_MULTU1     = 0x19 | MMI_OPC_CLASS_MMI, /* Same min. as OPC_MULTU */
-    MMI_OPC_DIV1       = 0x1A | MMI_OPC_CLASS_MMI, /* Same minor as OPC_DIV  */
-    MMI_OPC_DIVU1      = 0x1B | MMI_OPC_CLASS_MMI, /* Same minor as OPC_DIVU */
-    MMI_OPC_MADD1      = 0x20 | MMI_OPC_CLASS_MMI,
-    MMI_OPC_MADDU1     = 0x21 | MMI_OPC_CLASS_MMI,
     MMI_OPC_CLASS_MMI1 = 0x28 | MMI_OPC_CLASS_MMI,
     MMI_OPC_CLASS_MMI3 = 0x29 | MMI_OPC_CLASS_MMI,
     MMI_OPC_PMFHL      = 0x30 | MMI_OPC_CLASS_MMI,
@@ -3049,26 +3050,26 @@ static void gen_shift(DisasContext *ctx, uint32_t opc,
 /* Copy GPR to and from TX79 HI1/LO1 register. */
 static void gen_HILO1_tx79(DisasContext *ctx, uint32_t opc, int reg)
 {
-    if (reg == 0 && (opc == MMI_OPC_MFHI1 || opc == MMI_OPC_MFLO1)) {
+    if (reg == 0 && (opc == OPC_MFHI1 || opc == OPC_MFLO1)) {
         /* Treat as NOP. */
         return;
     }
 
     switch (opc) {
-    case MMI_OPC_MFHI1:
+    case OPC_MFHI1:
         tcg_gen_mov_tl(cpu_gpr[reg], cpu_HI[1]);
         break;
-    case MMI_OPC_MFLO1:
+    case OPC_MFLO1:
         tcg_gen_mov_tl(cpu_gpr[reg], cpu_LO[1]);
         break;
-    case MMI_OPC_MTHI1:
+    case OPC_MTHI1:
         if (reg != 0) {
             tcg_gen_mov_tl(cpu_HI[1], cpu_gpr[reg]);
         } else {
             tcg_gen_movi_tl(cpu_HI[1], 0);
         }
         break;
-    case MMI_OPC_MTLO1:
+    case OPC_MTLO1:
         if (reg != 0) {
             tcg_gen_mov_tl(cpu_LO[1], cpu_gpr[reg]);
         } else {
@@ -3443,7 +3444,7 @@ static void gen_div1_tx79(DisasContext *ctx, uint32_t opc, int rs, int rt)
     gen_load_gpr(t1, rt);
 
     switch (opc) {
-    case MMI_OPC_DIV1:
+    case OPC_DIV1:
         {
             TCGv t2 = tcg_temp_new();
             TCGv t3 = tcg_temp_new();
@@ -3464,7 +3465,7 @@ static void gen_div1_tx79(DisasContext *ctx, uint32_t opc, int rs, int rt)
             tcg_temp_free(t2);
         }
         break;
-    case MMI_OPC_DIVU1:
+    case OPC_DIVU1:
         {
             TCGv t2 = tcg_const_tl(0);
             TCGv t3 = tcg_const_tl(1);
@@ -3719,7 +3720,7 @@ static void gen_mul_txx9(DisasContext *ctx, uint32_t opc,
     gen_load_gpr(t1, rt);
 
     switch (opc) {
-    case MMI_OPC_MULT1:
+    case OPC_MULT1:
         acc = 1;
         /* Fall through */
     case OPC_MULT:
@@ -3738,7 +3739,7 @@ static void gen_mul_txx9(DisasContext *ctx, uint32_t opc,
             tcg_temp_free_i32(t3);
         }
         break;
-    case MMI_OPC_MULTU1:
+    case OPC_MULTU1:
         acc = 1;
         /* Fall through */
     case OPC_MULTU:
@@ -3757,10 +3758,10 @@ static void gen_mul_txx9(DisasContext *ctx, uint32_t opc,
             tcg_temp_free_i32(t3);
         }
         break;
-    case MMI_OPC_MADD1:
+    case OPC_MADD1:
         acc = 1;
         /* Fall through */
-    case MMI_OPC_MADD:
+    case OPC_MADD:
         {
             TCGv_i64 t2 = tcg_temp_new_i64();
             TCGv_i64 t3 = tcg_temp_new_i64();
@@ -3779,10 +3780,10 @@ static void gen_mul_txx9(DisasContext *ctx, uint32_t opc,
             tcg_temp_free_i64(t2);
         }
         break;
-    case MMI_OPC_MADDU1:
+    case OPC_MADDU1:
         acc = 1;
         /* Fall through */
-    case MMI_OPC_MADDU:
+    case OPC_MADDU:
         {
             TCGv_i64 t2 = tcg_temp_new_i64();
             TCGv_i64 t3 = tcg_temp_new_i64();
@@ -12741,24 +12742,24 @@ static void decode_mmi(CPUMIPSState *env, DisasContext *ctx)
     case MMI_OPC_CLASS_MMI3:
         decode_mmi3(env, ctx);
         break;
-    case MMI_OPC_MULT1:
-    case MMI_OPC_MULTU1:
-    case MMI_OPC_MADD:
-    case MMI_OPC_MADDU:
-    case MMI_OPC_MADD1:
-    case MMI_OPC_MADDU1:
+    case OPC_MULT1:
+    case OPC_MULTU1:
+    case OPC_MADD:
+    case OPC_MADDU:
+    case OPC_MADD1:
+    case OPC_MADDU1:
         gen_mul_txx9(ctx, opc, rd, rs, rt);
         break;
-    case MMI_OPC_DIV1:
-    case MMI_OPC_DIVU1:
+    case OPC_DIV1:
+    case OPC_DIVU1:
         gen_div1_tx79(ctx, opc, rs, rt);
         break;
-    case MMI_OPC_MTLO1:
-    case MMI_OPC_MTHI1:
+    case OPC_MTLO1:
+    case OPC_MTHI1:
         gen_HILO1_tx79(ctx, opc, rs);
         break;
-    case MMI_OPC_MFLO1:
-    case MMI_OPC_MFHI1:
+    case OPC_MFLO1:
+    case OPC_MFHI1:
         gen_HILO1_tx79(ctx, opc, rd);
         break;
     case MMI_OPC_PLZCW:         /* TODO: MMI_OPC_PLZCW */
