@@ -84,5 +84,6 @@ extern TCGv bcond;
 void msa_translate_init(void);
 void gen_msa(DisasContext *ctx);
 void gen_msa_branch(DisasContext *ctx, uint32_t op1);
+bool decode_msa32(DisasContext *ctx, uint32_t insn);
 
 #endif

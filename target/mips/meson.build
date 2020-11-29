@@ -1,4 +1,9 @@
+gen = [
+  decodetree.process('mod-msa32.decode', extra_args: [ '--decode=decode_msa32' ]),
+]
+
 mips_ss = ss.source_set()
+mips_ss.add(gen)
 mips_ss.add(files(
   'cpu.c',
   'dsp_helper.c',
