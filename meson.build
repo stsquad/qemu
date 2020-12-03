@@ -74,11 +74,21 @@ else
 endif
 
 accelerator_targets = { 'CONFIG_KVM': kvm_targets }
+
+if cpu in ['x86', 'x86_64']
+  hvf_targets = ['x86_64-softmmu']
+elif cpu in ['aarch64']
+  hvf_targets = ['aarch64-softmmu']
+else
+  hvf_targets = []
+endif
+
 if cpu in ['arm', 'aarch64']
   # i386 emulator used to provide xenpv machine type for all
   # supported architectures
   accelerator_targets += {
     'CONFIG_XEN': ['i386-softmmu', 'x86_64-softmmu', 'arm-softmmu', 'aarch64-softmmu'],
+    'CONFIG_HVF': hvf_targets,
   }
 elif cpu in ['x86', 'x86_64']
   accelerator_targets += {
