@@ -837,12 +837,14 @@ struct CPUMIPSState {
 #define CP0C0_MDU  20
 #define CP0C0_MM   18
 #define CP0C0_BM   16
+#define CP0C0_Impl 16    /* 24..16 */
 #define CP0C0_BE   15
 #define CP0C0_AT   13    /* 14..13 */
 #define CP0C0_AR   10    /* 12..10 */
 #define CP0C0_MT   7     /*  9..7  */
 #define CP0C0_VI   3
 #define CP0C0_K0   0     /*  2..0  */
+#define CP0C0_AR_LENGTH 3
 /*
  * CP0 Register 16 (before Release 1)
  */
