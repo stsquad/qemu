@@ -31767,7 +31767,7 @@ void cpu_mips_realize_env(CPUMIPSState *env)
     mmu_init(env, env->cpu_model);
 #endif
     fpu_init(env, env->cpu_model);
-    mvp_init(env, env->cpu_model);
+    mvp_init(env);
 }
 
 bool cpu_supports_cps_smp(const char *cpu_type)
@@ -31921,7 +31921,7 @@ void cpu_state_reset(CPUMIPSState *env)
 
     cpu_mips_store_count(env, 1);
 
-    if (env->CP0_Config3 & (1 << CP0C3_MT)) {
+    if (ase_mt_available(env)) {
         int i;
 
         /* Only TC0 on VPE 0 starts as active.  */
