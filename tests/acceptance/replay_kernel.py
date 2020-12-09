@@ -83,6 +83,7 @@ class ReplayKernelNormal(ReplayKernelBase):
         """
         :avocado: tags=arch:x86_64
         :avocado: tags=machine:pc
+        :avocado: tags=accel:tcg
         """
         kernel_url = ('https://archives.fedoraproject.org/pub/archive/fedora'
                       '/linux/releases/29/Everything/x86_64/os/images/pxeboot'
@@ -100,6 +101,7 @@ class ReplayKernelNormal(ReplayKernelBase):
         :avocado: tags=arch:mips
         :avocado: tags=machine:malta
         :avocado: tags=endian:big
+        :avocado: tags=accel:tcg
         """
         deb_url = ('http://snapshot.debian.org/archive/debian/'
                    '20130217T032700Z/pool/main/l/linux-2.6/'
@@ -128,6 +130,7 @@ class ReplayKernelNormal(ReplayKernelBase):
 
         :avocado: tags=arch:mips64el
         :avocado: tags=machine:malta
+        :avocado: tags=accel:tcg
         """
         deb_url = ('http://snapshot.debian.org/archive/debian/'
                    '20130217T032700Z/pool/main/l/linux-2.6/'
@@ -145,6 +148,7 @@ class ReplayKernelNormal(ReplayKernelBase):
         :avocado: tags=arch:aarch64
         :avocado: tags=machine:virt
         :avocado: tags=cpu:cortex-a53
+        :avocado: tags=accel:tcg
         """
         kernel_url = ('https://archives.fedoraproject.org/pub/archive/fedora'
                       '/linux/releases/29/Everything/aarch64/os/images/pxeboot'
@@ -163,6 +167,7 @@ class ReplayKernelNormal(ReplayKernelBase):
         """
         :avocado: tags=arch:arm
         :avocado: tags=machine:virt
+        :avocado: tags=accel:tcg
         """
         kernel_url = ('https://archives.fedoraproject.org/pub/archive/fedora'
                       '/linux/releases/29/Everything/armhfp/os/images/pxeboot'
@@ -183,6 +188,7 @@ class ReplayKernelNormal(ReplayKernelBase):
         """
         :avocado: tags=arch:arm
         :avocado: tags=machine:cubieboard
+        :avocado: tags=accel:tcg
         """
         deb_url = ('https://apt.armbian.com/pool/main/l/'
                    'linux-4.20.7-sunxi/linux-image-dev-sunxi_5.75_armhf.deb')
@@ -214,6 +220,7 @@ class ReplayKernelNormal(ReplayKernelBase):
         """
         :avocado: tags=arch:ppc64
         :avocado: tags=machine:pseries
+        :avocado: tags=accel:tcg
         """
         kernel_url = ('https://archives.fedoraproject.org/pub/archive'
                       '/fedora-secondary/releases/29/Everything/ppc64le/os'
@@ -230,6 +237,7 @@ class ReplayKernelNormal(ReplayKernelBase):
         """
         :avocado: tags=arch:m68k
         :avocado: tags=machine:q800
+        :avocado: tags=accel:tcg
         """
         deb_url = ('https://snapshot.debian.org/archive/debian-ports'
                    '/20191021T083923Z/pool-m68k/main'
@@ -261,6 +269,7 @@ class ReplayKernelNormal(ReplayKernelBase):
         """
         :avocado: tags=arch:arm
         :avocado: tags=machine:vexpress-a9
+        :avocado: tags=accel:tcg
         """
         tar_hash = '32b7677ce8b6f1471fb0059865f451169934245b'
         tar_url = ('https://www.qemu-advent-calendar.org'
@@ -274,6 +283,7 @@ class ReplayKernelNormal(ReplayKernelBase):
         """
         :avocado: tags=arch:m68k
         :avocado: tags=machine:mcf5208evb
+        :avocado: tags=accel:tcg
         """
         tar_hash = 'ac688fd00561a2b6ce1359f9ff6aa2b98c9a570c'
         tar_url = ('https://www.qemu-advent-calendar.org'
@@ -286,6 +296,7 @@ class ReplayKernelNormal(ReplayKernelBase):
         """
         :avocado: tags=arch:microblaze
         :avocado: tags=machine:petalogix-s3adsp1800
+        :avocado: tags=accel:tcg
         """
         tar_hash = '08bf3e3bfb6b6c7ce1e54ab65d54e189f2caf13f'
         tar_url = ('https://www.qemu-advent-calendar.org'
@@ -298,6 +309,7 @@ class ReplayKernelNormal(ReplayKernelBase):
         :avocado: tags=arch:ppc64
         :avocado: tags=machine:ppce500
         :avocado: tags=cpu:e5500
+        :avocado: tags=accel:tcg
         """
         tar_hash = '6951d86d644b302898da2fd701739c9406527fe1'
         tar_url = ('https://www.qemu-advent-calendar.org'
@@ -309,6 +321,7 @@ class ReplayKernelNormal(ReplayKernelBase):
         """
         :avocado: tags=arch:ppc
         :avocado: tags=machine:g3beige
+        :avocado: tags=accel:tcg
         """
         tar_hash = 'e0b872a5eb8fdc5bed19bd43ffe863900ebcedfc'
         tar_url = ('https://www.qemu-advent-calendar.org'
@@ -321,6 +334,7 @@ class ReplayKernelNormal(ReplayKernelBase):
         """
         :avocado: tags=arch:ppc
         :avocado: tags=machine:mac99
+        :avocado: tags=accel:tcg
         """
         tar_hash = 'e0b872a5eb8fdc5bed19bd43ffe863900ebcedfc'
         tar_url = ('https://www.qemu-advent-calendar.org'
@@ -333,6 +347,7 @@ class ReplayKernelNormal(ReplayKernelBase):
         """
         :avocado: tags=arch:sparc
         :avocado: tags=machine:SS-20
+        :avocado: tags=accel:tcg
         """
         tar_hash = 'b18550d5d61c7615d989a06edace051017726a9f'
         tar_url = ('https://www.qemu-advent-calendar.org'
@@ -345,6 +360,7 @@ class ReplayKernelNormal(ReplayKernelBase):
         :avocado: tags=arch:xtensa
         :avocado: tags=machine:lx60
         :avocado: tags=cpu:dc233c
+        :avocado: tags=accel:tcg
         """
         tar_hash = '49e88d9933742f0164b60839886c9739cb7a0d34'
         tar_url = ('https://www.qemu-advent-calendar.org'
@@ -366,6 +382,7 @@ class ReplayKernelSlow(ReplayKernelBase):
         :avocado: tags=machine:malta
         :avocado: tags=endian:big
         :avocado: tags=slowness:high
+        :avocado: tags=accel:tcg
         """
         deb_url = ('http://snapshot.debian.org/archive/debian/'
                    '20160601T041800Z/pool/main/l/linux/'
@@ -396,6 +413,7 @@ class ReplayKernelSlow(ReplayKernelBase):
         :avocado: tags=machine:malta
         :avocado: tags=endian:little
         :avocado: tags=slowness:high
+        :avocado: tags=accel:tcg
         """
         kernel_url = ('https://github.com/philmd/qemu-testing-blob/'
                       'raw/9ad2df38/mips/malta/mips64el/'
@@ -436,6 +454,7 @@ class ReplayKernelSlow(ReplayKernelBase):
         :avocado: tags=arch:mipsel
         :avocado: tags=machine:malta
         :avocado: tags=endian:little
+        :avocado: tags=accel:tcg
         """
         kernel_url = ('https://mipsdistros.mips.com/LinuxDistro/nanomips/'
                       'kernels/v4.15.18-432-gb2eb9a8b07a1-20180627102142/'
@@ -449,6 +468,7 @@ class ReplayKernelSlow(ReplayKernelBase):
         :avocado: tags=arch:mipsel
         :avocado: tags=machine:malta
         :avocado: tags=endian:little
+        :avocado: tags=accel:tcg
         """
         kernel_url = ('https://mipsdistros.mips.com/LinuxDistro/nanomips/'
                       'kernels/v4.15.18-432-gb2eb9a8b07a1-20180627102142/'
@@ -462,6 +482,7 @@ class ReplayKernelSlow(ReplayKernelBase):
         :avocado: tags=arch:mipsel
         :avocado: tags=machine:malta
         :avocado: tags=endian:little
+        :avocado: tags=accel:tcg
         """
         kernel_url = ('https://mipsdistros.mips.com/LinuxDistro/nanomips/'
                       'kernels/v4.15.18-432-gb2eb9a8b07a1-20180627102142/'
