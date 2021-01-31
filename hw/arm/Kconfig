@@ -42,6 +42,8 @@ config CUBIEBOARD
 
 config DIGIC
     bool
+    default y if TCG && ARM
+    select ARM_V5
     select PTIMER
     select PFLASH_CFI02
 
@@ -71,6 +73,8 @@ config HIGHBANK
 
 config INTEGRATOR
     bool
+    default y if TCG && ARM
+    select ARM_V5
     select ARM_TIMER
     select INTEGRATOR_DEBUG
     select PL011 # UART
@@ -83,6 +87,7 @@ config INTEGRATOR
 
 config MAINSTONE
     bool
+    default y if TCG && ARM
     select PXA2XX
     select PFLASH_CFI01
     select SMC91C111
@@ -97,6 +102,8 @@ config MUSCA
 
 config MUSICPAL
     bool
+    default y if TCG && ARM
+    select ARM_V5
     select OR_IRQ
     select BITBANG_I2C
     select MARVELL_88W8618
@@ -137,6 +144,7 @@ config OMAP
 
 config PXA2XX
     bool
+    select ARM_V5
     select FRAMEBUFFER
     select I2C
     select SERIAL
@@ -146,12 +154,14 @@ config PXA2XX
 
 config GUMSTIX
     bool
+    default y if TCG && ARM
     select PFLASH_CFI01
     select SMC91C111
     select PXA2XX
 
 config TOSA
     bool
+    default y if TCG && ARM
     select ZAURUS  # scoop
     select MICRODRIVE
     select PXA2XX
@@ -159,6 +169,7 @@ config TOSA
 
 config SPITZ
     bool
+    default y if TCG && ARM
     select ADS7846 # touch-screen controller
     select MAX111X # A/D converter
     select WM8750  # audio codec
@@ -171,6 +182,7 @@ config SPITZ
 
 config Z2
     bool
+    default y if TCG && ARM
     select PFLASH_CFI01
     select WM8750
     select PL011 # UART
@@ -244,6 +256,7 @@ config STRONGARM
 
 config COLLIE
     bool
+    default y if TCG && ARM
     select PFLASH_CFI01
     select ZAURUS  # scoop
     select STRONGARM
@@ -256,6 +269,8 @@ config SX1
 
 config VERSATILE
     bool
+    default y if TCG && ARM
+    select ARM_V5
     select ARM_TIMER # sp804
     select PFLASH_CFI01
     select LSI_SCSI_PCI
@@ -372,6 +387,8 @@ config NPCM7XX
 
 config FSL_IMX25
     bool
+    default y if TCG && ARM
+    select ARM_V5
     select IMX
     select IMX_FEC
     select IMX_I2C
@@ -398,6 +415,8 @@ config FSL_IMX6
 
 config ASPEED_SOC
     bool
+    default y if TCG && ARM
+    select ARM_V5
     select DS1338
     select FTGMAC100
     select I2C
