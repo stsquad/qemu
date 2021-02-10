@@ -17,6 +17,7 @@ if 'CONFIG_TCG' in config_all
 endif
 
 mips_ss.add(when: 'CONFIG_KVM', if_true: files('kvm.c'))
+mips_user_ss = ss.source_set()
 
 target_arch += {'mips': mips_ss}
 target_softmmu_arch += {'mips': mips_softmmu_ss}
