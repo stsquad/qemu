@@ -39,6 +39,8 @@ s390x_user_ss.add(files(
 subdir('tcg')
 subdir('kvm')
 
+s390x_user_ss = ss.source_set()
+
 target_arch += {'s390x': s390x_ss}
 target_softmmu_arch += {'s390x': s390x_softmmu_ss}
 target_user_arch += {'s390x': s390x_user_ss}

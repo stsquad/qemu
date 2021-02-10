@@ -13,5 +13,8 @@ cris_softmmu_ss.add(files(
   'mmu.c',
 ))
 
+cris_user_ss = ss.source_set()
+
 target_arch += {'cris': cris_ss}
 target_softmmu_arch += {'cris': cris_softmmu_ss}
+target_user_arch += {'cris': cris_user_ss}

@@ -17,5 +17,8 @@ hppa_softmmu_ss.add(files(
   'mem_helper.c',
 ))
 
+hppa_user_ss = ss.source_set()
+
 target_arch += {'hppa': hppa_ss}
 target_softmmu_arch += {'hppa': hppa_softmmu_ss}
+target_user_arch += {'hppa': hppa_user_ss}
