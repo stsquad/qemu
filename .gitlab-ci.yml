@@ -497,7 +497,11 @@ gprof-gcov:
     TARGETS: aarch64-softmmu ppc64-softmmu s390x-softmmu x86_64-softmmu
   timeout: 70m
   after_script:
-    - ${CI_PROJECT_DIR}/scripts/ci/coverage-summary.sh
+    - cd build
+    - make coverage-xml
+  artifacts:
+    reports:
+      cobertura: build/meson-logs/coverage.xml
 
 build-oss-fuzz:
   <<: *native_build_job_definition
