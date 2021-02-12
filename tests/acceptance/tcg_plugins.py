@@ -115,7 +115,7 @@ class PluginKernelNormal(PluginKernelBase):
         console_pattern = 'Kernel panic - not syncing: VFS:'
 
         plugin_log = tempfile.NamedTemporaryFile(mode="r+t", prefix="plugin",
-                                                 suffix=".log", delete=False)
+                                                 suffix=".log")
 
         self.run_vm(kernel_path, kernel_command_line,
                     "tests/plugin/libinsn.so", plugin_log.name,
