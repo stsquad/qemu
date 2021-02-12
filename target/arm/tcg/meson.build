@@ -19,9 +19,23 @@ arm_ss.add(files(
   'translate-m-nocp.c',
   'translate-neon.c',
   'translate-vfp.c',
+  'helper.c',
+  'iwmmxt_helper.c',
+  'm_helper.c',
+  'neon_helper.c',
+  'op_helper.c',
+  'tlb_helper.c',
+  'vec_helper.c',
+  'vfp_helper.c',
+  'crypto_helper.c',
+  'debug_helper.c',
 ))
 
 arm_ss.add(when: 'TARGET_AARCH64', if_true: files(
   'translate-a64.c',
   'translate-sve.c',
+  'helper-a64.c',
+  'mte_helper.c',
+  'pauth_helper.c',
+  'sve_helper.c',
 ))
