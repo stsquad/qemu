@@ -2433,10 +2433,11 @@ void cpu_io_recompile(CPUState *cpu, uintptr_t retaddr)
 
     /*
      * Exit the loop and potentially generate a new TB executing the
-     * just the I/O insns. We also disable instrumentation so we don't
-     * double count the instruction.
+     * just the I/O insns. We also limit instrumentation to memory
+     * operations only (which execute after completion) so we don't
+     * double instrument the instruction.
      */
-    cpu->cflags_next_tb = curr_cflags() | CF_NOINSTR | CF_LAST_IO | n;
+    cpu->cflags_next_tb = curr_cflags() | CF_MEMI_ONLY | CF_LAST_IO | n;
 
     qemu_log_mask_and_addr(CPU_LOG_EXEC, tb->pc,
                            "cpu_io_recompile: rewound execution of TB to "
