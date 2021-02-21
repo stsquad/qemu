@@ -1110,8 +1110,8 @@ CPAccessResult e2h_access(CPUARMState *env, const ARMCPRegInfo *ri,
 }
 
 /* get_phys_addr() isn't present for user-mode-only targets */
-CPAccessResult ats_access(CPUARMState *env, const ARMCPRegInfo *ri,
-                          bool isread)
+static CPAccessResult ats_access(CPUARMState *env, const ARMCPRegInfo *ri,
+                                 bool isread)
 {
     if (ri->opc2 & 4) {
         /* The ATS12NSO* operations must trap to EL3 or EL2 if executed in
@@ -1298,7 +1298,7 @@ static uint64_t do_ats_write(CPUARMState *env, uint64_t value,
 }
 #endif /* CONFIG_TCG */
 
-void ats_write(CPUARMState *env, const ARMCPRegInfo *ri, uint64_t value)
+static void ats_write(CPUARMState *env, const ARMCPRegInfo *ri, uint64_t value)
 {
 #ifdef CONFIG_TCG
     MMUAccessType access_type = ri->opc2 & 1 ? MMU_DATA_STORE : MMU_DATA_LOAD;
@@ -1366,6 +1366,14 @@ void ats_write(CPUARMState *env, const ARMCPRegInfo *ri, uint64_t value)
     g_assert_not_reached();
 #endif /* CONFIG_TCG */
 }
+
+const ARMCPRegInfo vapa_cp_reginfo_softmmu[] = {
+    /* This underdecoding is safe because the reginfo is NO_RAW. */
+    { .name = "ATS", .cp = 15, .crn = 7, .crm = 8, .opc1 = 0, .opc2 = CP_ANY,
+      .access = PL1_W, .accessfn = ats_access,
+      .writefn = ats_write, .type = ARM_CP_NO_RAW | ARM_CP_RAISES_EXC },
+    REGINFO_SENTINEL
+};
 
 void ats1h_write(CPUARMState *env, const ARMCPRegInfo *ri, uint64_t value)
 {

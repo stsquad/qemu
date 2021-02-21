@@ -2465,12 +2465,6 @@ static const ARMCPRegInfo vapa_cp_reginfo[] = {
       .bank_fieldoffsets = { offsetoflow32(CPUARMState, cp15.par_s),
                              offsetoflow32(CPUARMState, cp15.par_ns) },
       .writefn = par_write },
-#ifndef CONFIG_USER_ONLY
-    /* This underdecoding is safe because the reginfo is NO_RAW. */
-    { .name = "ATS", .cp = 15, .crn = 7, .crm = 8, .opc1 = 0, .opc2 = CP_ANY,
-      .access = PL1_W, .accessfn = ats_access,
-      .writefn = ats_write, .type = ARM_CP_NO_RAW | ARM_CP_RAISES_EXC },
-#endif
     REGINFO_SENTINEL
 };
 
@@ -6167,6 +6161,9 @@ void register_cp_regs_for_features(ARMCPU *cpu)
     }
     if (arm_feature(env, ARM_FEATURE_VAPA)) {
         define_arm_cp_regs(cpu, vapa_cp_reginfo);
+#ifndef CONFIG_USER_ONLY
+        define_arm_cp_regs(cpu, vapa_cp_reginfo_softmmu);
+#endif /* !CONFIG_USER_ONLY */
     }
     if (arm_feature(env, ARM_FEATURE_CACHE_TEST_CLEAN)) {
         define_arm_cp_regs(cpu, cache_test_clean_cp_reginfo);
