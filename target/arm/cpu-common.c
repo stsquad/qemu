@@ -48,6 +48,18 @@ const ARMCPRegInfo *get_arm_cp_reginfo(GHashTable *cpregs, uint32_t encoded_cp)
     return g_hash_table_lookup(cpregs, &encoded_cp);
 }
 
+void arm_cp_write_ignore(CPUARMState *env, const ARMCPRegInfo *ri,
+                         uint64_t value)
+{
+    /* Helper coprocessor write function for write-ignore registers */
+}
+
+uint64_t arm_cp_read_zero(CPUARMState *env, const ARMCPRegInfo *ri)
+{
+    /* Helper coprocessor write function for read-as-zero registers */
+    return 0;
+}
+
 ARMMMUIdx arm_mmu_idx_el(CPUARMState *env, int el)
 {
     ARMMMUIdx idx;

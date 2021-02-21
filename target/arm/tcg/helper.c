@@ -6387,18 +6387,6 @@ void modify_arm_cp_regs(ARMCPRegInfo *regs, const ARMCPRegUserSpaceInfo *mods)
     }
 }
 
-void arm_cp_write_ignore(CPUARMState *env, const ARMCPRegInfo *ri,
-                         uint64_t value)
-{
-    /* Helper coprocessor write function for write-ignore registers */
-}
-
-uint64_t arm_cp_read_zero(CPUARMState *env, const ARMCPRegInfo *ri)
-{
-    /* Helper coprocessor write function for read-as-zero registers */
-    return 0;
-}
-
 void arm_cp_reset_ignore(CPUARMState *env, const ARMCPRegInfo *opaque)
 {
     /* Helper coprocessor reset function for do-nothing-on-reset registers */
