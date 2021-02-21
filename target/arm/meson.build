@@ -22,6 +22,9 @@ arm_softmmu_ss.add(files(
   'cpu-softmmu.c',
 ))
 arm_user_ss = ss.source_set()
+arm_user_ss.add(files(
+  'cpu-user.c',
+))
 
 subdir('tcg')
 
