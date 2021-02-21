@@ -13,3 +13,8 @@
 void arm_pmu_timer_cb(void *opaque)
 {
 }
+
+void write_v7m_exception(CPUARMState *env, uint32_t new_exc)
+{
+    g_assert_not_reached();
+}
