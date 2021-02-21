@@ -116,6 +116,12 @@ const ARMCPRegUserSpaceInfo id_v8_user_midr_cp_reginfo[] = {
     REGUSERINFO_SENTINEL
 };
 
+const ARMCPRegUserSpaceInfo mpidr_user_cp_reginfo[] = {
+    { .name = "MPIDR_EL1",
+      .fixed_bits = 0x0000000080000000 },
+    REGUSERINFO_SENTINEL
+};
+
 int sve_exception_el(CPUARMState *env, int el)
 {
     return 0;
