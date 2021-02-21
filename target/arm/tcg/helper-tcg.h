@@ -94,4 +94,8 @@ extern const ARMCPRegInfo vhe_reginfo_softmmu[];
 void define_arm_vh_e2h_redirects_aliases(ARMCPU *cpu);
 #endif /* !CONFIG_USER_ONLY */
 
+#ifdef CONFIG_USER_ONLY
+extern const ARMCPRegUserSpaceInfo v8_user_idregs[];
+#endif
+
 #endif /* HELPER_TCG_H */
