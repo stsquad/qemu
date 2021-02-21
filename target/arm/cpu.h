@@ -2895,6 +2895,9 @@ typedef struct ARMCPRegUserSpaceInfo {
 
 #define REGUSERINFO_SENTINEL { .name = NULL }
 
+void raw_write(CPUARMState *env, const ARMCPRegInfo *ri, uint64_t value);
+uint64_t raw_read(CPUARMState *env, const ARMCPRegInfo *ri);
+
 void modify_arm_cp_regs(ARMCPRegInfo *regs, const ARMCPRegUserSpaceInfo *mods);
 
 /* CPWriteFn that can be used to implement writes-ignored behaviour */

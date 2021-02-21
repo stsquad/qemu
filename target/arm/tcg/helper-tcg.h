@@ -9,9 +9,6 @@
 #ifndef HELPER_TCG_H
 #define HELPER_TCG_H
 
-void raw_write(CPUARMState *env, const ARMCPRegInfo *ri,
-               uint64_t value);
-uint64_t raw_read(CPUARMState *env, const ARMCPRegInfo *ri);
 uint64_t cycles_get_count(CPUARMState *env);
 
 void par_write(CPUARMState *env, const ARMCPRegInfo *ri, uint64_t value);
