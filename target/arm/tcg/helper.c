@@ -10040,11 +10040,13 @@ void arm_cpu_do_interrupt(CPUState *cs)
                       env->exception.syndrome);
     }
 
+#ifndef CONFIG_USER_ONLY
     if (arm_is_psci_call(cpu, cs->exception_index)) {
         arm_handle_psci_call(cpu);
         qemu_log_mask(CPU_LOG_INT, "...handled as PSCI call\n");
         return;
     }
+#endif /* CONFIG_USER_ONLY */
 
     /*
      * Semihosting semantics depend on the register width of the code

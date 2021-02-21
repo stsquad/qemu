@@ -19,7 +19,6 @@ arm_softmmu_ss.add(files(
   'arm-powerctl.c',
   'machine.c',
   'monitor.c',
-  'psci.c',
 ))
 arm_user_ss = ss.source_set()
 
