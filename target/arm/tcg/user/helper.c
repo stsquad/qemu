@@ -132,11 +132,3 @@ uint32_t arm_phys_excp_target_el(CPUState *cs, uint32_t excp_idx,
 {
     return 1;
 }
-
-/* Return the exception level to which FP-disabled exceptions should
- * be taken, or 0 if FP is enabled.
- */
-int fp_exception_el(CPUARMState *env, int cur_el)
-{
-    return 0;
-}

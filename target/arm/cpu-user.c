@@ -61,3 +61,12 @@ void switch_mode(CPUARMState *env, int mode)
         cpu_abort(CPU(cpu), "Tried to switch out of user mode\n");
     }
 }
+
+/*
+ * Return the exception level to which FP-disabled exceptions should
+ * be taken, or 0 if FP is enabled.
+ */
+int fp_exception_el(CPUARMState *env, int cur_el)
+{
+    return 0; /* FP is enabled */
+}
