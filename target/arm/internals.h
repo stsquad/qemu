@@ -1196,4 +1196,11 @@ static inline uint64_t useronly_maybe_clean_ptr(uint32_t desc, uint64_t ptr)
     return ptr;
 }
 
-#endif
+#ifndef CONFIG_USER_ONLY
+void arm_cpu_set_irq(void *opaque, int irq, int level);
+void arm_cpu_kvm_set_irq(void *opaque, int irq, int level);
+bool arm_cpu_virtio_is_big_endian(CPUState *cs);
+uint64_t a15_l2ctlr_read(CPUARMState *env, const ARMCPRegInfo *ri);
+#endif /* !CONFIG_USER_ONLY */
+
+#endif /* TARGET_ARM_INTERNALS_H */
