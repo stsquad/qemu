@@ -14,6 +14,9 @@ void raw_write(CPUARMState *env, const ARMCPRegInfo *ri,
                uint64_t value);
 uint64_t raw_read(CPUARMState *env, const ARMCPRegInfo *ri);
 uint64_t cycles_get_count(CPUARMState *env);
+
+void par_write(CPUARMState *env, const ARMCPRegInfo *ri, uint64_t value);
+
 CPAccessResult aa64_cacheop_poc_access(CPUARMState *env,
                                        const ARMCPRegInfo *ri,
                                        bool isread);
@@ -74,22 +77,11 @@ int64_t instructions_ns_per(uint64_t icount);
 CPAccessResult ats_access(CPUARMState *env, const ARMCPRegInfo *ri,
                           bool isread);
 void ats_write(CPUARMState *env, const ARMCPRegInfo *ri, uint64_t value);
-void ats_write64(CPUARMState *env, const ARMCPRegInfo *ri, uint64_t value);
 CPAccessResult at_s1e2_access(CPUARMState *env, const ARMCPRegInfo *ri,
                               bool isread);
 CPAccessResult e2h_access(CPUARMState *env, const ARMCPRegInfo *ri,
                           bool isread);
 void ats1h_write(CPUARMState *env, const ARMCPRegInfo *ri, uint64_t value);
-void gt_cntvoff_write(CPUARMState *env, const ARMCPRegInfo *ri,
-                      uint64_t value);
-void gt_hyp_ctl_write(CPUARMState *env, const ARMCPRegInfo *ri,
-                      uint64_t value);
-void gt_hyp_tval_write(CPUARMState *env, const ARMCPRegInfo *ri,
-                       uint64_t value);
-uint64_t gt_hyp_tval_read(CPUARMState *env, const ARMCPRegInfo *ri);
-void gt_hyp_cval_write(CPUARMState *env, const ARMCPRegInfo *ri,
-                       uint64_t value);
-void gt_hyp_timer_reset(CPUARMState *env, const ARMCPRegInfo *ri);
 void gt_hv_ctl_write(CPUARMState *env, const ARMCPRegInfo *ri, uint64_t value);
 void gt_hv_tval_write(CPUARMState *env, const ARMCPRegInfo *ri, uint64_t value);
 uint64_t gt_hv_tval_read(CPUARMState *env, const ARMCPRegInfo *ri);
@@ -114,6 +106,8 @@ extern const ARMCPRegInfo ats1e1_reginfo[];
 extern const ARMCPRegInfo ats1cp_reginfo[];
 extern const ARMCPRegInfo dcpop_reg[];
 extern const ARMCPRegInfo dcpodp_reg[];
+extern const ARMCPRegInfo v8_cp_reginfo_softmmu[];
+extern const ARMCPRegInfo el2_cp_reginfo_softmmu[];
 void define_arm_vh_e2h_redirects_aliases(ARMCPU *cpu);
 #endif /* !CONFIG_USER_ONLY */
 
