@@ -9,7 +9,6 @@
 #ifndef HELPER_TCG_H
 #define HELPER_TCG_H
 
-void switch_mode(CPUARMState *env, int mode);
 void raw_write(CPUARMState *env, const ARMCPRegInfo *ri,
                uint64_t value);
 uint64_t raw_read(CPUARMState *env, const ARMCPRegInfo *ri);

@@ -52,3 +52,12 @@ void aarch64_sync_64_to_32(CPUARMState *env)
 {
     g_assert_not_reached();
 }
+
+void switch_mode(CPUARMState *env, int mode)
+{
+    ARMCPU *cpu = env_archcpu(env);
+
+    if (mode != ARM_CPU_MODE_USR) {
+        cpu_abort(CPU(cpu), "Tried to switch out of user mode\n");
+    }
+}

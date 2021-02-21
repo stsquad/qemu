@@ -127,15 +127,6 @@ int sve_exception_el(CPUARMState *env, int el)
     return 0;
 }
 
-void switch_mode(CPUARMState *env, int mode)
-{
-    ARMCPU *cpu = env_archcpu(env);
-
-    if (mode != ARM_CPU_MODE_USR) {
-        cpu_abort(CPU(cpu), "Tried to switch out of user mode\n");
-    }
-}
-
 uint32_t arm_phys_excp_target_el(CPUState *cs, uint32_t excp_idx,
                                  uint32_t cur_el, bool secure)
 {

@@ -1739,35 +1739,6 @@ const ARMCPRegInfo ats1cp_reginfo[] = {
     REGINFO_SENTINEL
 };
 
-void switch_mode(CPUARMState *env, int mode)
-{
-    int old_mode;
-    int i;
-
-    old_mode = env->uncached_cpsr & CPSR_M;
-    if (mode == old_mode)
-        return;
-
-    if (old_mode == ARM_CPU_MODE_FIQ) {
-        memcpy (env->fiq_regs, env->regs + 8, 5 * sizeof(uint32_t));
-        memcpy (env->regs + 8, env->usr_regs, 5 * sizeof(uint32_t));
-    } else if (mode == ARM_CPU_MODE_FIQ) {
-        memcpy (env->usr_regs, env->regs + 8, 5 * sizeof(uint32_t));
-        memcpy (env->regs + 8, env->fiq_regs, 5 * sizeof(uint32_t));
-    }
-
-    i = bank_number(old_mode);
-    env->banked_r13[i] = env->regs[13];
-    env->banked_spsr[i] = env->spsr;
-
-    i = bank_number(mode);
-    env->regs[13] = env->banked_r13[i];
-    env->spsr = env->banked_spsr[i];
-
-    env->banked_r14[r14_bank_number(old_mode)] = env->regs[14];
-    env->regs[14] = env->banked_r14[r14_bank_number(mode)];
-}
-
 /* Physical Interrupt Target EL Lookup Table
  *
  * [ From ARM ARM section G1.13.4 (Table G1-15) ]
