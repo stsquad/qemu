@@ -82,25 +82,6 @@ CPAccessResult at_s1e2_access(CPUARMState *env, const ARMCPRegInfo *ri,
 CPAccessResult e2h_access(CPUARMState *env, const ARMCPRegInfo *ri,
                           bool isread);
 void ats1h_write(CPUARMState *env, const ARMCPRegInfo *ri, uint64_t value);
-void gt_hv_ctl_write(CPUARMState *env, const ARMCPRegInfo *ri, uint64_t value);
-void gt_hv_tval_write(CPUARMState *env, const ARMCPRegInfo *ri, uint64_t value);
-uint64_t gt_hv_tval_read(CPUARMState *env, const ARMCPRegInfo *ri);
-void gt_hv_cval_write(CPUARMState *env, const ARMCPRegInfo *ri, uint64_t value);
-void gt_hv_timer_reset(CPUARMState *env, const ARMCPRegInfo *ri);
-void gt_phys_ctl_write(CPUARMState *env, const ARMCPRegInfo *ri,
-                       uint64_t value);
-void gt_phys_tval_write(CPUARMState *env, const ARMCPRegInfo *ri,
-                        uint64_t value);
-uint64_t gt_phys_tval_read(CPUARMState *env, const ARMCPRegInfo *ri);
-void gt_phys_cval_write(CPUARMState *env, const ARMCPRegInfo *ri,
-                        uint64_t value);
-void gt_virt_ctl_write(CPUARMState *env, const ARMCPRegInfo *ri,
-                       uint64_t value);
-void gt_virt_tval_write(CPUARMState *env, const ARMCPRegInfo *ri,
-                        uint64_t value);
-uint64_t gt_virt_tval_read(CPUARMState *env, const ARMCPRegInfo *ri);
-void gt_virt_cval_write(CPUARMState *env, const ARMCPRegInfo *ri,
-                        uint64_t value);
 uint64_t id_aa64pfr0_read(CPUARMState *env, const ARMCPRegInfo *ri);
 extern const ARMCPRegInfo ats1e1_reginfo[];
 extern const ARMCPRegInfo ats1cp_reginfo[];
@@ -108,6 +89,8 @@ extern const ARMCPRegInfo dcpop_reg[];
 extern const ARMCPRegInfo dcpodp_reg[];
 extern const ARMCPRegInfo v8_cp_reginfo_softmmu[];
 extern const ARMCPRegInfo el2_cp_reginfo_softmmu[];
+extern const ARMCPRegInfo vhe_reginfo_softmmu[];
+
 void define_arm_vh_e2h_redirects_aliases(ARMCPU *cpu);
 #endif /* !CONFIG_USER_ONLY */
 

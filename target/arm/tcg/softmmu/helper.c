@@ -486,25 +486,25 @@ static void gt_phys_timer_reset(CPUARMState *env, const ARMCPRegInfo *ri)
     gt_timer_reset(env, ri, GTIMER_PHYS);
 }
 
-void gt_phys_cval_write(CPUARMState *env, const ARMCPRegInfo *ri,
-                        uint64_t value)
+static void gt_phys_cval_write(CPUARMState *env, const ARMCPRegInfo *ri,
+                               uint64_t value)
 {
     gt_cval_write(env, ri, GTIMER_PHYS, value);
 }
 
-uint64_t gt_phys_tval_read(CPUARMState *env, const ARMCPRegInfo *ri)
+static uint64_t gt_phys_tval_read(CPUARMState *env, const ARMCPRegInfo *ri)
 {
     return gt_tval_read(env, ri, GTIMER_PHYS);
 }
 
-void gt_phys_tval_write(CPUARMState *env, const ARMCPRegInfo *ri,
-                        uint64_t value)
+static void gt_phys_tval_write(CPUARMState *env, const ARMCPRegInfo *ri,
+                               uint64_t value)
 {
     gt_tval_write(env, ri, GTIMER_PHYS, value);
 }
 
-void gt_phys_ctl_write(CPUARMState *env, const ARMCPRegInfo *ri,
-                       uint64_t value)
+static void gt_phys_ctl_write(CPUARMState *env, const ARMCPRegInfo *ri,
+                              uint64_t value)
 {
     gt_ctl_write(env, ri, GTIMER_PHYS, value);
 }
@@ -586,25 +586,25 @@ static void gt_virt_timer_reset(CPUARMState *env, const ARMCPRegInfo *ri)
     gt_timer_reset(env, ri, GTIMER_VIRT);
 }
 
-void gt_virt_cval_write(CPUARMState *env, const ARMCPRegInfo *ri,
-                        uint64_t value)
+static void gt_virt_cval_write(CPUARMState *env, const ARMCPRegInfo *ri,
+                               uint64_t value)
 {
     gt_cval_write(env, ri, GTIMER_VIRT, value);
 }
 
-uint64_t gt_virt_tval_read(CPUARMState *env, const ARMCPRegInfo *ri)
+static uint64_t gt_virt_tval_read(CPUARMState *env, const ARMCPRegInfo *ri)
 {
     return gt_tval_read(env, ri, GTIMER_VIRT);
 }
 
-void gt_virt_tval_write(CPUARMState *env, const ARMCPRegInfo *ri,
-                        uint64_t value)
+static void gt_virt_tval_write(CPUARMState *env, const ARMCPRegInfo *ri,
+                               uint64_t value)
 {
     gt_tval_write(env, ri, GTIMER_VIRT, value);
 }
 
-void gt_virt_ctl_write(CPUARMState *env, const ARMCPRegInfo *ri,
-                       uint64_t value)
+static void gt_virt_ctl_write(CPUARMState *env, const ARMCPRegInfo *ri,
+                              uint64_t value)
 {
     gt_ctl_write(env, ri, GTIMER_VIRT, value);
 }
@@ -782,30 +782,88 @@ static void gt_sec_ctl_write(CPUARMState *env, const ARMCPRegInfo *ri,
     gt_ctl_write(env, ri, GTIMER_SEC, value);
 }
 
-void gt_hv_timer_reset(CPUARMState *env, const ARMCPRegInfo *ri)
+static void gt_hv_timer_reset(CPUARMState *env, const ARMCPRegInfo *ri)
 {
     gt_timer_reset(env, ri, GTIMER_HYPVIRT);
 }
 
-void gt_hv_cval_write(CPUARMState *env, const ARMCPRegInfo *ri, uint64_t value)
+static void gt_hv_cval_write(CPUARMState *env, const ARMCPRegInfo *ri,
+                             uint64_t value)
 {
     gt_cval_write(env, ri, GTIMER_HYPVIRT, value);
 }
 
-uint64_t gt_hv_tval_read(CPUARMState *env, const ARMCPRegInfo *ri)
+static uint64_t gt_hv_tval_read(CPUARMState *env, const ARMCPRegInfo *ri)
 {
     return gt_tval_read(env, ri, GTIMER_HYPVIRT);
 }
 
-void gt_hv_tval_write(CPUARMState *env, const ARMCPRegInfo *ri, uint64_t value)
+static void gt_hv_tval_write(CPUARMState *env, const ARMCPRegInfo *ri,
+                             uint64_t value)
 {
     gt_tval_write(env, ri, GTIMER_HYPVIRT, value);
 }
 
-void gt_hv_ctl_write(CPUARMState *env, const ARMCPRegInfo *ri, uint64_t value)
+static void gt_hv_ctl_write(CPUARMState *env, const ARMCPRegInfo *ri,
+                            uint64_t value)
 {
     gt_ctl_write(env, ri, GTIMER_HYPVIRT, value);
 }
+
+const ARMCPRegInfo vhe_reginfo_softmmu[] = {
+    { .name = "CNTHV_CVAL_EL2", .state = ARM_CP_STATE_AA64,
+      .opc0 = 3, .opc1 = 4, .crn = 14, .crm = 3, .opc2 = 2,
+      .fieldoffset =
+        offsetof(CPUARMState, cp15.c14_timer[GTIMER_HYPVIRT].cval),
+      .type = ARM_CP_IO, .access = PL2_RW,
+      .writefn = gt_hv_cval_write, .raw_writefn = raw_write },
+    { .name = "CNTHV_TVAL_EL2", .state = ARM_CP_STATE_BOTH,
+      .opc0 = 3, .opc1 = 4, .crn = 14, .crm = 3, .opc2 = 0,
+      .type = ARM_CP_NO_RAW | ARM_CP_IO, .access = PL2_RW,
+      .resetfn = gt_hv_timer_reset,
+      .readfn = gt_hv_tval_read, .writefn = gt_hv_tval_write },
+    { .name = "CNTHV_CTL_EL2", .state = ARM_CP_STATE_BOTH,
+      .type = ARM_CP_IO,
+      .opc0 = 3, .opc1 = 4, .crn = 14, .crm = 3, .opc2 = 1,
+      .access = PL2_RW,
+      .fieldoffset = offsetof(CPUARMState, cp15.c14_timer[GTIMER_HYPVIRT].ctl),
+      .writefn = gt_hv_ctl_write, .raw_writefn = raw_write },
+    { .name = "CNTP_CTL_EL02", .state = ARM_CP_STATE_AA64,
+      .opc0 = 3, .opc1 = 5, .crn = 14, .crm = 2, .opc2 = 1,
+      .type = ARM_CP_IO | ARM_CP_ALIAS,
+      .access = PL2_RW, .accessfn = e2h_access,
+      .fieldoffset = offsetof(CPUARMState, cp15.c14_timer[GTIMER_PHYS].ctl),
+      .writefn = gt_phys_ctl_write, .raw_writefn = raw_write },
+    { .name = "CNTV_CTL_EL02", .state = ARM_CP_STATE_AA64,
+      .opc0 = 3, .opc1 = 5, .crn = 14, .crm = 3, .opc2 = 1,
+      .type = ARM_CP_IO | ARM_CP_ALIAS,
+      .access = PL2_RW, .accessfn = e2h_access,
+      .fieldoffset = offsetof(CPUARMState, cp15.c14_timer[GTIMER_VIRT].ctl),
+      .writefn = gt_virt_ctl_write, .raw_writefn = raw_write },
+    { .name = "CNTP_TVAL_EL02", .state = ARM_CP_STATE_AA64,
+      .opc0 = 3, .opc1 = 5, .crn = 14, .crm = 2, .opc2 = 0,
+      .type = ARM_CP_NO_RAW | ARM_CP_IO | ARM_CP_ALIAS,
+      .access = PL2_RW, .accessfn = e2h_access,
+      .readfn = gt_phys_tval_read, .writefn = gt_phys_tval_write },
+    { .name = "CNTV_TVAL_EL02", .state = ARM_CP_STATE_AA64,
+      .opc0 = 3, .opc1 = 5, .crn = 14, .crm = 3, .opc2 = 0,
+      .type = ARM_CP_NO_RAW | ARM_CP_IO | ARM_CP_ALIAS,
+      .access = PL2_RW, .accessfn = e2h_access,
+      .readfn = gt_virt_tval_read, .writefn = gt_virt_tval_write },
+    { .name = "CNTP_CVAL_EL02", .state = ARM_CP_STATE_AA64,
+      .opc0 = 3, .opc1 = 5, .crn = 14, .crm = 2, .opc2 = 2,
+      .type = ARM_CP_IO | ARM_CP_ALIAS,
+      .fieldoffset = offsetof(CPUARMState, cp15.c14_timer[GTIMER_PHYS].cval),
+      .access = PL2_RW, .accessfn = e2h_access,
+      .writefn = gt_phys_cval_write, .raw_writefn = raw_write },
+    { .name = "CNTV_CVAL_EL02", .state = ARM_CP_STATE_AA64,
+      .opc0 = 3, .opc1 = 5, .crn = 14, .crm = 3, .opc2 = 2,
+      .type = ARM_CP_IO | ARM_CP_ALIAS,
+      .fieldoffset = offsetof(CPUARMState, cp15.c14_timer[GTIMER_VIRT].cval),
+      .access = PL2_RW, .accessfn = e2h_access,
+      .writefn = gt_virt_cval_write, .raw_writefn = raw_write },
+    REGINFO_SENTINEL
+};
 
 void arm_gt_ptimer_cb(void *opaque)
 {
