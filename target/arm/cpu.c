@@ -1648,6 +1648,7 @@ static void arm_cpu_realizefn(DeviceState *dev, Error **errp)
         unset_feature(env, ARM_FEATURE_PMU);
     }
     if (arm_feature(env, ARM_FEATURE_PMU)) {
+#ifdef CONFIG_TCG
         pmu_init(cpu);
 
         if (!kvm_enabled()) {
@@ -1659,6 +1660,7 @@ static void arm_cpu_realizefn(DeviceState *dev, Error **errp)
         cpu->pmu_timer = timer_new_ns(QEMU_CLOCK_VIRTUAL, arm_pmu_timer_cb,
                 cpu);
 #endif
+#endif /* CONFIG_TCG */
     } else {
         cpu->isar.id_aa64dfr0 =
             FIELD_DP64(cpu->isar.id_aa64dfr0, ID_AA64DFR0, PMUVER, 0);
