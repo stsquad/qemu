@@ -3,6 +3,7 @@ arm_ss.add(files(
   'cpu.c',
   'gdbstub.c',
   'cpu_tcg.c',
+  'cpu-common.c',
 ))
 arm_ss.add(zlib)
 
