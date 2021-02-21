@@ -18,21 +18,6 @@ CPAccessResult aa64_cacheop_poc_access(CPUARMState *env,
                                        bool isread);
 extern const ARMCPRegInfo generic_timer_cp_reginfo[];
 
-/* Return true if the translation regime is using LPAE format page tables */
-static inline bool regime_using_lpae_format(CPUARMState *env,
-                                            ARMMMUIdx mmu_idx)
-{
-    int el = regime_el(env, mmu_idx);
-    if (el == 2 || arm_el_is_aa64(env, el)) {
-        return true;
-    }
-    if (arm_feature(env, ARM_FEATURE_LPAE)
-        && (regime_tcr(env, mmu_idx)->raw_tcr & TTBCR_EAE)) {
-        return true;
-    }
-    return false;
-}
-
 #ifndef CONFIG_USER_ONLY
 int64_t cycles_ns_per(uint64_t cycles);
 bool instructions_supported(CPUARMState *env);

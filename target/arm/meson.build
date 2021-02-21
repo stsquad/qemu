@@ -22,6 +22,7 @@ arm_softmmu_ss.add(files(
   'machine.c',
   'monitor.c',
   'cpu-softmmu.c',
+  'get-phys-addr.c',
 ))
 arm_user_ss = ss.source_set()
 arm_user_ss.add(files(
