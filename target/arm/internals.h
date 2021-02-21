@@ -1196,6 +1196,43 @@ static inline uint64_t useronly_maybe_clean_ptr(uint32_t desc, uint64_t ptr)
     return ptr;
 }
 
+/*
+ * Convert a possible stage1+2 MMU index into the appropriate
+ * stage 1 MMU index
+ */
+static inline ARMMMUIdx stage_1_mmu_idx(ARMMMUIdx mmu_idx)
+{
+    switch (mmu_idx) {
+    case ARMMMUIdx_SE10_0:
+        return ARMMMUIdx_Stage1_SE0;
+    case ARMMMUIdx_SE10_1:
+        return ARMMMUIdx_Stage1_SE1;
+    case ARMMMUIdx_SE10_1_PAN:
+        return ARMMMUIdx_Stage1_SE1_PAN;
+    case ARMMMUIdx_E10_0:
+        return ARMMMUIdx_Stage1_E0;
+    case ARMMMUIdx_E10_1:
+        return ARMMMUIdx_Stage1_E1;
+    case ARMMMUIdx_E10_1_PAN:
+        return ARMMMUIdx_Stage1_E1_PAN;
+    default:
+        return mmu_idx;
+    }
+}
+
+int aa64_va_parameter_tbi(uint64_t tcr, ARMMMUIdx mmu_idx);
+int aa64_va_parameter_tbid(uint64_t tcr, ARMMMUIdx mmu_idx);
+uint32_t rebuild_hflags_a64(CPUARMState *env, int el, int fp_el,
+                            ARMMMUIdx mmu_idx);
+uint32_t rebuild_hflags_a32(CPUARMState *env, int fp_el, ARMMMUIdx mmu_idx);
+uint32_t rebuild_hflags_m32(CPUARMState *env, int fp_el, ARMMMUIdx mmu_idx);
+
+/* Return the SCTLR value which controls this address translation regime */
+static inline uint64_t regime_sctlr(CPUARMState *env, ARMMMUIdx mmu_idx)
+{
+    return env->cp15.sctlr_el[regime_el(env, mmu_idx)];
+}
+
 #ifndef CONFIG_USER_ONLY
 void arm_cpu_set_irq(void *opaque, int irq, int level);
 void arm_cpu_kvm_set_irq(void *opaque, int irq, int level);

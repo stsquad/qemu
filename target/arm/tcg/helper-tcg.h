@@ -17,38 +17,6 @@ CPAccessResult aa64_cacheop_poc_access(CPUARMState *env,
                                        const ARMCPRegInfo *ri,
                                        bool isread);
 extern const ARMCPRegInfo generic_timer_cp_reginfo[];
-int aa64_va_parameter_tbi(uint64_t tcr, ARMMMUIdx mmu_idx);
-int aa64_va_parameter_tbid(uint64_t tcr, ARMMMUIdx mmu_idx);
-
-/* Return the SCTLR value which controls this address translation regime */
-static inline uint64_t regime_sctlr(CPUARMState *env, ARMMMUIdx mmu_idx)
-{
-    return env->cp15.sctlr_el[regime_el(env, mmu_idx)];
-}
-
-/*
- * Convert a possible stage1+2 MMU index into the appropriate
- * stage 1 MMU index
- */
-static inline ARMMMUIdx stage_1_mmu_idx(ARMMMUIdx mmu_idx)
-{
-    switch (mmu_idx) {
-    case ARMMMUIdx_SE10_0:
-        return ARMMMUIdx_Stage1_SE0;
-    case ARMMMUIdx_SE10_1:
-        return ARMMMUIdx_Stage1_SE1;
-    case ARMMMUIdx_SE10_1_PAN:
-        return ARMMMUIdx_Stage1_SE1_PAN;
-    case ARMMMUIdx_E10_0:
-        return ARMMMUIdx_Stage1_E0;
-    case ARMMMUIdx_E10_1:
-        return ARMMMUIdx_Stage1_E1;
-    case ARMMMUIdx_E10_1_PAN:
-        return ARMMMUIdx_Stage1_E1_PAN;
-    default:
-        return mmu_idx;
-    }
-}
 
 /* Return true if the translation regime is using LPAE format page tables */
 static inline bool regime_using_lpae_format(CPUARMState *env,
