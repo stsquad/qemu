@@ -70,3 +70,8 @@ int fp_exception_el(CPUARMState *env, int cur_el)
 {
     return 0; /* FP is enabled */
 }
+
+int sve_exception_el(CPUARMState *env, int el)
+{
+    return 0;
+}

@@ -122,11 +122,6 @@ const ARMCPRegUserSpaceInfo mpidr_user_cp_reginfo[] = {
     REGUSERINFO_SENTINEL
 };
 
-int sve_exception_el(CPUARMState *env, int el)
-{
-    return 0;
-}
-
 uint32_t arm_phys_excp_target_el(CPUState *cs, uint32_t excp_idx,
                                  uint32_t cur_el, bool secure)
 {
