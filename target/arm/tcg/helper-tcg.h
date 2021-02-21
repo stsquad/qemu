@@ -96,6 +96,7 @@ void define_arm_vh_e2h_redirects_aliases(ARMCPU *cpu);
 
 #ifdef CONFIG_USER_ONLY
 extern const ARMCPRegUserSpaceInfo v8_user_idregs[];
-#endif
+extern const ARMCPRegUserSpaceInfo id_v8_user_midr_cp_reginfo[];
+#endif /* CONFIG_USER_ONLY */
 
 #endif /* HELPER_TCG_H */
