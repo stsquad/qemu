@@ -764,10 +764,10 @@ static int cpu_post_load(void *opaque, int version_id)
         }
     }
 
+#ifdef CONFIG_TCG
     hw_breakpoint_update_all(cpu);
     hw_watchpoint_update_all(cpu);
 
-#ifdef CONFIG_TCG
     if (tcg_enabled()) {
         pmu_op_finish(&cpu->env);
     }

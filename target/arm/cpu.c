@@ -434,8 +434,11 @@ static void arm_cpu_reset(DeviceState *dev)
     }
 #endif
 
+#ifdef CONFIG_TCG
     hw_breakpoint_update_all(cpu);
     hw_watchpoint_update_all(cpu);
+#endif /* CONFIG_TCG */
+
     arm_rebuild_hflags(env);
 }
 
