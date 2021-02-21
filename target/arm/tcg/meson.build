@@ -12,6 +12,8 @@ gen = [
   decodetree.process('t16.decode', extra_args: ['-w', '16', '--static-decode=disas_t16']),
 ]
 
+arm_ss.add(when: 'CONFIG_TCG', if_false: files('tcg-stub.c'))
+
 arm_ss.add(when: 'CONFIG_TCG', if_true: gen)
 
 arm_ss.add(when: 'CONFIG_TCG', if_true: files(
