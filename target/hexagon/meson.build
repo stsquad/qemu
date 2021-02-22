@@ -16,6 +16,8 @@
 ##
 
 hexagon_ss = ss.source_set()
+hexagon_softmmu_ss = ss.source_set()
+hexagon_user_ss = ss.source_set()
 
 hex_common_py = 'hex_common.py'
 attribs_def = meson.current_source_dir() / 'attribs_def.h.inc'
@@ -36,7 +38,7 @@ semantics_generated = custom_target(
     input: gen_semantics,
     command: ['@INPUT@', '@OUTPUT@'],
 )
-hexagon_ss.add(semantics_generated)
+hexagon_user_ss.add(semantics_generated)
 
 #
 # Step 2
@@ -59,7 +61,7 @@ shortcode_generated = custom_target(
     depend_files: [hex_common_py, attribs_def],
     command: [python, '@INPUT@', semantics_generated, attribs_def, '@OUTPUT@'],
 )
-hexagon_ss.add(shortcode_generated)
+hexagon_user_ss.add(shortcode_generated)
 
 helper_protos_generated = custom_target(
     'helper_protos_generated.h.inc',
@@ -69,7 +71,7 @@ helper_protos_generated = custom_target(
     depend_files: [hex_common_py, attribs_def, gen_tcg_h],
     command: [python, '@INPUT@', semantics_generated, attribs_def, gen_tcg_h, '@OUTPUT@'],
 )
-hexagon_ss.add(helper_protos_generated)
+hexagon_user_ss.add(helper_protos_generated)
 
 tcg_funcs_generated = custom_target(
     'tcg_funcs_generated.c.inc',
@@ -79,7 +81,7 @@ tcg_funcs_generated = custom_target(
     depend_files: [hex_common_py, attribs_def, gen_tcg_h],
     command: [python, '@INPUT@', semantics_generated, attribs_def, gen_tcg_h, '@OUTPUT@'],
 )
-hexagon_ss.add(tcg_funcs_generated)
+hexagon_user_ss.add(tcg_funcs_generated)
 
 tcg_func_table_generated = custom_target(
     'tcg_func_table_generated.c.inc',
@@ -89,7 +91,7 @@ tcg_func_table_generated = custom_target(
     depend_files: [hex_common_py, attribs_def],
     command: [python, '@INPUT@', semantics_generated, attribs_def, '@OUTPUT@'],
 )
-hexagon_ss.add(tcg_func_table_generated)
+hexagon_user_ss.add(tcg_func_table_generated)
 
 helper_funcs_generated = custom_target(
     'helper_funcs_generated.c.inc',
@@ -99,7 +101,7 @@ helper_funcs_generated = custom_target(
     depend_files: [hex_common_py, attribs_def, gen_tcg_h],
     command: [python, '@INPUT@', semantics_generated, attribs_def, gen_tcg_h, '@OUTPUT@'],
 )
-hexagon_ss.add(helper_funcs_generated)
+hexagon_user_ss.add(helper_funcs_generated)
 
 printinsn_generated = custom_target(
     'printinsn_generated.h.inc',
@@ -109,7 +111,7 @@ printinsn_generated = custom_target(
     depend_files: [hex_common_py, attribs_def],
     command: [python, '@INPUT@', semantics_generated, attribs_def, '@OUTPUT@'],
 )
-hexagon_ss.add(printinsn_generated)
+hexagon_user_ss.add(printinsn_generated)
 
 op_regs_generated = custom_target(
     'op_regs_generated.h.inc',
@@ -119,7 +121,7 @@ op_regs_generated = custom_target(
     depend_files: [hex_common_py, attribs_def],
     command: [python, '@INPUT@', semantics_generated, attribs_def, '@OUTPUT@'],
 )
-hexagon_ss.add(op_regs_generated)
+hexagon_user_ss.add(op_regs_generated)
 
 op_attribs_generated = custom_target(
     'op_attribs_generated.h.inc',
@@ -129,7 +131,7 @@ op_attribs_generated = custom_target(
     depend_files: [hex_common_py, attribs_def],
     command: [python, '@INPUT@', semantics_generated, attribs_def, '@OUTPUT@'],
 )
-hexagon_ss.add(op_attribs_generated)
+hexagon_user_ss.add(op_attribs_generated)
 
 opcodes_def_generated = custom_target(
     'opcodes_def_generated.h.inc',
@@ -139,7 +141,7 @@ opcodes_def_generated = custom_target(
     depend_files: [hex_common_py, attribs_def],
     command: [python, '@INPUT@', semantics_generated, attribs_def, '@OUTPUT@'],
 )
-hexagon_ss.add(opcodes_def_generated)
+hexagon_user_ss.add(opcodes_def_generated)
 
 #
 # Step 3
@@ -157,7 +159,7 @@ iset_py = custom_target(
     input: gen_dectree_import,
     command: ['@INPUT@', '@OUTPUT@'],
 )
-hexagon_ss.add(iset_py)
+hexagon_user_ss.add(iset_py)
 
 #
 # Step 4
@@ -170,9 +172,9 @@ dectree_generated = custom_target(
     depends: [iset_py],
     command: ['PYTHONPATH=' + meson.current_build_dir(), '@INPUT@', '@OUTPUT@'],
 )
-hexagon_ss.add(dectree_generated)
+hexagon_user_ss.add(dectree_generated)
 
-hexagon_ss.add(files(
+hexagon_user_ss.add(files(
     'cpu.c',
     'translate.c',
     'op_helper.c',
@@ -188,4 +190,6 @@ hexagon_ss.add(files(
     'conv_emu.c',
 ))
 
-target_arch += {'hexagon': hexagon_ss}
+target_arch += {'hexagon': hexagon_user_ss}
+target_softmmu_arch += {'hexagon': hexagon_softmmu_ss}
+target_user_arch += {'hexagon': hexagon_user_ss}
