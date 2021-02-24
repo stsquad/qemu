@@ -30,6 +30,7 @@
 #include "qemu/cutils.h"
 #include "qemu/log.h"
 #include "qom/object.h"
+#include "cpregs.h"
 
 static struct {
     hwaddr io_base;

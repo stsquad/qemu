@@ -19,6 +19,7 @@
 #include "gicv3_internal.h"
 #include "hw/irq.h"
 #include "cpu.h"
+#include "cpregs.h"
 
 void gicv3_set_gicv3state(CPUState *cpu, GICv3CPUState *s)
 {
