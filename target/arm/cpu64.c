@@ -32,7 +32,7 @@
 #include "kvm_arm.h"
 #include "qapi/visitor.h"
 #include "hw/qdev-properties.h"
-
+#include "cpregs.h"
 
 #ifndef CONFIG_USER_ONLY
 static uint64_t a57_a53_l2ctlr_read(CPUARMState *env, const ARMCPRegInfo *ri)
