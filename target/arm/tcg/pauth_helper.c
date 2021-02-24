@@ -25,7 +25,7 @@
 #include "exec/helper-proto.h"
 #include "tcg/tcg-gvec-desc.h"
 #include "qemu/xxhash.h"
-
+#include "cpu-mmu.h"
 
 static uint64_t pac_cell_shuffle(uint64_t i)
 {
