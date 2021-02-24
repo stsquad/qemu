@@ -1,7 +1,9 @@
 arm_ss = ss.source_set()
 arm_ss.add(files(
+  'cpregs.c',
   'cpu.c',
   'cpu-mmu.c',
+  'cpustate-list.c',
   'gdbstub.c',
   'cpu_tcg.c',
 ))
