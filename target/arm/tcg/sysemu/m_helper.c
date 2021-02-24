@@ -13,7 +13,7 @@
 #include "qemu/main-loop.h"
 #include "exec/exec-all.h"
 #include "semihosting/common-semi.h"
-
+#include "cpu-mmu.h"
 #include "tcg/m_helper.h"
 
 /*
