@@ -23,6 +23,14 @@
 /* currently there is no RPMB driver in Linux */
 #define VIRTIO_ID_RPMB         28 /* virtio RPMB */
 
+static const int user_feature_bits[] = {
+    VIRTIO_F_VERSION_1,
+    VIRTIO_RING_F_INDIRECT_DESC,
+    VIRTIO_RING_F_EVENT_IDX,
+    VIRTIO_F_NOTIFY_ON_EMPTY,
+    VHOST_INVALID_FEATURE_BIT
+};
+
 static void vurpmb_get_config(VirtIODevice *vdev, uint8_t *config)
 {
     /* this somehow needs to come from the vhost-user daemon */
@@ -120,11 +128,12 @@ static void vurpmb_set_status(VirtIODevice *vdev, uint8_t status)
 }
 
 static uint64_t vurpmb_get_features(VirtIODevice *vdev,
-                                      uint64_t requested_features,
-                                      Error **errp)
+                                    uint64_t requested_features,
+                                    Error **errp)
 {
-    /* No feature bits used yet */
-    return requested_features;
+    VHostUserRPMB *rpmb = VHOST_USER_RPMB(vdev);
+    return vhost_get_features(&rpmb->vhost_dev, user_feature_bits,
+                              requested_features);
 }
 
 static void vurpmb_handle_output(VirtIODevice *vdev, VirtQueue *vq)
