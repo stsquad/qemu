@@ -224,7 +224,6 @@ static void *l1_map[V_L1_MAX_SIZE];
 TCGContext tcg_init_ctx;
 __thread TCGContext *tcg_ctx;
 TBContext tb_ctx;
-bool parallel_cpus;
 
 static void page_table_config_init(void)
 {

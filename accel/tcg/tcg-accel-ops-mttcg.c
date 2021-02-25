@@ -114,8 +114,7 @@ void mttcg_start_vcpu_thread(CPUState *cpu)
     char thread_name[VCPU_THREAD_NAME_SIZE];
 
     g_assert(tcg_enabled());
-
-    parallel_cpus = (current_machine->smp.max_cpus > 1);
+    tcg_set_cpus_cflags(current_machine->smp.max_cpus > 1 ? CF_PARALLEL : 0);
 
     cpu->thread = g_malloc0(sizeof(QemuThread));
     cpu->halt_cond = g_malloc0(sizeof(QemuCond));

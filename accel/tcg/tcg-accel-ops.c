@@ -41,6 +41,16 @@
 
 /* common functionality among all TCG variants */
 
+void tcg_set_cpus_cflags(uint32_t cflags_base)
+{
+    CPUState *cpu;
+
+    CPU_FOREACH(cpu) {
+        cpu->cflags_base = deposit32(cflags_base, CF_CLUSTER_SHIFT, 8,
+                                     cpu->cluster_index);
+    }
+}
+
 void tcg_cpus_destroy(CPUState *cpu)
 {
     cpu_thread_signal_destroyed(cpu);

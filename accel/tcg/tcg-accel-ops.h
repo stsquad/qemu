@@ -17,5 +17,6 @@
 void tcg_cpus_destroy(CPUState *cpu);
 int tcg_cpus_exec(CPUState *cpu);
 void tcg_handle_interrupt(CPUState *cpu, int mask);
+void tcg_set_cpus_cflags(uint32_t cflags_base);
 
 #endif /* TCG_CPUS_H */
