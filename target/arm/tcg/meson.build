@@ -21,6 +21,7 @@ arm_ss.add(when: 'CONFIG_TCG', if_true: files(
   'translate-vfp.c',
   'helper.c',
   'cpregs.c',
+  'cpu-vfp.c',
   'iwmmxt_helper.c',
   'm_helper.c',
   'neon_helper.c',

@@ -4,6 +4,7 @@ arm_ss.add(files(
   'cpu.c',
   'cpu-common.c',
   'cpu-mmu.c',
+  'cpu-vfp.c',
   'cpustate-list.c',
   'gdbstub.c',
   'cpu_tcg.c',
