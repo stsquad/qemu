@@ -39,3 +39,6 @@ arm_ss.add(when: ['TARGET_AARCH64','CONFIG_TCG'], if_true: files(
   'pauth_helper.c',
   'sve_helper.c',
 ))
+
+subdir('user')
+subdir('sysemu')
