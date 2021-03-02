@@ -33,3 +33,8 @@ uint32_t arm_phys_excp_target_el(CPUState *cs, uint32_t excp_idx,
 {
     return 1;
 }
+
+int sve_exception_el(CPUARMState *env, int el)
+{
+    return 0;
+}
