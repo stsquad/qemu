@@ -148,8 +148,7 @@ qtests_arm = \
   (config_all_devices.has_key('CONFIG_CMSDK_APB_WATCHDOG') ? ['cmsdk-apb-watchdog-test'] : []) + \
   (config_all_devices.has_key('CONFIG_PFLASH_CFI02') ? ['pflash-cfi02-test'] : []) +         \
   (config_all_devices.has_key('CONFIG_NPCM7XX') ? qtests_npcm7xx : []) + \
-  ['arm-cpu-features',
-   'microbit-test',
+  ['microbit-test',
    'm25p80-test',
    'test-arm-mptimer',
    'boot-serial-test',
@@ -158,8 +157,7 @@ qtests_arm = \
 # TODO: once aarch64 TCG is fixed on ARM 32 bit host, make bios-tables-test unconditional
 qtests_aarch64 = \
   (cpu != 'arm' ? ['bios-tables-test'] : []) +                                                  \
-  ['arm-cpu-features',
-   'numa-test',
+  ['numa-test',
    'boot-serial-test',
    'xlnx-can-test',
    'migration-test']
