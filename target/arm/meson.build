@@ -32,6 +32,9 @@ arm_softmmu_ss.add(when: 'CONFIG_TCG', if_true: files(
 ))
 
 arm_user_ss = ss.source_set()
+arm_user_ss.add(files(
+  'cpu-user.c',
+))
 
 subdir('tcg')
 subdir('kvm')
