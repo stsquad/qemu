@@ -1488,6 +1488,13 @@ static void test_acpi_oem_fields_virt(void)
     };
     char *args;
 
+#ifndef CONFIG_TCG
+    if (data.tcg_only) {
+        g_test_skip("TCG disabled, skipping ACPI tcg_only test");
+        return;
+    }
+#endif /* CONFIG_TCG */
+
     args = test_acpi_create_args(&data,
                                  "-cpu cortex-a57 "OEM_TEST_ARGS, true);
     data.qts = qtest_init(args);
