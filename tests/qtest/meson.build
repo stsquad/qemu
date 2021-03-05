@@ -6,12 +6,12 @@ endif
 
 qtests_generic = [
   'cdrom-test',
-  'device-introspect-test',
+# 'device-introspect-test',
   'machine-none-test',
   'qmp-test',
   'qmp-cmd-test',
-  'qom-test',
-  'test-hmp',
+# 'qom-test',
+# 'test-hmp',
   'qos-test',
 ]
 if config_host.has_key('CONFIG_MODULES')
@@ -158,8 +158,6 @@ qtests_arm = \
 # TODO: once aarch64 TCG is fixed on ARM 32 bit host, make bios-tables-test unconditional
 qtests_aarch64 = \
   (cpu != 'arm' ? ['bios-tables-test'] : []) +                                                  \
-  (config_all_devices.has_key('CONFIG_TPM_TIS_SYSBUS') ? ['tpm-tis-device-test'] : []) +        \
-  (config_all_devices.has_key('CONFIG_TPM_TIS_SYSBUS') ? ['tpm-tis-device-swtpm-test'] : []) +  \
   ['arm-cpu-features',
    'numa-test',
    'boot-serial-test',
