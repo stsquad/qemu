@@ -40,7 +40,7 @@
 #include "kvm_arm.h"
 #include "disas/capstone.h"
 #include "fpu/softfloat.h"
-#include "get-phys-addr.h"
+#include "cpu-mmu.h"
 #include "cpu32.h"
 
 #if !defined(CONFIG_USER_ONLY) || !defined(TARGET_AARCH64)

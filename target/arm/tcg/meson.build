@@ -28,9 +28,11 @@ arm_ss.add(when: 'CONFIG_TCG', if_true: files(
   'vfp_helper.c',
   'crypto_helper.c',
   'debug_helper.c',
+  'tcg-cpu.c',
+  'tcg-cpu-models.c',
 ))
 
-arm_ss.add(when: ['TARGET_AARCH64','CONFIG_TCG'], if_true: files(
+arm_ss.add(when: ['TARGET_AARCH64', 'CONFIG_TCG'], if_true: files(
   'translate-a64.c',
   'translate-sve.c',
   'helper-a64.c',
