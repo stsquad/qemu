@@ -25,3 +25,9 @@ void write_v7m_exception(CPUARMState *env, uint32_t new_exc)
 {
     g_assert_not_reached();
 }
+
+/* XXX this is used all over in hw/arm, needs Philippe's work to remove */
+void arm_rebuild_hflags(CPUARMState *env)
+{
+    g_assert_not_reached();
+}
