@@ -1015,23 +1015,6 @@ static inline uint32_t aarch64_pstate_valid_mask(const ARMISARegisters *id)
     return valid;
 }
 
-/*
- * Parameters of a given virtual address, as extracted from the
- * translation control register (TCR) for a given regime.
- */
-typedef struct ARMVAParameters {
-    unsigned tsz    : 8;
-    unsigned select : 1;
-    bool tbi        : 1;
-    bool epd        : 1;
-    bool hpd        : 1;
-    bool using16k   : 1;
-    bool using64k   : 1;
-} ARMVAParameters;
-
-ARMVAParameters aa64_va_parameters(CPUARMState *env, uint64_t va,
-                                   ARMMMUIdx mmu_idx, bool data);
-
 static inline int exception_target_el(CPUARMState *env)
 {
     int target_el = MAX(1, arm_current_el(env));
@@ -1079,28 +1062,11 @@ typedef struct V8M_SAttributes {
     bool irvalid;
 } V8M_SAttributes;
 
-void v8m_security_lookup(CPUARMState *env, uint32_t address,
-                         MMUAccessType access_type, ARMMMUIdx mmu_idx,
-                         V8M_SAttributes *sattrs);
-
-bool pmsav8_mpu_lookup(CPUARMState *env, uint32_t address,
-                       MMUAccessType access_type, ARMMMUIdx mmu_idx,
-                       hwaddr *phys_ptr, MemTxAttrs *txattrs,
-                       int *prot, bool *is_subpage,
-                       ARMMMUFaultInfo *fi, uint32_t *mregion);
-
 /* Cacheability and shareability attributes for a memory access */
 typedef struct ARMCacheAttrs {
     unsigned int attrs:8; /* as in the MAIR register encoding */
     unsigned int shareability:2; /* as in the SH field of the VMSAv8-64 PTEs */
 } ARMCacheAttrs;
-
-bool get_phys_addr(CPUARMState *env, target_ulong address,
-                   MMUAccessType access_type, ARMMMUIdx mmu_idx,
-                   hwaddr *phys_ptr, MemTxAttrs *attrs, int *prot,
-                   target_ulong *page_size,
-                   ARMMMUFaultInfo *fi, ARMCacheAttrs *cacheattrs)
-    __attribute__((nonnull));
 
 void arm_log_exception(int idx);
 
