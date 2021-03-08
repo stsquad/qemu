@@ -352,6 +352,11 @@ static void sve_tests_sve_max_vq_8(const void *data)
 {
     QTestState *qts;
 
+#ifndef CONFIG_TCG
+    g_test_skip("TCG disabled, skipping tcg_only sve_tests_sve_max_vq_8");
+    return;
+#endif /* CONFIG_TCG */
+
     qts = qtest_init(MACHINE "-cpu max,sve-max-vq=8");
 
     assert_sve_vls(qts, "max", BIT_ULL(8) - 1, NULL);
@@ -386,6 +391,11 @@ static void sve_tests_sve_max_vq_8(const void *data)
 static void sve_tests_sve_off(const void *data)
 {
     QTestState *qts;
+
+#ifndef CONFIG_TCG
+    g_test_skip("TCG disabled, skipping tcg_only sve_tests_sve_off");
+    return;
+#endif /* CONFIG_TCG */
 
     qts = qtest_init(MACHINE "-cpu max,sve=off");
 
@@ -442,6 +452,11 @@ static void pauth_tests_default(QTestState *qts, const char *cpu_type)
 static void test_query_cpu_model_expansion(const void *data)
 {
     QTestState *qts;
+
+#ifndef CONFIG_TCG
+    g_test_skip("TCG disabled, skipping tcg_only test_query_cpu_model_expansion");
+    return;
+#endif /* CONFIG_TCG */
 
     qts = qtest_init(MACHINE "-cpu max");
 
