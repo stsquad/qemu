@@ -150,6 +150,8 @@ static void add_machine_test_case(const char *mname)
 int main(int argc, char **argv)
 {
     char *v_env = getenv("V");
+    const bool has_tcg = qtest_has_accel("tcg");
+    const char *arch = qtest_get_arch();
 
     if (v_env && *v_env >= '2') {
         verbose = true;
@@ -157,7 +159,22 @@ int main(int argc, char **argv)
 
     g_test_init(&argc, &argv, NULL);
 
-    qtest_cb_for_every_machine(add_machine_test_case, g_test_quick());
+    /*
+     * Currently we build also boards for ARM that are incompatible with KVM.
+     * We therefore need to check for the presence of the TCG
+     * accelerator and only test the "virt" machine for ARM builds
+     * where this doesn't exist.
+     *
+     * TODO: After we do the work of Kconfig etc to ensure that only
+     * KVM-compatible boards are built for the kvm-only build, we
+     * could remove this.
+     */
+    if (!has_tcg &&
+        (g_str_equal(arch, "arm") || g_str_equal(arch, "aarch64"))) {
+        add_machine_test_case("virt");
+    } else {
+        qtest_cb_for_every_machine(add_machine_test_case, g_test_quick());
+    }
 
     /* as none machine has no memory by default, add a test case with memory */
     qtest_add_data_func("hmp/none+2MB", g_strdup("none -m 2"), test_machine);
