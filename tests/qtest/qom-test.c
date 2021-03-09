@@ -88,9 +88,26 @@ static void add_machine_test_case(const char *mname)
 
 int main(int argc, char **argv)
 {
+    const bool has_tcg = qtest_has_accel("tcg");
+    const char *arch = qtest_get_arch();
+
     g_test_init(&argc, &argv, NULL);
 
-    qtest_cb_for_every_machine(add_machine_test_case, g_test_quick());
+    /*
+     * Currently we build also boards for ARM that are incompatible
+     * with KVM. We therefore need to check this explicitly, and only
+     * test virt for kvm-only arm builds.
+     *
+     * TODO: After we do the work of Kconfig etc to ensure that only
+     * KVM-compatible boards are built for the kvm-only build, we
+     * could remove this.
+     */
+    if (!has_tcg &&
+        (g_str_equal(arch, "arm") || g_str_equal(arch, "aarch64"))) {
+        add_machine_test_case("virt");
+    } else {
+        qtest_cb_for_every_machine(add_machine_test_case, g_test_quick());
+    }
 
     return g_test_run();
 }
