@@ -19,10 +19,13 @@
  */
 
 #include "qemu/osdep.h"
+#include "qapi/error.h"
+#include "qemu/timer.h"
 #include "cpu.h"
 #include "semihosting/common-semi.h"
 #include "qemu/log.h"
 #include "tcg/tcg-cpu.h"
+#include "internals.h"
 
 /*
  * Do semihosting call and set the appropriate return value. All the
@@ -49,4 +52,28 @@ void tcg_handle_semihosting(CPUState *cs)
         env->regs[0] = do_common_semihosting(cs);
         env->regs[15] += env->thumb ? 2 : 4;
     }
+}
+
+bool tcg_cpu_realizefn(CPUState *cs, Error **errp)
+{
+    ARMCPU *cpu = ARM_CPU(cs);
+    CPUARMState *env = &cpu->env;
+
+    /*
+     * The NVIC and M-profile CPU are two halves of a single piece of
+     * hardware; trying to use one without the other is a command line
+     * error and will result in segfaults if not caught here.
+     */
+    if (arm_feature(env, ARM_FEATURE_M)) {
+        if (!env->nvic) {
+            error_setg(errp, "This board cannot be used with Cortex-M CPUs");
+            return false;
+        }
+    } else {
+        if (env->nvic) {
+            error_setg(errp, "This board can only be used with Cortex-M CPUs");
+            return false;
+        }
+    }
+    return true;
 }
