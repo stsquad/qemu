@@ -22,15 +22,17 @@
 
 #include "cpu.h"
 #include "hw/core/tcg-cpu-ops.h"
+#include "hw/core/accel-cpu.h"
 
 void arm_cpu_synchronize_from_tb(CPUState *cs,
                                  const TranslationBlock *tb);
 
-extern struct TCGCPUOps arm_tcg_ops;
+void tcg_arm_init_accel_cpu(AccelCPUClass *accel_cpu, CPUClass *cc);
 
 #ifndef CONFIG_USER_ONLY
 /* Do semihosting call and set the appropriate return value. */
 void tcg_handle_semihosting(CPUState *cs);
+bool tcg_cpu_realizefn(CPUState *cs, Error **errp);
 
 #endif /* !CONFIG_USER_ONLY */
 

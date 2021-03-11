@@ -844,16 +844,18 @@ static struct TCGCPUOps arm_v7m_tcg_ops = {
 #endif /* !CONFIG_USER_ONLY */
 };
 
+static void arm_v7m_init_accel_cpu(AccelCPUClass *accel_cpu, CPUClass *cc)
+{
+    cc->tcg_ops = &arm_v7m_tcg_ops;
+}
+
 static void arm_v7m_class_init(ObjectClass *oc, void *data)
 {
     ARMCPUClass *acc = ARM_CPU_CLASS(oc);
     CPUClass *cc = CPU_CLASS(oc);
 
     acc->info = data;
-#ifdef CONFIG_TCG
-    cc->tcg_ops = &arm_v7m_tcg_ops;
-#endif /* CONFIG_TCG */
-
+    cc->init_accel_cpu = arm_v7m_init_accel_cpu;
     cc->gdb_core_xml_file = "arm-m-profile.xml";
 }
 
