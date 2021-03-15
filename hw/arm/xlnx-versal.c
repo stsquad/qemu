@@ -18,7 +18,7 @@
 #include "sysemu/sysemu.h"
 #include "sysemu/kvm.h"
 #include "hw/arm/boot.h"
-#include "kvm_arm.h"
+#include "kvm/kvm_arm.h"
 #include "hw/misc/unimp.h"
 #include "hw/arm/xlnx-versal.h"
 
