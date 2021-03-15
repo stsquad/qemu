@@ -28,7 +28,7 @@
 #include "sysemu/runstate.h"
 #include "sysemu/sysemu.h"
 #include "exec/hwaddr.h"
-#include "kvm_arm.h"
+#include "kvm/kvm_arm.h"
 #include "hw/arm/boot.h"
 #include "hw/block/flash.h"
 #include "hw/boards.h"

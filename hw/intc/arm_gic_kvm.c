@@ -24,7 +24,7 @@
 #include "qemu/module.h"
 #include "migration/blocker.h"
 #include "sysemu/kvm.h"
-#include "kvm_arm.h"
+#include "kvm/kvm_arm.h"
 #include "gic_internal.h"
 #include "vgic_common.h"
 #include "qom/object.h"
