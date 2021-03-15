@@ -31,7 +31,7 @@
 #include "hw/loader.h"
 #endif
 #include "sysemu/kvm.h"
-#include "kvm_arm.h"
+#include "kvm/kvm_arm.h"
 #include "qapi/visitor.h"
 #include "hw/qdev-properties.h"
 #include "cpregs.h"

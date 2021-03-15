@@ -20,7 +20,7 @@
 #ifndef ARM_CPU_H
 #define ARM_CPU_H
 
-#include "kvm-consts.h"
+#include "kvm/kvm-consts.h"
 #include "hw/registerfields.h"
 #include "cpu-qom.h"
 #include "exec/cpu-defs.h"
