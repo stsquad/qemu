@@ -25,7 +25,7 @@
 #include "hw/qdev-properties.h"
 #include "sysemu/runstate.h"
 #include "sysemu/kvm.h"
-#include "kvm_arm.h"
+#include "kvm/kvm_arm.h"
 #include "migration/blocker.h"
 #include "qom/object.h"
 
