@@ -21,6 +21,7 @@
 #include "qemu/osdep.h"
 #include "qemu-common.h"
 #include "cpu.h"
+#include "cpu-sve.h"
 #include "hw/core/accel-cpu.h"
 #include "qapi/error.h"
 
