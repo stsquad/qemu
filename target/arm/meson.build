@@ -13,6 +13,7 @@ arm_ss.add(zlib)
 
 arm_ss.add(when: 'TARGET_AARCH64', if_true: files(
   'cpu64.c',
+  'cpu-sve.c',
   'gdbstub64.c',
 ))
 
