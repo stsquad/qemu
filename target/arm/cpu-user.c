@@ -12,6 +12,7 @@
 #include "qapi/qapi-commands-machine-target.h"
 #include "qapi/error.h"
 #include "cpu.h"
+#include "cpu-exceptions-aa64.h"
 #include "internals.h"
 
 void switch_mode(CPUARMState *env, int mode)
