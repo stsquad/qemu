@@ -20,26 +20,12 @@
 
 #include "qemu/osdep.h"
 #include "qemu/qemu-print.h"
-#include "qemu-common.h"
-#include "target/arm/idau.h"
 #include "qemu/module.h"
-#include "qapi/error.h"
-#include "qapi/visitor.h"
 #include "cpu.h"
 #include "cpregs.h"
-#include "internals.h"
-#include "exec/exec-all.h"
-#include "hw/qdev-properties.h"
 #if !defined(CONFIG_USER_ONLY)
-#include "hw/loader.h"
 #include "hw/boards.h"
 #endif
-#include "sysemu/sysemu.h"
-#include "sysemu/tcg.h"
-#include "sysemu/hw_accel.h"
-#include "kvm/kvm_arm.h"
-#include "disas/capstone.h"
-#include "fpu/softfloat.h"
 #include "cpu-mmu.h"
 #include "cpu32.h"
 
