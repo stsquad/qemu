@@ -33,6 +33,8 @@ typedef struct AccelCPUClass {
     void (*cpu_class_init)(CPUClass *cc);
     void (*cpu_instance_init)(CPUState *cpu);
     bool (*cpu_realizefn)(CPUState *cpu, Error **errp);
+    void (*cpu_reset)(CPUState *cpu);
+
 } AccelCPUClass;
 
 #endif /* ACCEL_CPU_H */
