@@ -63,6 +63,7 @@ static void kvm_cpu_instance_init(CPUState *cs)
      * the same interface as non-KVM CPUs.
      */
     qdev_init_gpio_in(DEVICE(cs), arm_cpu_kvm_set_irq, 4);
+    kvm_arm_add_vcpu_properties(OBJECT(cs));
 }
 
 static bool kvm_cpu_realizefn(CPUState *cs, Error **errp)
