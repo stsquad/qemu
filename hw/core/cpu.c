@@ -35,6 +35,7 @@
 #include "trace/trace-root.h"
 #include "qemu/plugin.h"
 #include "sysemu/hw_accel.h"
+#include "qemu/accel.h"
 
 CPUState *cpu_by_arch_id(int64_t id)
 {
@@ -230,7 +231,7 @@ void cpu_dump_statistics(CPUState *cpu, int flags)
 void cpu_reset(CPUState *cpu)
 {
     device_cold_reset(DEVICE(cpu));
-
+    accel_cpu_reset(cpu);
     trace_guest_cpu_reset(cpu);
 }
 
