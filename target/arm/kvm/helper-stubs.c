@@ -9,6 +9,7 @@
 
 #include "qemu/osdep.h"
 #include "cpu.h"
+#include "cpu-vfp.h"
 
 /* return the effective value of HCR_EL2. For KVM, always 0. */
 uint64_t arm_hcr_el2_eff(CPUARMState *env)
@@ -30,4 +31,13 @@ void write_v7m_exception(CPUARMState *env, uint32_t new_exc)
 void arm_rebuild_hflags(CPUARMState *env)
 {
     g_assert_not_reached();
+}
+
+uint32_t vfp_get_fpscr_from_host(CPUARMState *env)
+{
+    return 0;
+}
+
+void vfp_set_fpscr_to_host(CPUARMState *env, uint32_t val)
+{
 }
