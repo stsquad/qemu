@@ -16,6 +16,7 @@
 #include <zlib.h> /* For crc32 */
 #include "arm_ldst.h"
 #include "cpu-mmu.h"
+#include "tcg/cpu-sve.h"
 #include "cpregs.h"
 #include "tcg-cpu.h"
 
