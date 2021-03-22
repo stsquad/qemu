@@ -203,6 +203,7 @@ typedef struct {
 #ifdef TARGET_AARCH64
 # define ARM_MAX_VQ    16
 # include "cpu-sve.h"
+# include "tcg/cpu-pauth.h"
 #else
 # define ARM_MAX_VQ    1
 #endif /* TARGET_AARCH64 */
@@ -210,18 +211,6 @@ typedef struct {
 typedef struct ARMVectorReg {
     uint64_t d[2 * ARM_MAX_VQ] QEMU_ALIGNED(16);
 } ARMVectorReg;
-
-/* ARMv8.3 Pointer Authentication Extension (AARCH64-only) */
-
-#ifdef TARGET_AARCH64
-void arm_cpu_pauth_finalize(ARMCPU *cpu, Error **errp);
-/* In AArch32 mode, PAC keys do not exist at all.  */
-typedef struct ARMPACKey {
-    uint64_t lo, hi;
-} ARMPACKey;
-#else
-static inline void arm_cpu_pauth_finalize(ARMCPU *cpu, Error **errp) { }
-#endif
 
 typedef struct CPUARMState {
     /* Regs for current mode.  */
