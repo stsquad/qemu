@@ -34,6 +34,7 @@ arm_softmmu_ss.add(when: 'CONFIG_TCG', if_true: files(
 arm_user_ss = ss.source_set()
 
 subdir('tcg')
+subdir('kvm')
 
 target_arch += {'arm': arm_ss}
 target_softmmu_arch += {'arm': arm_softmmu_ss}
