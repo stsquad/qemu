@@ -20,8 +20,8 @@
 
 #include "qemu/osdep.h"
 #include "cpu.h"
+#include "qapi/error.h"
 #include "tcg-cpu.h"
-#include "hw/core/tcg-cpu-ops.h"
 #include "cpregs.h"
 #include "internals.h"
 #include "exec/exec-all.h"
@@ -212,7 +212,7 @@ static bool arm_cpu_exec_interrupt(CPUState *cs, int interrupt_request)
     return true;
 }
 
-struct TCGCPUOps arm_tcg_ops = {
+static struct TCGCPUOps arm_tcg_ops = {
     .initialize = arm_translate_init,
     .synchronize_from_tb = arm_cpu_synchronize_from_tb,
     .cpu_exec_interrupt = arm_cpu_exec_interrupt,
@@ -227,3 +227,56 @@ struct TCGCPUOps arm_tcg_ops = {
     .debug_check_watchpoint = arm_debug_check_watchpoint,
 #endif /* !CONFIG_USER_ONLY */
 };
+
+void tcg_arm_init_accel_cpu(AccelCPUClass *accel_cpu, CPUClass *cc)
+{
+    g_assert(object_class_by_name(ACCEL_CPU_NAME("tcg")) == OBJECT_CLASS(accel_cpu));
+
+    cc->tcg_ops = &arm_tcg_ops;
+}
+
+static void tcg_cpu_instance_init(CPUState *cs)
+{
+    ARMCPU *cpu = ARM_CPU(cs);
+
+    /*
+     * this would be the place to move TCG-specific props
+     * in future refactoring of cpu properties.
+     */
+
+    cpu->psci_version = 2; /* TCG implements PSCI 0.2 */
+}
+
+static void tcg_cpu_reset(CPUState *cs)
+{
+    ARMCPU *cpu = ARM_CPU(cs);
+    CPUARMState *env = &cpu->env;
+
+    hw_breakpoint_update_all(cpu);
+    hw_watchpoint_update_all(cpu);
+    arm_rebuild_hflags(env);
+}
+
+static void tcg_cpu_accel_class_init(ObjectClass *oc, void *data)
+{
+    AccelCPUClass *acc = ACCEL_CPU_CLASS(oc);
+
+#ifndef CONFIG_USER_ONLY
+    acc->cpu_realizefn = tcg_cpu_realizefn;
+#endif /* CONFIG_USER_ONLY */
+
+    acc->cpu_instance_init = tcg_cpu_instance_init;
+    acc->cpu_reset = tcg_cpu_reset;
+}
+static const TypeInfo tcg_cpu_accel_type_info = {
+    .name = ACCEL_CPU_NAME("tcg"),
+
+    .parent = TYPE_ACCEL_CPU,
+    .class_init = tcg_cpu_accel_class_init,
+    .abstract = true,
+};
+static void tcg_cpu_accel_register_types(void)
+{
+    type_register_static(&tcg_cpu_accel_type_info);
+}
+type_init(tcg_cpu_accel_register_types);
