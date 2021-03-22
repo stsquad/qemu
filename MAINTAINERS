@@ -398,7 +398,7 @@ ARM KVM CPUs
 M: Peter Maydell <peter.maydell@linaro.org>
 L: qemu-arm@nongnu.org
 S: Maintained
-F: target/arm/kvm.c
+F: target/arm/kvm/kvm.c
 
 MIPS KVM CPUs
 M: Huacai Chen <chenhuacai@kernel.org>
