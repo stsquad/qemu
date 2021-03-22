@@ -454,7 +454,7 @@ build-user-centos7:
     job: amd64-centos7-container
   variables:
     IMAGE: centos7
-    CONFIGURE_ARGS: --disable-system --disable-tools --disable-docs
+    CONFIGURE_ARGS: --disable-system --disable-tools
     MAKE_CHECK_ARGS: check-tcg
 
 build-some-softmmu-plugins:
