@@ -19,6 +19,7 @@
 #include "qemu-common.h"
 #include "qapi/error.h"
 #include "cpu.h"
+#include "cpu-exceptions-aa64.h"
 #include "qemu/timer.h"
 #include "qemu/error-report.h"
 #include "qemu/host-utils.h"
