@@ -23,7 +23,6 @@
 #include "target/arm/idau.h"
 #include "qapi/error.h"
 #include "cpu.h"
-#include "cpu-sve.h"
 #include "cpregs.h"
 
 #ifdef CONFIG_TCG
@@ -815,40 +814,6 @@ static void arm_cpu_finalizefn(Object *obj)
 #endif
 }
 
-void arm_cpu_finalize_features(ARMCPU *cpu, Error **errp)
-{
-    Error *local_err = NULL;
-
-#ifdef TARGET_AARCH64
-    if (arm_feature(&cpu->env, ARM_FEATURE_AARCH64)) {
-        if (!cpu_sve_finalize_features(cpu, &local_err)) {
-            error_propagate(errp, local_err);
-            return;
-        }
-
-        /*
-         * KVM does not support modifications to this feature.
-         * We have not registered the cpu properties when KVM
-         * is in use, so the user will not be able to set them.
-         */
-        if (tcg_enabled()) {
-            if (!cpu_pauth_finalize(cpu, &local_err)) {
-                error_propagate(errp, local_err);
-                return;
-            }
-        }
-    }
-#endif /* TARGET_AARCH64 */
-
-    if (kvm_enabled()) {
-        kvm_arm_steal_time_finalize(cpu, &local_err);
-        if (local_err != NULL) {
-            error_propagate(errp, local_err);
-            return;
-        }
-    }
-}
-
 static void arm_cpu_realizefn(DeviceState *dev, Error **errp)
 {
     CPUState *cs = CPU(dev);
@@ -871,22 +836,22 @@ static void arm_cpu_realizefn(DeviceState *dev, Error **errp)
         return;
     }
 
-    arm_cpu_finalize_features(cpu, &local_err);
-    if (local_err != NULL) {
-        error_propagate(errp, local_err);
-        return;
+#ifdef TARGET_AARCH64
+    if (arm_feature(env, ARM_FEATURE_AARCH64)) {
+        if (!aarch64_cpu_finalize_features(cpu, errp)) {
+            return;
+        }
+        if (cpu->has_vfp != cpu->has_neon) {
+            /*
+             * This is an architectural requirement for AArch64; AArch32 is
+             * more flexible and permits VFP-no-Neon and Neon-no-VFP.
+             */
+            error_setg(errp,
+                       "AArch64 CPUs must have both VFP and Neon or neither");
+            return;
+        }
     }
-
-    if (arm_feature(env, ARM_FEATURE_AARCH64) &&
-        cpu->has_vfp != cpu->has_neon) {
-        /*
-         * This is an architectural requirement for AArch64; AArch32 is
-         * more flexible and permits VFP-no-Neon and Neon-no-VFP.
-         */
-        error_setg(errp,
-                   "AArch64 CPUs must have both VFP and Neon or neither");
-        return;
-    }
+#endif /* TARGET_AARCH64 */
 
     if (!cpu->has_vfp) {
         uint64_t t;

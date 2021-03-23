@@ -275,7 +275,7 @@ void kvm_arm_add_vcpu_properties(Object *obj);
  * Validate the kvm-steal-time property selection and set its default
  * based on KVM support and guest configuration.
  */
-void kvm_arm_steal_time_finalize(ARMCPU *cpu, Error **errp);
+bool kvm_arm_steal_time_finalize(ARMCPU *cpu, Error **errp);
 
 /**
  * kvm_arm_steal_time_supported:
@@ -436,9 +436,10 @@ static inline void kvm_arm_pvtime_init(CPUState *cs, uint64_t ipa)
     g_assert_not_reached();
 }
 
-static inline void kvm_arm_steal_time_finalize(ARMCPU *cpu, Error **errp)
+static inline bool kvm_arm_steal_time_finalize(ARMCPU *cpu, Error **errp)
 {
     g_assert_not_reached();
+    return false;
 }
 
 static inline void kvm_arm_sve_get_vls(CPUState *cs, unsigned long *map)
