@@ -88,7 +88,7 @@ static void host_cpu_instance_init(Object *obj)
 
     kvm_arm_set_cpu_features_from_host(cpu);
     if (arm_feature(&cpu->env, ARM_FEATURE_AARCH64)) {
-        aarch64_add_sve_properties(obj);
+        cpu_sve_add_props(obj);
     }
     arm_cpu_post_init(obj);
 }
