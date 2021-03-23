@@ -21,10 +21,8 @@
 #include "cpu.h"
 #include "exec/helper-proto.h"
 #include "internals.h"
-#ifdef CONFIG_TCG
 #include "qemu/log.h"
 #include "fpu/softfloat.h"
-#endif
 
 /* VFP support.  We follow the convention used for VFP instructions:
    Single precision routines have a "s" suffix, double precision a
@@ -39,8 +37,6 @@ void HELPER(vfp_set_fpscr)(CPUARMState *env, uint32_t val)
 {
     vfp_set_fpscr(env, val);
 }
-
-#ifdef CONFIG_TCG
 
 #define VFP_HELPER(name, p) HELPER(glue(glue(vfp_,name),p))
 
@@ -1110,5 +1106,3 @@ void HELPER(check_hcr_el2_trap)(CPUARMState *env, uint32_t rt, uint32_t reg)
 
     raise_exception(env, EXCP_HYP_TRAP, syndrome, 2);
 }
-
-#endif
