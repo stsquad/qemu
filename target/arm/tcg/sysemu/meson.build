@@ -4,4 +4,5 @@ arm_softmmu_ss.add(when: ['CONFIG_TCG','CONFIG_SOFTMMU'], if_true: files(
   'debug_helper.c',
   'tlb_helper.c',
   'm_helper.c',
+  'tcg-cpu.c',
 ))
