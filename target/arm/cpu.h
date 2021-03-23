@@ -997,6 +997,9 @@ struct ARMCPU {
 
     /* Generic timer counter frequency, in Hz */
     uint64_t gt_cntfrq_hz;
+
+    /* MAX features requested via cpu="max" */
+    bool max_features;
 };
 
 unsigned int gt_cntfrq_period_ns(ARMCPU *cpu);
