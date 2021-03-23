@@ -8,6 +8,7 @@
 
 #include "qemu/osdep.h"
 #include "cpu.h"
+#include "cpu-exceptions-aa64.h"
 #include "internals.h"
 #include "exec/gdbstub.h"
 #include "exec/helper-proto.h"

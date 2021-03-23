@@ -25,6 +25,11 @@ arm_softmmu_ss.add(files(
   'monitor.c',
   'cpu-sysemu.c',
   'cpu-mmu-sysemu.c',
+  'cpu-exceptions.c',
+))
+
+arm_softmmu_ss.add(when: 'TARGET_AARCH64', if_true: files(
+  'cpu-exceptions-aa64.c'
 ))
 
 arm_softmmu_ss.add(when: 'CONFIG_TCG', if_true: files(
