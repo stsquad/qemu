@@ -7,6 +7,7 @@ arm_ss.add(files(
   'cpregs.c',
   'cpustate-list.c',
   'cpu-common.c',
+  'cpu-vfp.c',
 ))
 arm_ss.add(zlib)
 
