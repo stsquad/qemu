@@ -9,6 +9,7 @@
 #include "cpu.h"
 #include "internals.h"
 #include "exec/exec-all.h"
+#include "cpu-mmu.h"
 #include "tcg/tlb_helper.h"
 
 /*
