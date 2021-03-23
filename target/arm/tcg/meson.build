@@ -39,6 +39,7 @@ arm_ss.add(when: ['TARGET_AARCH64', 'CONFIG_TCG'], if_true: files(
   'mte_helper.c',
   'pauth_helper.c',
   'sve_helper.c',
+  'cpu-sve.c',
 ))
 
 subdir('user')
