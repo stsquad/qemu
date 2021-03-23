@@ -6,6 +6,7 @@ arm_ss.add(files(
   'cpu-mmu.c',
   'cpregs.c',
   'cpustate-list.c',
+  'cpu-common.c',
 ))
 arm_ss.add(zlib)
 
