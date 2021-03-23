@@ -17,6 +17,7 @@ arm_ss.add(when: 'CONFIG_TCG', if_true: gen)
 arm_ss.add(when: 'CONFIG_TCG', if_true: files(
   'translate.c',
   'helper.c',
+  'cpregs.c',
   'iwmmxt_helper.c',
   'm_helper.c',
   'neon_helper.c',

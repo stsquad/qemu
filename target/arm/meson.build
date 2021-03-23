@@ -4,6 +4,8 @@ arm_ss.add(files(
   'gdbstub.c',
   'cpu_tcg.c',
   'cpu-mmu.c',
+  'cpregs.c',
+  'cpustate-list.c',
 ))
 arm_ss.add(zlib)
 
