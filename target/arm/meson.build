@@ -19,6 +19,7 @@ arm_softmmu_ss.add(files(
   'arm-powerctl.c',
   'machine.c',
   'monitor.c',
+  'cpu-sysemu.c',
 ))
 
 arm_softmmu_ss.add(when: 'CONFIG_TCG', if_true: files(
