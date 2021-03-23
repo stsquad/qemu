@@ -20,6 +20,7 @@
 #include "qemu/osdep.h"
 #include "qemu/units.h"
 #include "cpu.h"
+#include "tcg/cpu-sve.h"
 #include "cpu-exceptions-aa64.h"
 #include "exec/gdbstub.h"
 #include "exec/helper-proto.h"
