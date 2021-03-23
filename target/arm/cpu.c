@@ -42,6 +42,7 @@
 #include "disas/capstone.h"
 #include "fpu/softfloat.h"
 #include "cpu-mmu.h"
+#include "qemu/accel.h"
 
 static void arm_cpu_set_pc(CPUState *cs, vaddr value)
 {
@@ -409,11 +410,6 @@ static void arm_cpu_reset(DeviceState *dev)
                               &env->vfp.fp_status_f16);
     set_float_detect_tininess(float_tininess_before_rounding,
                               &env->vfp.standard_fp_status_f16);
-#ifndef CONFIG_USER_ONLY
-    if (kvm_enabled()) {
-        kvm_arm_reset_vcpu(cpu);
-    }
-#endif
 
     if (tcg_enabled()) {
         hw_breakpoint_update_all(cpu);
@@ -560,12 +556,6 @@ static void arm_cpu_initfn(Object *obj)
 
 #ifndef CONFIG_USER_ONLY
     /* Our inbound IRQ and FIQ lines */
-    if (kvm_enabled()) {
-        /* VIRQ and VFIQ are unused with KVM but we add them to maintain
-         * the same interface as non-KVM CPUs.
-         */
-        qdev_init_gpio_in(DEVICE(cpu), arm_cpu_kvm_set_irq, 4);
-    }
     if (tcg_enabled() || qtest_enabled()) {
         qdev_init_gpio_in(DEVICE(cpu), arm_cpu_set_irq, 4);
     }
@@ -810,6 +800,9 @@ void arm_cpu_post_init(Object *obj)
         }
     }
 #endif
+
+    /* if required, do accelerator-specific cpu initializations */
+    accel_cpu_instance_init(CPU(obj));
 }
 
 static void arm_cpu_finalizefn(Object *obj)
@@ -879,16 +872,13 @@ static void arm_cpu_realizefn(DeviceState *dev, Error **errp)
     Error *local_err = NULL;
     bool no_aa32 = false;
 
-    /* If we needed to query the host kernel for the CPU features
+    /*
+     * If we needed to query the host kernel for the CPU features
      * then it's possible that might have failed in the initfn, but
      * this is the first point where we can report it.
      */
     if (cpu->host_cpu_probe_failed) {
-        if (!kvm_enabled()) {
-            error_setg(errp, "The 'host' CPU type can only be used with KVM");
-        } else {
-            error_setg(errp, "Failed to retrieve host CPU features");
-        }
+        error_setg(errp, "The 'host' CPU type can only be used with KVM");
         return;
     }
 
@@ -1478,26 +1468,6 @@ static void arm_cpu_class_init(ObjectClass *oc, void *data)
     arm32_cpu_class_init(oc, data);
 }
 
-#ifdef CONFIG_KVM
-static void arm_host_initfn(Object *obj)
-{
-    ARMCPU *cpu = ARM_CPU(obj);
-
-    kvm_arm_set_cpu_features_from_host(cpu);
-    if (arm_feature(&cpu->env, ARM_FEATURE_AARCH64)) {
-        aarch64_add_sve_properties(obj);
-    }
-    arm_cpu_post_init(obj);
-}
-
-static const TypeInfo host_arm_cpu_type_info = {
-    .name = TYPE_ARM_HOST_CPU,
-    .parent = TYPE_AARCH64_CPU,
-    .instance_init = arm_host_initfn,
-};
-
-#endif
-
 static const TypeInfo arm_cpu_type_info = {
     .name = TYPE_ARM_CPU,
     .parent = TYPE_CPU,
@@ -1520,10 +1490,6 @@ static void arm_cpu_register_types(void)
 {
     type_register_static(&arm_cpu_type_info);
     type_register_static(&idau_interface_type_info);
-
-#ifdef CONFIG_KVM
-    type_register_static(&host_arm_cpu_type_info);
-#endif
 }
 
 type_init(arm_cpu_register_types)
