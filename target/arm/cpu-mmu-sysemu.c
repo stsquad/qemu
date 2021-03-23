@@ -787,7 +787,6 @@ static bool check_s2_mmu_setup(ARMCPU *cpu, bool is_aa64, int level,
     }
 
     if (is_aa64) {
-        CPUARMState *env = &cpu->env;
         unsigned int pamax = arm_pamax(cpu);
 
         switch (stride) {
@@ -812,7 +811,7 @@ static bool check_s2_mmu_setup(ARMCPU *cpu, bool is_aa64, int level,
 
         /* Inputsize checks.  */
         if (inputsize > pamax &&
-            (arm_el_is_aa64(env, 1) || inputsize > 40)) {
+            (arm_el_is_aa64(&cpu->env, 1) || inputsize > 40)) {
             /* This is CONSTRAINED UNPREDICTABLE and we choose to fault.  */
             return false;
         }
@@ -967,9 +966,8 @@ static bool get_phys_addr_lpae(CPUARMState *env, uint64_t address,
     int addrsize, inputsize;
     TCR *tcr = regime_tcr(env, mmu_idx);
     int ap, ns, xn, pxn;
-    uint32_t el = regime_el(env, mmu_idx);
     uint64_t descaddrmask;
-    bool aarch64 = arm_el_is_aa64(env, el);
+    bool aarch64 = arm_el_is_aa64(env, regime_el(env, mmu_idx));
     bool guarded = false;
 
     /* TODO: This code does not support shareability levels. */
