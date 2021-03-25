@@ -1380,7 +1380,9 @@ static const struct SysemuCPUOps arm_sysemu_ops = {
     .get_phys_page_attrs_debug = arm_cpu_get_phys_page_attrs_debug,
     .asidx_from_attrs = arm_asidx_from_attrs,
     .write_elf32_note = arm_cpu_write_elf32_note,
+#ifdef TARGET_AARCH64
     .write_elf64_note = arm_cpu_write_elf64_note,
+#endif
     .virtio_is_big_endian = arm_cpu_virtio_is_big_endian,
     .legacy_vmsd = &vmstate_arm_cpu,
 };
