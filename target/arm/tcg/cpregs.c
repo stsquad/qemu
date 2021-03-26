@@ -5814,7 +5814,7 @@ static void zcr_write(CPUARMState *env, const ARMCPRegInfo *ri,
      */
     new_len = sve_zcr_len_for_el(env, cur_el);
     if (new_len < old_len) {
-        aarch64_sve_narrow_vq(env, new_len + 1);
+        tcg_sve_narrow_vq(env, new_len + 1);
     }
 }
 
