@@ -28,6 +28,10 @@
 #include "sysemu/tcg.h"
 #include "tcg/tcg-cpu.h"
 
+#ifdef CONFIG_TCG
+#include "tcg/tcg-cpu.h"
+#endif /* CONFIG_TCG */
+
 void arm_cpu_set_irq(void *opaque, int irq, int level)
 {
     ARMCPU *cpu = opaque;
