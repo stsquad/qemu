@@ -95,7 +95,7 @@ bool tcg_sve_validate_lens(unsigned long *sve_vq_map, uint32_t max_vq,
  * may well be cheaper than conditionals to restrict the operation
  * to the relevant portion of a uint16_t[16].
  */
-void aarch64_sve_narrow_vq(CPUARMState *env, unsigned vq)
+void tcg_sve_narrow_vq(CPUARMState *env, unsigned vq)
 {
     int i, j;
     uint64_t pmask;
@@ -124,7 +124,7 @@ void aarch64_sve_narrow_vq(CPUARMState *env, unsigned vq)
 /*
  * Notice a change in SVE vector size when changing EL.
  */
-void aarch64_sve_change_el(CPUARMState *env, int old_el,
+void tcg_sve_change_el(CPUARMState *env, int old_el,
                            int new_el, bool el0_a64)
 {
     ARMCPU *cpu = env_archcpu(env);
@@ -162,6 +162,6 @@ void aarch64_sve_change_el(CPUARMState *env, int old_el,
 
     /* When changing vector length, clear inaccessible state.  */
     if (new_len < old_len) {
-        aarch64_sve_narrow_vq(env, new_len + 1);
+        tcg_sve_narrow_vq(env, new_len + 1);
     }
 }
