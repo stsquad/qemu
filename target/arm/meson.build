@@ -18,10 +18,6 @@ arm_ss.add(when: 'TARGET_AARCH64', if_true: files(
   'gdbstub64.c',
 ))
 
-arm_ss.add(when: 'CONFIG_TCG', if_true: files(
-  'cpu_tcg.c',
-))
-
 arm_softmmu_ss = ss.source_set()
 arm_softmmu_ss.add(files(
   'arch_dump.c',
