@@ -28,6 +28,7 @@ arm_ss.add(when: 'CONFIG_TCG', if_true: files(
   'vfp_helper.c',
   'crypto_helper.c',
   'debug_helper.c',
+  'tcg-cpu.c',
 
 ), if_false: files(
   'helper-stubs.c',
