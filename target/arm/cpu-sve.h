@@ -34,4 +34,7 @@ void cpu_sve_add_props(Object *obj);
 /* add the CPU SVE properties specific to the "MAX" CPU */
 void cpu_sve_add_props_max(Object *obj);
 
+/* return the vector length for EL */
+uint32_t sve_zcr_len_for_el(CPUARMState *env, int el);
+
 #endif /* CPU_SVE_H */
