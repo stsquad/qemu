@@ -16,6 +16,10 @@
 #include "cpu-mmu.h"
 #include "cpregs.h"
 
+#ifdef TARGET_AARCH64
+#include "tcg/tcg-sve.h"
+#endif /* TARGET_AARCH64 */
+
 #define ARM_CPU_FREQ 1000000000 /* FIXME: 1 GHz, should be configurable */
 #define PMCR_NUM_COUNTERS 4 /* QEMU IMPDEF choice */
 
