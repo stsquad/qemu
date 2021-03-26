@@ -54,6 +54,46 @@ void tcg_handle_semihosting(CPUState *cs)
     }
 }
 
+/*
+ * we cannot use tcg_enabled() to condition the call to this function,
+ * due to the fields VMSTATE definitions in machine.c : it would break
+ * the --enable-tcg --enable-kvm build. We need to run this code whenever
+ * CONFIG_TCG is true, regardless of the chosen accelerator.
+ *
+ * So we cannot call this from tcg_cpu_realizefn, as this needs to
+ * be called whenever TCG is built-in, regardless of whether it is
+ * enabled or not.
+ */
+bool tcg_cpu_realize_gt_timers(CPUState *cs, Error **errp)
+{
+    ARMCPU *cpu = ARM_CPU(cs);
+    CPUARMState *env = &cpu->env;
+    uint64_t scale;
+
+    if (arm_feature(env, ARM_FEATURE_GENERIC_TIMER)) {
+        if (!cpu->gt_cntfrq_hz) {
+            error_setg(errp, "Invalid CNTFRQ: %"PRId64"Hz",
+                       cpu->gt_cntfrq_hz);
+            return false;
+        }
+        scale = gt_cntfrq_period_ns(cpu);
+    } else {
+        scale = GTIMER_SCALE;
+    }
+
+    cpu->gt_timer[GTIMER_PHYS] = timer_new(QEMU_CLOCK_VIRTUAL, scale,
+                                           arm_gt_ptimer_cb, cpu);
+    cpu->gt_timer[GTIMER_VIRT] = timer_new(QEMU_CLOCK_VIRTUAL, scale,
+                                           arm_gt_vtimer_cb, cpu);
+    cpu->gt_timer[GTIMER_HYP] = timer_new(QEMU_CLOCK_VIRTUAL, scale,
+                                          arm_gt_htimer_cb, cpu);
+    cpu->gt_timer[GTIMER_SEC] = timer_new(QEMU_CLOCK_VIRTUAL, scale,
+                                          arm_gt_stimer_cb, cpu);
+    cpu->gt_timer[GTIMER_HYPVIRT] = timer_new(QEMU_CLOCK_VIRTUAL, scale,
+                                              arm_gt_hvtimer_cb, cpu);
+    return true;
+}
+
 bool tcg_cpu_realizefn(CPUState *cs, Error **errp)
 {
     ARMCPU *cpu = ARM_CPU(cs);
