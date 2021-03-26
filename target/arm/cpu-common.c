@@ -8,6 +8,7 @@
 
 #include "qemu/osdep.h"
 #include "qemu/log.h"
+#include "qemu/qemu-print.h"
 #include "qom/object.h"
 #include "qapi/qapi-commands-machine-target.h"
 #include "qapi/error.h"
@@ -356,4 +357,45 @@ uint64_t arm_sctlr(CPUARMState *env, int el)
 #endif /* TARGET_AARCH64 */
     }
     return env->cp15.sctlr_el[el];
+}
+
+/* Sort alphabetically by type name, except for "any". */
+static gint arm_cpu_list_compare(gconstpointer a, gconstpointer b)
+{
+    ObjectClass *class_a = (ObjectClass *)a;
+    ObjectClass *class_b = (ObjectClass *)b;
+    const char *name_a, *name_b;
+
+    name_a = object_class_get_name(class_a);
+    name_b = object_class_get_name(class_b);
+    if (strcmp(name_a, "any-" TYPE_ARM_CPU) == 0) {
+        return 1;
+    } else if (strcmp(name_b, "any-" TYPE_ARM_CPU) == 0) {
+        return -1;
+    } else {
+        return strcmp(name_a, name_b);
+    }
+}
+
+static void arm_cpu_list_entry(gpointer data, gpointer user_data)
+{
+    ObjectClass *oc = data;
+    const char *typename;
+    char *name;
+
+    typename = object_class_get_name(oc);
+    name = g_strndup(typename, strlen(typename) - strlen("-" TYPE_ARM_CPU));
+    qemu_printf("  %s\n", name);
+    g_free(name);
+}
+
+void arm_cpu_list(void)
+{
+    GSList *list;
+
+    list = object_class_get_list(TYPE_ARM_CPU, false);
+    list = g_slist_sort(list, arm_cpu_list_compare);
+    qemu_printf("Available CPUs:\n");
+    g_slist_foreach(list, arm_cpu_list_entry, NULL);
+    g_slist_free(list);
 }
