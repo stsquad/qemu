@@ -1092,11 +1092,7 @@ static inline void aarch64_sve_change_el(CPUARMState *env, int o,
 
 #endif /* TARGET_AARCH64 */
 
-void aarch64_sync_32_to_64(CPUARMState *env);
-void aarch64_sync_64_to_32(CPUARMState *env);
-
 int fp_exception_el(CPUARMState *env, int cur_el);
-int sve_exception_el(CPUARMState *env, int cur_el);
 uint32_t sve_zcr_len_for_el(CPUARMState *env, int el);
 
 /* you can call this signal handler from your SIGBUS and SIGSEGV

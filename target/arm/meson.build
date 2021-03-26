@@ -21,10 +21,15 @@ arm_softmmu_ss = ss.source_set()
 arm_softmmu_ss.add(files(
   'arch_dump.c',
   'arm-powerctl.c',
+  'cpu-exceptions.c',
   'cpu-mmu-sysemu.c',
   'cpu-sysemu.c',
   'machine.c',
   'monitor.c',
+))
+
+arm_softmmu_ss.add(when: 'TARGET_AARCH64', if_true: files(
+  'cpu-exceptions-aa64.c'
 ))
 
 arm_softmmu_ss.add(when: 'CONFIG_TCG', if_true: files(

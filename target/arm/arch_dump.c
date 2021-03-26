@@ -20,6 +20,7 @@
 
 #include "qemu/osdep.h"
 #include "cpu.h"
+#include "cpu-exceptions-aa64.h"
 #include "elf.h"
 #include "sysemu/dump.h"
 
