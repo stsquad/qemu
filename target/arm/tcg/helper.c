@@ -19,6 +19,10 @@
 #include "cpregs.h"
 #include "tcg-cpu.h"
 
+#ifdef TARGET_AARCH64
+#include "cpu-sve.h"
+#endif /* TARGET_AARCH64 */
+
 static int vfp_gdb_get_reg(CPUARMState *env, GByteArray *buf, int reg)
 {
     ARMCPU *cpu = env_archcpu(env);
