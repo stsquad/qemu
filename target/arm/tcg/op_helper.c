@@ -20,6 +20,7 @@
 #include "qemu/log.h"
 #include "qemu/main-loop.h"
 #include "cpu.h"
+#include "cpregs.h"
 #include "exec/helper-proto.h"
 #include "internals.h"
 #include "exec/exec-all.h"
