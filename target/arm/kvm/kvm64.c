@@ -677,7 +677,7 @@ bool kvm_arm_get_host_cpu_features(ARMHostCPUFeatures *ahcf)
     return true;
 }
 
-void kvm_arm_steal_time_finalize(ARMCPU *cpu, Error **errp)
+bool kvm_arm_steal_time_finalize(ARMCPU *cpu, Error **errp)
 {
     bool has_steal_time = kvm_arm_steal_time_supported();
 
@@ -691,7 +691,7 @@ void kvm_arm_steal_time_finalize(ARMCPU *cpu, Error **errp)
         if (!has_steal_time) {
             error_setg(errp, "'kvm-steal-time' cannot be enabled "
                              "on this host");
-            return;
+            return false;
         } else if (!arm_feature(&cpu->env, ARM_FEATURE_AARCH64)) {
             /*
              * DEN0057A chapter 2 says "This specification only covers
@@ -702,9 +702,10 @@ void kvm_arm_steal_time_finalize(ARMCPU *cpu, Error **errp)
              */
             error_setg(errp, "'kvm-steal-time' cannot be enabled "
                              "for AArch32 guests");
-            return;
+            return false;
         }
     }
+    return true;
 }
 
 bool kvm_arm_aarch32_supported(void)
