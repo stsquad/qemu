@@ -21,6 +21,7 @@
 #include "qemu/osdep.h"
 #include "qemu/log.h"
 #include "cpu.h"
+#include "tcg/tcg-sve.h"
 #include "internals.h"
 #include "sysemu/tcg.h"
 
