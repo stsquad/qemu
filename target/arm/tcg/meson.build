@@ -32,6 +32,7 @@ arm_ss.add(when: 'CONFIG_TCG', if_true: files(
   'crypto_helper.c',
   'debug_helper.c',
   'tcg-cpu.c',
+  'tcg-cpu-models.c',
 
 ), if_false: files(
   'tcg-stubs.c',
