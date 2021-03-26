@@ -636,6 +636,10 @@ static void aarch64_cpu_class_init(ObjectClass *oc, void *data)
     cc->gdb_arch_name = aarch64_gdb_arch_name;
     cc->dump_state = arm_cpu_dump_state;
 
+#ifndef CONFIG_USER_ONLY
+    cc->write_elf64_note = arm_cpu_write_elf64_note;
+#endif /* !CONFIG_USER_ONLY */
+
     object_class_property_add_bool(oc, "aarch64", aarch64_cpu_get_aarch64,
                                    aarch64_cpu_set_aarch64);
     object_class_property_set_description(oc, "aarch64",
