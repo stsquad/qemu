@@ -17,6 +17,7 @@
 #include "cpregs.h"
 
 #ifdef TARGET_AARCH64
+#include "cpu-sve.h"
 #include "tcg/tcg-sve.h"
 #endif /* TARGET_AARCH64 */
 
