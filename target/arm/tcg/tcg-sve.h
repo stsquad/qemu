@@ -23,9 +23,9 @@ bool tcg_sve_validate_lens(unsigned long *sve_vq_map, uint32_t max_vq,
 
 /* tcg/helper.c */
 
-void aarch64_sve_narrow_vq(CPUARMState *env, unsigned vq);
+void tcg_sve_narrow_vq(CPUARMState *env, unsigned vq);
 
-void aarch64_sve_change_el(CPUARMState *env, int old_el,
+void tcg_sve_change_el(CPUARMState *env, int old_el,
                            int new_el, bool el0_a64);
 
 #endif /* TCG_SVE_H */
