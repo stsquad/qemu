@@ -23,7 +23,11 @@
 #include "target/arm/idau.h"
 #include "qapi/error.h"
 #include "cpu.h"
+
+#ifdef TARGET_AARCH64
 #include "cpu-sve.h"
+#endif /* TARGET_AARCH64 */
+
 #include "cpregs.h"
 
 #ifdef CONFIG_TCG
