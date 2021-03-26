@@ -24,6 +24,7 @@
 #include "sysemu/dump.h"
 
 #ifdef TARGET_AARCH64
+#include "cpu-sve.h"
 
 /* struct user_pt_regs from arch/arm64/include/uapi/asm/ptrace.h */
 struct aarch64_user_regs {
