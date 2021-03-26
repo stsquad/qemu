@@ -2693,14 +2693,16 @@ typedef struct ARMCPRegInfo ARMCPRegInfo;
 typedef enum CPAccessResult {
     /* Access is permitted */
     CP_ACCESS_OK = 0,
-    /* Access fails due to a configurable trap or enable which would
+    /*
+     * Access fails due to a configurable trap or enable which would
      * result in a categorized exception syndrome giving information about
      * the failing instruction (ie syndrome category 0x3, 0x4, 0x5, 0x6,
      * 0xc or 0x18). The exception is taken to the usual target EL (EL1 or
      * PL1 if in EL0, otherwise to the current EL).
      */
     CP_ACCESS_TRAP = 1,
-    /* Access fails and results in an exception syndrome 0x0 ("uncategorized").
+    /*
+     * Access fails and results in an exception syndrome 0x0 ("uncategorized").
      * Note that this is not a catch-all case -- the set of cases which may
      * result in this failure is specifically defined by the architecture.
      */
@@ -2711,14 +2713,16 @@ typedef enum CPAccessResult {
     /* As CP_ACCESS_UNCATEGORIZED, but for traps directly to EL2 or EL3 */
     CP_ACCESS_TRAP_UNCATEGORIZED_EL2 = 5,
     CP_ACCESS_TRAP_UNCATEGORIZED_EL3 = 6,
-    /* Access fails and results in an exception syndrome for an FP access,
+    /*
+     * Access fails and results in an exception syndrome for an FP access,
      * trapped directly to EL2 or EL3
      */
     CP_ACCESS_TRAP_FP_EL2 = 7,
     CP_ACCESS_TRAP_FP_EL3 = 8,
 } CPAccessResult;
 
-/* Access functions for coprocessor registers. These cannot fail and
+/*
+ * Access functions for coprocessor registers. These cannot fail and
  * may not raise exceptions.
  */
 typedef uint64_t CPReadFn(CPUARMState *env, const ARMCPRegInfo *opaque);
@@ -2737,7 +2741,8 @@ typedef void CPResetFn(CPUARMState *env, const ARMCPRegInfo *opaque);
 struct ARMCPRegInfo {
     /* Name of register (useful mainly for debugging, need not be unique) */
     const char *name;
-    /* Location of register: coprocessor number and (crn,crm,opc1,opc2)
+    /*
+     * Location of register: coprocessor number and (crn,crm,opc1,opc2)
      * tuple. Any of crm, opc1 and opc2 may be CP_ANY to indicate a
      * 'wildcard' field -- any value of that field in the MRC/MCR insn
      * will be decoded to this register. The register read and write
@@ -2768,16 +2773,19 @@ struct ARMCPRegInfo {
     int access;
     /* Security state: ARM_CP_SECSTATE_* bits/values */
     int secure;
-    /* The opaque pointer passed to define_arm_cp_regs_with_opaque() when
+    /*
+     * The opaque pointer passed to define_arm_cp_regs_with_opaque() when
      * this register was defined: can be used to hand data through to the
      * register read/write functions, since they are passed the ARMCPRegInfo*.
      */
     void *opaque;
-    /* Value of this register, if it is ARM_CP_CONST. Otherwise, if
+    /*
+     * Value of this register, if it is ARM_CP_CONST. Otherwise, if
      * fieldoffset is non-zero, the reset value of the register.
      */
     uint64_t resetvalue;
-    /* Offset of the field in CPUARMState for this register.
+    /*
+     * Offset of the field in CPUARMState for this register.
      *
      * This is not needed if either:
      *  1. type is ARM_CP_CONST or one of the ARM_CP_SPECIALs
@@ -2785,7 +2793,8 @@ struct ARMCPRegInfo {
      */
     ptrdiff_t fieldoffset; /* offsetof(CPUARMState, field) */
 
-    /* Offsets of the secure and non-secure fields in CPUARMState for the
+    /*
+     * Offsets of the secure and non-secure fields in CPUARMState for the
      * register if it is banked.  These fields are only used during the static
      * registration of a register.  During hashing the bank associated
      * with a given security state is copied to fieldoffset which is used from
@@ -2798,36 +2807,42 @@ struct ARMCPRegInfo {
      */
     ptrdiff_t bank_fieldoffsets[2];
 
-    /* Function for making any access checks for this register in addition to
+    /*
+     * Function for making any access checks for this register in addition to
      * those specified by the 'access' permissions bits. If NULL, no extra
      * checks required. The access check is performed at runtime, not at
      * translate time.
      */
     CPAccessFn *accessfn;
-    /* Function for handling reads of this register. If NULL, then reads
+    /*
+     * Function for handling reads of this register. If NULL, then reads
      * will be done by loading from the offset into CPUARMState specified
      * by fieldoffset.
      */
     CPReadFn *readfn;
-    /* Function for handling writes of this register. If NULL, then writes
+    /*
+     * Function for handling writes of this register. If NULL, then writes
      * will be done by writing to the offset into CPUARMState specified
      * by fieldoffset.
      */
     CPWriteFn *writefn;
-    /* Function for doing a "raw" read; used when we need to copy
+    /*
+     * Function for doing a "raw" read; used when we need to copy
      * coprocessor state to the kernel for KVM or out for
      * migration. This only needs to be provided if there is also a
      * readfn and it has side effects (for instance clear-on-read bits).
      */
     CPReadFn *raw_readfn;
-    /* Function for doing a "raw" write; used when we need to copy KVM
+    /*
+     * Function for doing a "raw" write; used when we need to copy KVM
      * kernel coprocessor state into userspace, or for inbound
      * migration. This only needs to be provided if there is also a
      * writefn and it masks out "unwritable" bits or has write-one-to-clear
      * or similar behaviour.
      */
     CPWriteFn *raw_writefn;
-    /* Function for resetting the register. If NULL, then reset will be done
+    /*
+     * Function for resetting the register. If NULL, then reset will be done
      * by writing resetvalue to the field specified in fieldoffset. If
      * fieldoffset is 0 then no reset will be done.
      */
@@ -2847,7 +2862,8 @@ struct ARMCPRegInfo {
     CPWriteFn *orig_writefn;
 };
 
-/* Macros which are lvalues for the field in CPUARMState for the
+/*
+ * Macros which are lvalues for the field in CPUARMState for the
  * ARMCPRegInfo *ri.
  */
 #define CPREG_FIELD32(env, ri) \
@@ -2901,12 +2917,14 @@ void arm_cp_write_ignore(CPUARMState *env, const ARMCPRegInfo *ri,
 /* CPReadFn that can be used for read-as-zero behaviour */
 uint64_t arm_cp_read_zero(CPUARMState *env, const ARMCPRegInfo *ri);
 
-/* CPResetFn that does nothing, for use if no reset is required even
+/*
+ * CPResetFn that does nothing, for use if no reset is required even
  * if fieldoffset is non zero.
  */
 void arm_cp_reset_ignore(CPUARMState *env, const ARMCPRegInfo *opaque);
 
-/* Return true if this reginfo struct's field in the cpu state struct
+/*
+ * Return true if this reginfo struct's field in the cpu state struct
  * is 64 bits wide.
  */
 static inline bool cpreg_field_is_64bit(const ARMCPRegInfo *ri)
