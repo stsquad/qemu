@@ -11,7 +11,7 @@
 #include "qemu/osdep.h"
 #include "cpu.h"
 #ifdef CONFIG_TCG
-#include "hw/core/tcg-cpu-ops.h"
+#include "tcg/tcg-cpu.h"
 #endif /* CONFIG_TCG */
 #include "internals.h"
 #include "target/arm/idau.h"
