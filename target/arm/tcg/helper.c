@@ -16,6 +16,7 @@
 #include "arm_ldst.h"
 #include "cpu-mmu.h"
 #include "cpregs.h"
+#include "tcg-cpu.h"
 
 static int vfp_gdb_get_reg(CPUARMState *env, GByteArray *buf, int reg)
 {
