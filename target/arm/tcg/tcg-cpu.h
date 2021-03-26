@@ -21,6 +21,12 @@
 #define ARM_TCG_CPU_H
 
 #include "cpu.h"
+#include "hw/core/tcg-cpu-ops.h"
+
+void arm_cpu_synchronize_from_tb(CPUState *cs,
+                                 const TranslationBlock *tb);
+
+extern struct TCGCPUOps arm_tcg_ops;
 
 #ifndef CONFIG_USER_ONLY
 /* Do semihosting call and set the appropriate return value. */
