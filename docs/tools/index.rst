@@ -18,3 +18,4 @@ Contents:
    virtfs-proxy-helper
    virtiofsd
    vhost-user-rpmb
+   vhost-user-i2c
