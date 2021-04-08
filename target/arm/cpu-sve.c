@@ -27,7 +27,7 @@
 #include "qapi/visitor.h"
 #include "cpu-sve.h"
 
-void arm_cpu_sve_finalize(ARMCPU *cpu, Error **errp)
+void cpu_sve_finalize_features(ARMCPU *cpu, Error **errp)
 {
     /*
      * If any vector lengths are explicitly enabled with sve<N> properties,
@@ -229,8 +229,8 @@ void arm_cpu_sve_finalize(ARMCPU *cpu, Error **errp)
     cpu->sve_max_vq = max_vq;
 }
 
-static void cpu_max_get_sve_max_vq(Object *obj, Visitor *v, const char *name,
-                                   void *opaque, Error **errp)
+static void get_prop_max_vq(Object *obj, Visitor *v, const char *name,
+                            void *opaque, Error **errp)
 {
     ARMCPU *cpu = ARM_CPU(obj);
     uint32_t value;
@@ -244,8 +244,8 @@ static void cpu_max_get_sve_max_vq(Object *obj, Visitor *v, const char *name,
     visit_type_uint32(v, name, &value, errp);
 }
 
-static void cpu_max_set_sve_max_vq(Object *obj, Visitor *v, const char *name,
-                                   void *opaque, Error **errp)
+static void set_prop_max_vq(Object *obj, Visitor *v, const char *name,
+                            void *opaque, Error **errp)
 {
     ARMCPU *cpu = ARM_CPU(obj);
     uint32_t max_vq;
@@ -276,8 +276,8 @@ static void cpu_max_set_sve_max_vq(Object *obj, Visitor *v, const char *name,
  * of the contents of "name" to determine which bit on which
  * to operate.
  */
-static void cpu_arm_get_sve_vq(Object *obj, Visitor *v, const char *name,
-                               void *opaque, Error **errp)
+static void get_prop_vq(Object *obj, Visitor *v, const char *name,
+                        void *opaque, Error **errp)
 {
     ARMCPU *cpu = ARM_CPU(obj);
     uint32_t vq = atoi(&name[3]) / 128;
@@ -292,8 +292,8 @@ static void cpu_arm_get_sve_vq(Object *obj, Visitor *v, const char *name,
     visit_type_bool(v, name, &value, errp);
 }
 
-static void cpu_arm_set_sve_vq(Object *obj, Visitor *v, const char *name,
-                               void *opaque, Error **errp)
+static void set_prop_vq(Object *obj, Visitor *v, const char *name,
+                        void *opaque, Error **errp)
 {
     ARMCPU *cpu = ARM_CPU(obj);
     uint32_t vq = atoi(&name[3]) / 128;
@@ -317,13 +317,13 @@ static void cpu_arm_set_sve_vq(Object *obj, Visitor *v, const char *name,
     set_bit(vq - 1, cpu->sve_vq_init);
 }
 
-static bool cpu_arm_get_sve(Object *obj, Error **errp)
+static bool get_prop_sve(Object *obj, Error **errp)
 {
     ARMCPU *cpu = ARM_CPU(obj);
     return cpu_isar_feature(aa64_sve, cpu);
 }
 
-static void cpu_arm_set_sve(Object *obj, bool value, Error **errp)
+static void set_prop_sve(Object *obj, bool value, Error **errp)
 {
     ARMCPU *cpu = ARM_CPU(obj);
     uint64_t t;
@@ -338,21 +338,21 @@ static void cpu_arm_set_sve(Object *obj, bool value, Error **errp)
     cpu->isar.id_aa64pfr0 = t;
 }
 
-void aarch64_add_sve_properties(Object *obj)
+void cpu_sve_add_props(Object *obj)
 {
     uint32_t vq;
 
-    object_property_add_bool(obj, "sve", cpu_arm_get_sve, cpu_arm_set_sve);
+    object_property_add_bool(obj, "sve", get_prop_sve, set_prop_sve);
 
     for (vq = 1; vq <= ARM_MAX_VQ; ++vq) {
         char name[8];
         sprintf(name, "sve%d", vq * 128);
-        object_property_add(obj, name, "bool", cpu_arm_get_sve_vq, cpu_arm_set_sve_vq, NULL, NULL);
+        object_property_add(obj, name, "bool", get_prop_vq, set_prop_vq, NULL, NULL);
     }
 }
 
 /* properties added for MAX CPU */
-void aarch64_add_sve_properties_max(Object *obj)
+void cpu_sve_add_props_max(Object *obj)
 {
-    object_property_add(obj, "sve-max-vq", "uint32", cpu_max_get_sve_max_vq, cpu_max_set_sve_max_vq, NULL, NULL);
+    object_property_add(obj, "sve-max-vq", "uint32", get_prop_max_vq, set_prop_max_vq, NULL, NULL);
 }
