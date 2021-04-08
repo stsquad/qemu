@@ -438,8 +438,8 @@ static void aarch64_max_initfn(Object *obj)
         qdev_property_add_static(DEVICE(obj), &arm_cpu_pauth_impdef_property);
     }
 
-    aarch64_add_sve_properties(obj);
-    aarch64_add_sve_properties_max(obj);
+    cpu_sve_add_props(obj);
+    cpu_sve_add_props_max(obj);
 }
 
 static const ARMCPUInfo aarch64_cpus[] = {

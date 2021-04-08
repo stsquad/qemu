@@ -26,12 +26,12 @@
 #include "cpu.h"
 
 /* called by arm_cpu_finalize_features in realizefn */
-void arm_cpu_sve_finalize(ARMCPU *cpu, Error **errp);
+void cpu_sve_finalize_features(ARMCPU *cpu, Error **errp);
 
 /* add the CPU SVE properties */
-void aarch64_add_sve_properties(Object *obj);
+void cpu_sve_add_props(Object *obj);
 
 /* add the CPU SVE properties specific to the "MAX" CPU */
-void aarch64_add_sve_properties_max(Object *obj);
+void cpu_sve_add_props_max(Object *obj);
 
 #endif /* CPU_SVE_H */
