@@ -38,3 +38,8 @@ int sve_exception_el(CPUARMState *env, int el)
 {
     return 0;
 }
+
+int fp_exception_el(CPUARMState *env, int el)
+{
+    return 0;
+}
