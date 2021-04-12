@@ -1153,7 +1153,7 @@ void arm_cpu_do_interrupt(CPUState *cs)
      * must be handled here.
      */
     if (cs->exception_index == EXCP_SEMIHOST) {
-        handle_semihosting(cs);
+        tcg_handle_semihosting(cs);
         return;
     }
 #endif /* CONFIG_TCG */

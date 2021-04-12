@@ -24,7 +24,7 @@
 
 #ifndef CONFIG_USER_ONLY
 /* Do semihosting call and set the appropriate return value. */
-void handle_semihosting(CPUState *cs);
+void tcg_handle_semihosting(CPUState *cs);
 
 #endif /* !CONFIG_USER_ONLY */
 
