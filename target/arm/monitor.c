@@ -184,9 +184,11 @@ CpuModelExpansionInfo *qmp_query_cpu_model_expansion(CpuModelExpansionType type,
         if (!err) {
             visit_check_struct(visitor, &err);
         }
+#ifdef TARGET_AARCH64
         if (!err) {
             arm_cpu_finalize_features(ARM_CPU(obj), &err);
         }
+#endif /* TARGET_AARCH64 */
         visit_end_struct(visitor, NULL);
         visit_free(visitor);
         if (err) {
@@ -195,7 +197,9 @@ CpuModelExpansionInfo *qmp_query_cpu_model_expansion(CpuModelExpansionType type,
             return NULL;
         }
     } else {
+#ifdef TARGET_AARCH64
         arm_cpu_finalize_features(ARM_CPU(obj), &error_abort);
+#endif /* TARGET_AARCH64 */
     }
 
     expansion_info = g_new0(CpuModelExpansionInfo, 1);
