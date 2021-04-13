@@ -25,7 +25,7 @@
 
 #include "cpu.h"
 
-/* called by arm_cpu_finalize_features in realizefn */
+/* called by aarch64_cpu_finalize_features in realizefn */
 bool cpu_pauth_finalize(ARMCPU *cpu, Error **errp);
 
 /* add the CPU Pointer Authentication properties */
