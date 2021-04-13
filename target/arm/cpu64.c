@@ -455,6 +455,40 @@ static gchar *aarch64_gdb_arch_name(CPUState *cs)
     return g_strdup("aarch64");
 }
 
+void arm_cpu_finalize_features(ARMCPU *cpu, Error **errp)
+{
+    Error *local_err = NULL;
+
+#ifdef TARGET_AARCH64
+    if (arm_feature(&cpu->env, ARM_FEATURE_AARCH64)) {
+        if (!cpu_sve_finalize_features(cpu, &local_err)) {
+            error_propagate(errp, local_err);
+            return;
+        }
+
+        /*
+         * KVM does not support modifications to this feature.
+         * We have not registered the cpu properties when KVM
+         * is in use, so the user will not be able to set them.
+         */
+        if (tcg_enabled()) {
+            if (!cpu_pauth_finalize(cpu, &local_err)) {
+                error_propagate(errp, local_err);
+                return;
+            }
+        }
+    }
+#endif /* TARGET_AARCH64 */
+
+    if (kvm_enabled()) {
+        kvm_arm_steal_time_finalize(cpu, &local_err);
+        if (local_err != NULL) {
+            error_propagate(errp, local_err);
+            return;
+        }
+    }
+}
+
 static void aarch64_cpu_dump_state(CPUState *cs, FILE *f, int flags)
 {
     ARMCPU *cpu = ARM_CPU(cs);
