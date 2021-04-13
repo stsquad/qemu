@@ -21,8 +21,12 @@
 #ifndef ARM_CPU32_H
 #define ARM_CPU32_H
 
+#include "cpregs.h"
+
 void arm32_cpu_dump_state(CPUState *cs, FILE *f, int flags);
 void arm32_cpu_class_init(ObjectClass *oc, void *data);
 void arm32_cpu_register(const ARMCPUInfo *info);
+void cortex_a15_initfn(Object *obj);
+extern const ARMCPRegInfo cortexa15_cp_reginfo[];
 
 #endif /* ARM_CPU32_H */
