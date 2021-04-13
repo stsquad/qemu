@@ -21,7 +21,7 @@
 #ifndef ARM_CPU32_H
 #define ARM_CPU32_H
 
-void arm_cpu_dump_state(CPUState *cs, FILE *f, int flags);
+void arm32_cpu_dump_state(CPUState *cs, FILE *f, int flags);
 void arm32_cpu_class_init(ObjectClass *oc, void *data);
 void arm32_cpu_register(const ARMCPUInfo *info);
 
