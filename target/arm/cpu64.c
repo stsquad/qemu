@@ -459,26 +459,25 @@ void aarch64_cpu_finalize_features(ARMCPU *cpu, Error **errp)
 {
     Error *local_err = NULL;
 
-    if (arm_feature(&cpu->env, ARM_FEATURE_AARCH64)) {
-        if (!cpu_sve_finalize_features(cpu, &local_err)) {
+    if (!arm_feature(&cpu->env, ARM_FEATURE_AARCH64)) {
+        return;
+    }
+    if (!cpu_sve_finalize_features(cpu, &local_err)) {
+        error_propagate(errp, local_err);
+        return;
+    }
+
+    /*
+     * KVM does not support modifications to this feature.
+     * We have not registered the cpu properties when KVM
+     * is in use, so the user will not be able to set them.
+     */
+    if (tcg_enabled()) {
+        if (!cpu_pauth_finalize(cpu, &local_err)) {
             error_propagate(errp, local_err);
             return;
         }
-
-        /*
-         * KVM does not support modifications to this feature.
-         * We have not registered the cpu properties when KVM
-         * is in use, so the user will not be able to set them.
-         */
-        if (tcg_enabled()) {
-            if (!cpu_pauth_finalize(cpu, &local_err)) {
-                error_propagate(errp, local_err);
-                return;
-            }
-        }
-    }
-
-    if (kvm_enabled()) {
+    } else if (kvm_enabled()) {
         kvm_arm_steal_time_finalize(cpu, &local_err);
         if (local_err != NULL) {
             error_propagate(errp, local_err);
