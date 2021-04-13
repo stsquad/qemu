@@ -25,8 +25,9 @@
 #include "tcg/cpu-pauth.h"
 #include "hw/qdev-properties.h"
 
-void arm_cpu_pauth_finalize(ARMCPU *cpu, Error **errp)
+bool cpu_pauth_finalize(ARMCPU *cpu, Error **errp)
 {
+    bool result = true;
     int arch_val = 0, impdef_val = 0;
     uint64_t t;
 
@@ -40,6 +41,7 @@ void arm_cpu_pauth_finalize(ARMCPU *cpu, Error **errp)
     } else if (cpu->prop_pauth_impdef) {
         error_setg(errp, "cannot enable pauth-impdef without pauth");
         error_append_hint(errp, "Add pauth=on to the CPU property list.\n");
+        result = false;
     }
 
     t = cpu->isar.id_aa64isar1;
@@ -48,6 +50,7 @@ void arm_cpu_pauth_finalize(ARMCPU *cpu, Error **errp)
     t = FIELD_DP64(t, ID_AA64ISAR1, API, impdef_val);
     t = FIELD_DP64(t, ID_AA64ISAR1, GPI, impdef_val);
     cpu->isar.id_aa64isar1 = t;
+    return result;
 }
 
 static Property arm_cpu_pauth_property =
