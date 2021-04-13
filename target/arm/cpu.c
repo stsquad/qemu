@@ -843,7 +843,7 @@ static void arm_cpu_realizefn(DeviceState *dev, Error **errp)
     }
 
 #ifdef TARGET_AARCH64
-    arm_cpu_finalize_features(cpu, &local_err);
+    aarch64_cpu_finalize_features(cpu, &local_err);
     if (local_err != NULL) {
         error_propagate(errp, local_err);
         return;
