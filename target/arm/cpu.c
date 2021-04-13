@@ -33,6 +33,7 @@
 #ifdef CONFIG_TCG
 #include "tcg/tcg-cpu.h"
 #endif /* CONFIG_TCG */
+#include "tcg/cpu-pauth.h"
 #include "cpu32.h"
 #include "exec/exec-all.h"
 #include "hw/qdev-properties.h"
