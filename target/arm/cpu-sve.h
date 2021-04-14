@@ -26,7 +26,7 @@
 #include "cpu.h"
 
 /* called by arm_cpu_finalize_features in realizefn */
-void cpu_sve_finalize_features(ARMCPU *cpu, Error **errp);
+bool cpu_sve_finalize_features(ARMCPU *cpu, Error **errp);
 
 /* add the CPU SVE properties */
 void cpu_sve_add_props(Object *obj);

@@ -821,8 +821,7 @@ void arm_cpu_finalize_features(ARMCPU *cpu, Error **errp)
 
 #ifdef TARGET_AARCH64
     if (arm_feature(&cpu->env, ARM_FEATURE_AARCH64)) {
-        cpu_sve_finalize_features(cpu, &local_err);
-        if (local_err != NULL) {
+        if (!cpu_sve_finalize_features(cpu, &local_err)) {
             error_propagate(errp, local_err);
             return;
         }
