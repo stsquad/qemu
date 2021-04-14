@@ -49,7 +49,7 @@ static bool apply_max_vq(unsigned long *sve_vq_map, unsigned long *sve_vq_init,
     return true;
 }
 
-void cpu_sve_finalize_features(ARMCPU *cpu, Error **errp)
+bool cpu_sve_finalize_features(ARMCPU *cpu, Error **errp)
 {
     /*
      * If any vector lengths are explicitly enabled with sve<N> properties,
@@ -86,7 +86,7 @@ void cpu_sve_finalize_features(ARMCPU *cpu, Error **errp)
                               "length, sve-max-vq=%d (%d bits)\n",
                               max_vq * 128, cpu->sve_max_vq,
                               cpu->sve_max_vq * 128);
-            return;
+            return false;
         }
         if (kvm_enabled()) {
             kvm_sve_enable_lens(cpu->sve_vq_map, cpu->sve_vq_init, max_vq,
@@ -98,7 +98,7 @@ void cpu_sve_finalize_features(ARMCPU *cpu, Error **errp)
         /* No explicit bits enabled, and no implicit bits from sve-max-vq. */
         if (!cpu_isar_feature(aa64_sve, cpu)) {
             /* SVE is disabled and so are all vector lengths.  Good. */
-            return;
+            return true;
         }
         if (kvm_enabled()) {
             max_vq = kvm_sve_disable_lens(cpu->sve_vq_map, cpu->sve_vq_init,
@@ -108,7 +108,7 @@ void cpu_sve_finalize_features(ARMCPU *cpu, Error **errp)
                                           errp);
         }
         if (!max_vq) {
-            return;
+            return false;
         }
         max_vq = find_last_bit(cpu->sve_vq_map, max_vq) + 1;
     }
@@ -122,7 +122,7 @@ void cpu_sve_finalize_features(ARMCPU *cpu, Error **errp)
         max_vq = cpu->sve_max_vq;
         if (!apply_max_vq(cpu->sve_vq_map, cpu->sve_vq_init, max_vq,
                           errp)) {
-            return;
+            return false;
         }
     }
     /*
@@ -136,11 +136,11 @@ void cpu_sve_finalize_features(ARMCPU *cpu, Error **errp)
     if (kvm_enabled()) {
         if (!kvm_sve_validate_lens(cpu->sve_vq_map, max_vq, kvm_supported,
                                    errp, cpu->sve_max_vq)) {
-            return;
+            return false;
         }
     } else if (tcg_enabled()) {
         if (!tcg_sve_validate_lens(cpu->sve_vq_map, max_vq, errp)) {
-            return;
+            return false;
         }
     }
 
@@ -153,11 +153,12 @@ void cpu_sve_finalize_features(ARMCPU *cpu, Error **errp)
         error_append_hint(errp, "SVE must be enabled to enable vector "
                           "lengths.\n");
         error_append_hint(errp, "Add sve=on to the CPU property list.\n");
-        return;
+        return false;
     }
 
     /* From now on sve_max_vq is the actual maximum supported length. */
     cpu->sve_max_vq = max_vq;
+    return true;
 }
 
 static void get_prop_max_vq(Object *obj, Visitor *v, const char *name,
