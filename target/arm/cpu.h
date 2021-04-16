@@ -223,7 +223,8 @@ typedef struct ARMPACKey {
 } ARMPACKey;
 #else
 static inline void arm_cpu_pauth_finalize(ARMCPU *cpu, Error **errp) { }
-#endif
+
+#endif /* TARGET_AARCH64 */
 
 typedef struct CPUARMState {
     /* Regs for current mode.  */
@@ -1090,7 +1091,6 @@ void aarch64_sync_64_to_32(CPUARMState *env);
 
 int fp_exception_el(CPUARMState *env, int cur_el);
 int sve_exception_el(CPUARMState *env, int cur_el);
-uint32_t sve_zcr_len_for_el(CPUARMState *env, int el);
 
 /* you can call this signal handler from your SIGBUS and SIGSEGV
    signal handlers to inform the virtual CPU of exceptions. non zero
