@@ -1053,6 +1053,11 @@ void aarch64_sve_narrow_vq(CPUARMState *env, unsigned vq);
 void aarch64_sve_change_el(CPUARMState *env, int old_el,
                            int new_el, bool el0_a64);
 
+static inline bool is_a64(CPUARMState *env)
+{
+    return env->aarch64;
+}
+
 /*
  * SVE registers are encoded in KVM's memory in an endianness-invariant format.
  * The byte at offset i from the start of the in-memory representation contains
@@ -1082,7 +1087,10 @@ static inline void aarch64_sve_narrow_vq(CPUARMState *env, unsigned vq) { }
 static inline void aarch64_sve_change_el(CPUARMState *env, int o,
                                          int n, bool a)
 { }
-#endif
+
+#define is_a64(env) ((void)env, false)
+
+#endif /* TARGET_AARCH64 */
 
 void aarch64_sync_32_to_64(CPUARMState *env);
 void aarch64_sync_64_to_32(CPUARMState *env);
@@ -1090,11 +1098,6 @@ void aarch64_sync_64_to_32(CPUARMState *env);
 int fp_exception_el(CPUARMState *env, int cur_el);
 int sve_exception_el(CPUARMState *env, int cur_el);
 uint32_t sve_zcr_len_for_el(CPUARMState *env, int el);
-
-static inline bool is_a64(CPUARMState *env)
-{
-    return env->aarch64;
-}
 
 /* you can call this signal handler from your SIGBUS and SIGSEGV
    signal handlers to inform the virtual CPU of exceptions. non zero
@@ -2195,13 +2198,7 @@ static inline bool arm_is_el2_enabled(CPUARMState *env)
 }
 #endif
 
-/**
- * arm_hcr_el2_eff(): Return the effective value of HCR_EL2.
- * E.g. when in secure state, fields in HCR_EL2 are suppressed,
- * "for all purposes other than a direct read or write access of HCR_EL2."
- * Not included here is HCR_RW.
- */
-uint64_t arm_hcr_el2_eff(CPUARMState *env);
+#ifdef TARGET_AARCH64
 
 /* Return true if the specified exception level is running in AArch64 state. */
 static inline bool arm_el_is_aa64(CPUARMState *env, int el)
@@ -2235,6 +2232,20 @@ static inline bool arm_el_is_aa64(CPUARMState *env, int el)
 
     return aa64;
 }
+
+#else
+
+#define arm_el_is_aa64(env, el) ((void)env, (void)el, false)
+
+#endif /* TARGET_AARCH64 */
+
+/**
+ * arm_hcr_el2_eff(): Return the effective value of HCR_EL2.
+ * E.g. when in secure state, fields in HCR_EL2 are suppressed,
+ * "for all purposes other than a direct read or write access of HCR_EL2."
+ * Not included here is HCR_RW.
+ */
+uint64_t arm_hcr_el2_eff(CPUARMState *env);
 
 /* Function for determing whether guest cp register reads and writes should
  * access the secure or non-secure bank of a cp register.  When EL3 is
