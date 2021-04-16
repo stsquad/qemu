@@ -417,7 +417,6 @@ int sve_exception_el(CPUARMState *env, int el)
  */
 int fp_exception_el(CPUARMState *env, int cur_el)
 {
-#ifndef CONFIG_USER_ONLY
     /*
      * CPACR and the CPTR registers don't exist before v6, so FP is
      * always accessible
@@ -507,6 +506,5 @@ int fp_exception_el(CPUARMState *env, int cur_el)
         /* Trap all FP ops to EL3 */
         return 3;
     }
-#endif
     return 0;
 }
