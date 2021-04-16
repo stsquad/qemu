@@ -10932,7 +10932,7 @@ static abi_long do_syscall1(void *cpu_env, int num, abi_long arg1,
                 vq = MIN(vq, cpu->sve_max_vq);
 
                 if (vq < old_vq) {
-                    aarch64_sve_narrow_vq(env, vq);
+                    tcg_sve_narrow_vq(env, vq);
                 }
                 env->vfp.zcr_el[1] = vq - 1;
                 arm_rebuild_hflags(env);

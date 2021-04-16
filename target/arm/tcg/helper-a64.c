@@ -1042,7 +1042,7 @@ void HELPER(exception_return)(CPUARMState *env, uint64_t new_pc)
      * Note that cur_el can never be 0.  If new_el is 0, then
      * el0_a64 is return_to_aa64, else el0_a64 is ignored.
      */
-    aarch64_sve_change_el(env, cur_el, new_el, return_to_aa64);
+    tcg_sve_change_el(env, cur_el, new_el, return_to_aa64);
 
     qemu_mutex_lock_iothread();
     arm_call_el_change_hook(env_archcpu(env));
