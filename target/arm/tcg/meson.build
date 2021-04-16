@@ -12,9 +12,9 @@ gen = [
   decodetree.process('t16.decode', extra_args: ['-w', '16', '--static-decode=disas_t16']),
 ]
 
-arm_ss.add(gen)
+arm_ss.add(when: 'CONFIG_TCG', if_true: gen)
 
-arm_ss.add(files(
+arm_ss.add(when: 'CONFIG_TCG', if_true: files(
   'translate.c',
   'helper.c',
   'iwmmxt_helper.c',
@@ -28,7 +28,7 @@ arm_ss.add(files(
   'debug_helper.c',
 ))
 
-arm_ss.add(when: 'TARGET_AARCH64', if_true: files(
+arm_ss.add(when: ['TARGET_AARCH64','CONFIG_TCG'], if_true: files(
   'translate-a64.c',
   'translate-sve.c',
   'helper-a64.c',
