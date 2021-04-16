@@ -14,3 +14,8 @@ void write_v7m_exception(CPUARMState *env, uint32_t new_exc)
 {
     g_assert_not_reached();
 }
+
+void arm_rebuild_hflags(CPUARMState *env)
+{
+    g_assert_not_reached();
+}
