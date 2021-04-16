@@ -19,6 +19,7 @@
 #include "hw/boards.h"
 #endif
 #include "cpregs.h"
+#include "cpu32.h"
 
 /* CPU models. These are not needed for the AArch64 linux-user build. */
 #if !defined(CONFIG_USER_ONLY) || !defined(TARGET_AARCH64)
@@ -1071,7 +1072,7 @@ static void arm_tcg_cpu_register_types(void)
 
     type_register_static(&idau_interface_type_info);
     for (i = 0; i < ARRAY_SIZE(arm_tcg_cpus); ++i) {
-        arm_cpu_register(&arm_tcg_cpus[i]);
+        arm32_cpu_register(&arm_tcg_cpus[i]);
     }
 }
 
