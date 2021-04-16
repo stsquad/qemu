@@ -51,7 +51,7 @@
 #include "sysemu/numa.h"
 #include "sysemu/reset.h"
 #include "sysemu/tpm.h"
-#include "kvm_arm.h"
+#include "kvm/kvm_arm.h"
 #include "migration/vmstate.h"
 #include "hw/acpi/ghes.h"
 

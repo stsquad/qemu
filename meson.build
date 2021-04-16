@@ -1844,8 +1844,8 @@ if have_system or have_user
   trace_events_subdirs += [
     'accel/tcg',
     'hw/core',
-    'target/arm',
     'target/arm/tcg',
+    'target/arm/kvm',
     'target/hppa',
     'target/i386',
     'target/i386/kvm',
