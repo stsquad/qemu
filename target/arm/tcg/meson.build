@@ -36,6 +36,7 @@ arm_ss.add(when: 'CONFIG_TCG', if_true: files(
 ))
 
 arm_ss.add(when: ['TARGET_AARCH64','CONFIG_TCG'], if_true: files(
+  'cpu-pauth.c',
   'translate-a64.c',
   'translate-sve.c',
   'helper-a64.c',
