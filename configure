@@ -429,7 +429,7 @@ libxml2="$default_feature"
 debug_mutex="no"
 libpmem="$default_feature"
 default_devices="true"
-plugins="no"
+plugins="$default_feature"
 fuzzing="no"
 rng_none="no"
 secret_keyring="$default_feature"
@@ -3122,7 +3122,7 @@ glib_modules=gthread-2.0
 if test "$modules" = yes; then
     glib_modules="$glib_modules gmodule-export-2.0"
 fi
-if test "$plugins" = yes; then
+if test "$plugins" != "no"; then
     glib_modules="$glib_modules gmodule-2.0"
 fi
 
@@ -4614,17 +4614,21 @@ if compile_prog "" "" ; then
   atomic64=yes
 fi
 
-#########################################
-# See if --dynamic-list is supported by the linker
-ld_dynamic_list="no"
-if test "$static" = "no" ; then
-    cat > $TMPTXT <<EOF
+
+if test "$plugins" != "no"; then
+
+    #########################################
+    # See if --dynamic-list is supported by the linker
+
+    ld_dynamic_list="no"
+    if test "$static" = "no" ; then
+        cat > $TMPTXT <<EOF
 {
   foo;
 };
 EOF
 
-    cat > $TMPC <<EOF
+        cat > $TMPC <<EOF
 #include <stdio.h>
 void foo(void);
 
@@ -4640,34 +4644,47 @@ int main(void)
 }
 EOF
 
-    if compile_prog "" "-Wl,--dynamic-list=$TMPTXT" ; then
-        ld_dynamic_list="yes"
+        if compile_prog "" "-Wl,--dynamic-list=$TMPTXT" ; then
+            ld_dynamic_list="yes"
+        fi
     fi
-fi
 
-#########################################
-# See if -exported_symbols_list is supported by the linker
+    #########################################
+    # See if -exported_symbols_list is supported by the linker
 
-ld_exported_symbols_list="no"
-if test "$static" = "no" ; then
-    cat > $TMPTXT <<EOF
+    ld_exported_symbols_list="no"
+    if test "$static" = "no" ; then
+        cat > $TMPTXT <<EOF
   _foo
 EOF
 
-    if compile_prog "" "-Wl,-exported_symbols_list,$TMPTXT" ; then
-        ld_exported_symbols_list="yes"
+        if compile_prog "" "-Wl,-exported_symbols_list,$TMPTXT" ; then
+            ld_exported_symbols_list="yes"
+        fi
+    fi
+
+    if test "$ld_dynamic_list" = "no" &&
+       test "$ld_exported_symbols_list" = "no" ; then
+        if test $plugins="yes"; then
+            error_exit \
+                "Plugin support requires dynamic linking and specifying a set of symbols " \
+                "that are exported to plugins. Unfortunately your linker doesn't " \
+                "support the flag (--dynamic-list or -exported_symbols_list) used " \
+                "for this purpose. You can't build with --static."
+        else
+            plugins="no"
+        fi
+    else
+        plugins="yes"
     fi
 fi
 
-if  test "$plugins" = "yes" &&
-    test "$ld_dynamic_list" = "no" &&
-    test "$ld_exported_symbols_list" = "no" ; then
-  error_exit \
-      "Plugin support requires dynamic linking and specifying a set of symbols " \
-      "that are exported to plugins. Unfortunately your linker doesn't " \
-      "support the flag (--dynamic-list or -exported_symbols_list) used " \
-      "for this purpose. You can't build with --static."
+if test "$plugins" = yes; then
+    glib_modules="$glib_modules gmodule-2.0"
 fi
+
+echo "ld_dynamic_list=$ld_dynamic_list"
+echo "ld_exported_symbols_list=$ld_exported_symbols_list"
 
 ########################################
 # check if getauxval is available.
