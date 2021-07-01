@@ -220,3 +220,18 @@ ubuntu-20.04-aarch64-notcg:
  - ../configure --disable-libssh --disable-tcg
  - make --output-sync -j`nproc`
  - make --output-sync -j`nproc` check V=1
+
+ubuntu-20.04-ajb-test:
+ allow_failure: true
+ needs: []
+ stage: build
+ tags:
+ - ubuntu_20.04
+ - x86_64
+ script:
+ - mkdir build
+ - cd build
+ - ../configure --disable-libssh --target-list=aarch64-softmmu,aarch64-linux-user
+ - make --output-sync -j`nproc`
+ - make --output-sync -j`nproc` check-tcg V=1
+ 
