@@ -11,6 +11,11 @@
 
 #include <qemu-plugin.h>
 
+/* Compiler barrier */
+#define barrier()   ({ asm volatile("" ::: "memory"); (void)0; })
+/* store barrier */
+#define smp_mb()    ({ barrier(); __atomic_thread_fence(__ATOMIC_SEQ_CST); })
+
 QEMU_PLUGIN_EXPORT int qemu_plugin_version = QEMU_PLUGIN_VERSION;
 
 static enum qemu_plugin_mem_rw rw = QEMU_PLUGIN_MEM_RW;
@@ -381,13 +386,10 @@ static void vcpu_mem_access(unsigned int vcpu_index, qemu_plugin_meminfo_t info,
 
     effective_addr = hwaddr ? qemu_plugin_hwaddr_phys_addr(hwaddr) : vaddr;
 
-    g_mutex_lock(&mtx);
     cache_idx = vcpu_index % cores;
-    if (dcaches[cache_idx] == NULL) {
-        g_mutex_unlock(&mtx);
-        return;
-    }
+    g_assert(dcaches[cache_idx]);
 
+    g_mutex_lock(&mtx);
     if (!access_cache(dcaches[cache_idx], effective_addr)) {
         insn = (InsnData *) userdata;
         insn->dmisses++;
@@ -717,6 +719,7 @@ int qemu_plugin_install(qemu_plugin_id_t id, const qemu_info_t *info,
     policy_init();
 
     dcaches = caches_init(dblksize, dassoc, dcachesize);
+    smp_mb();
     if (!dcaches) {
         const char *err = cache_config_error(dblksize, dassoc, dcachesize);
         fprintf(stderr, "dcache cannot be constructed from given parameters\n");

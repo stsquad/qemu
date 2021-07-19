@@ -25,10 +25,11 @@ run-float_%: float_%
 	$(call run-test,$<, $(QEMU) $(QEMU_OPTS) $<,"$< on $(TARGET_NAME)")
 	$(call conditional-diff-out,$<,$(SRC_PATH)/tests/tcg/$(TARGET_NAME)/$<.ref)
 
-
 testthread: LDFLAGS+=-lpthread
 
 threadcount: LDFLAGS+=-lpthread
+
+threadexit: LDFLAGS+=-lpthread
 
 signals: LDFLAGS+=-lrt -lpthread
 
