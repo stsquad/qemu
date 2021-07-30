@@ -656,6 +656,16 @@ build-without-default-features:
         --target-list-exclude=arm-softmmu,i386-softmmu,mipsel-softmmu,mips64-softmmu,ppc-softmmu
     MAKE_CHECK_ARGS: check-unit
 
+build-64bit-only-aarch64-softmmu:
+  extends: .native_build_job_template
+  needs:
+    job: amd64-debian-container
+  variables:
+    IMAGE: debian-amd64
+    TARGETS: aarch64-softmmu
+    CONFIGURE_ARGS: --with-devices-aarch64=minimal
+    MAKE_CHECK_ARGS: check
+
 build-libvhost-user:
   stage: build
   image: $CI_REGISTRY_IMAGE/qemu/fedora:latest
