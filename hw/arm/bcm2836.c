@@ -292,8 +292,8 @@ static void bcm2711_class_init(ObjectClass *oc, void *data)
 
     bc->cpu_type = ARM_CPU_TYPE_NAME("cortex-a72");
     bc->core_count = BCM283X_NCPUS;
-    bc->peri_base = 0x7e000000;
-    bc->ctrl_base = 0x40000000;
+    bc->peri_base = 0xfe000000;
+    bc->ctrl_base = 0xff800000;
     bc->clusterid = 0x0;
     bc->gic_base = 0x40000,
     dc->realize = bcm2836_realize;
