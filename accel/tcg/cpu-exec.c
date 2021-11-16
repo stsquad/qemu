@@ -954,11 +954,16 @@ int cpu_exec(CPUState *cpu)
              * after-access watchpoints.  Since this request should never
              * have CF_INVALID set, -1 is a convenient invalid value that
              * does not require tcg headers for cpu_common_reset.
+             *
+             * As we don't want this special TB being interrupted by
+             * some sort of asynchronous event we apply CF_NOIRQ to
+             * disable the usual event checking.
              */
             cflags = cpu->cflags_next_tb;
             if (cflags == -1) {
                 cflags = curr_cflags(cpu);
             } else {
+                cflags |= CF_NOIRQ;
                 cpu->cflags_next_tb = -1;
             }
 
