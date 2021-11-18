@@ -132,13 +132,13 @@ Function Naming Conventions
 
 Wrapped version of standard library or GLib functions use a ``qemu_``
 prefix to alert readers that they are seeing a wrapped version, for
-example ``qemu_strtol`` or ``qemu_mutex_lock``.  Other utility functions
+example ``qemu_strtol()`` or ``qemu_mutex_lock()``.  Other utility functions
 that are widely called from across the codebase should not have any
-prefix, for example ``pstrcpy`` or bit manipulation functions such as
-``find_first_bit``.
+prefix, for example ``pstrcpy()`` or bit manipulation functions such as
+``find_first_bit()``.
 
 The ``qemu_`` prefix is also used for functions that modify global
-emulator state, for example ``qemu_add_vm_change_state_handler``.
+emulator state, for example ``qemu_add_vm_change_state_handler()``.
 However, if there is an obvious subsystem-specific prefix it should be
 used instead.
 
@@ -387,15 +387,16 @@ avoided.
 Low level memory management
 ===========================
 
-Use of the ``malloc/free/realloc/calloc/valloc/memalign/posix_memalign``
+Use of the
+``malloc()/free()/realloc()/calloc()/valloc()/memalign()/posix_memalign()``
 APIs is not allowed in the QEMU codebase. Instead of these routines,
 use the GLib memory allocation routines
-``g_malloc/g_malloc0/g_new/g_new0/g_realloc/g_free``
-or QEMU's ``qemu_memalign/qemu_blockalign/qemu_vfree`` APIs.
+``g_malloc()/g_malloc0()/g_new()/g_new0()/g_realloc()/g_free()``
+or QEMU's ``qemu_memalign()/qemu_blockalign()/qemu_vfree()`` APIs.
 
-Please note that ``g_malloc`` will exit on allocation failure, so
+Please note that ``g_malloc()`` will exit on allocation failure, so
 there is no need to test for failure (as you would have to with
-``malloc``). Generally using ``g_malloc`` on start-up is fine as the
+``malloc()``). Generally using ``g_malloc()`` on start-up is fine as the
 result of a failure to allocate memory is going to be a fatal exit
 anyway. There may be some start-up cases where failing is unreasonable
 (for example speculatively loading a large debug symbol table).
@@ -403,11 +404,11 @@ anyway. There may be some start-up cases where failing is unreasonable
 Care should be taken to avoid introducing places where the guest could
 trigger an exit by causing a large allocation. For small allocations,
 of the order of 4k, a failure to allocate is likely indicative of an
-overloaded host and allowing ``g_malloc`` to ``exit`` is a reasonable
+overloaded host and allowing ``g_malloc()`` to ``exit()`` is a reasonable
 approach. However for larger allocations where we could realistically
 fall-back to a smaller one if need be we should use functions like
-``g_try_new`` and check the result. For example this is valid approach
-for a time/space trade-off like ``tlb_mmu_resize_locked`` in the
+``g_try_new()`` and check the result. For example this is valid approach
+for a time/space trade-off like ``tlb_mmu_resize_locked()`` in the
 SoftMMU TLB code.
 
 If the lifetime of the allocation is within the function and there are
@@ -415,7 +416,7 @@ multiple exist paths you can also improve the readability of the code
 by using ``g_autofree`` and related annotations. See :ref:`autofree-ref`
 for more details.
 
-Calling ``g_malloc`` with a zero size is valid and will return NULL.
+Calling ``g_malloc()`` with a zero size is valid and will return ``NULL``.
 
 Prefer ``g_new(T, n)`` instead of ``g_malloc(sizeof(T) * n)`` for the following
 reasons:
@@ -432,14 +433,15 @@ Declarations like
 
 are acceptable, though.
 
-Memory allocated by ``qemu_memalign`` or ``qemu_blockalign`` must be freed with
-``qemu_vfree``, since breaking this will cause problems on Win32.
+Memory allocated by ``qemu_memalign()`` or ``qemu_blockalign()`` must be freed
+with ``qemu_vfree()``, since breaking this will cause problems on Win32.
 
 String manipulation
 ===================
 
-Do not use the strncpy function.  As mentioned in the man page, it does *not*
-guarantee a NULL-terminated buffer, which makes it extremely dangerous to use.
+Do not use the ``strncpy()`` function.  As mentioned in the man page, it does
+*not* guarantee a ``NULL``-terminated buffer, which makes it extremely
+dangerous to use.
 It also zeros trailing destination bytes out to the specified length.  Instead,
 use this similar function when possible, but note its different signature:
 
@@ -447,14 +449,14 @@ use this similar function when possible, but note its different signature:
 
     void pstrcpy(char *dest, int dest_buf_size, const char *src)
 
-Don't use strcat because it can't check for buffer overflows, but:
+Don't use ``strcat()`` because it can't check for buffer overflows, but:
 
 .. code-block:: c
 
     char *pstrcat(char *buf, int buf_size, const char *s)
 
-The same limitation exists with sprintf and vsprintf, so use snprintf and
-vsnprintf.
+The same limitation exists with ``sprintf()`` and ``vsprintf()``, so use
+``snprintf()`` and ``vsnprintf()``.
 
 QEMU provides other useful string functions:
 
@@ -464,11 +466,11 @@ QEMU provides other useful string functions:
     int stristart(const char *str, const char *val, const char **ptr)
     int qemu_strnlen(const char *s, int max_len)
 
-There are also replacement character processing macros for isxyz and toxyz,
-so instead of e.g. isalnum you should use qemu_isalnum.
+There are also replacement character processing macros for ``isxyz()`` and
+``toxyz()``, so instead of e.g. ``isalnum()`` you should use ``qemu_isalnum()``.
 
-Because of the memory management rules, you must use g_strdup/g_strndup
-instead of plain strdup/strndup.
+Because of the memory management rules, you must use ``g_strdup()/g_strndup()``
+instead of plain ``strdup()/strndup()``.
 
 Printf-style functions
 ======================
@@ -527,10 +529,10 @@ automatic cleanup:
 
 Most notably:
 
-* g_autofree - will invoke g_free() on the variable going out of scope
+* ``g_autofree`` - will invoke ``g_free()`` on the variable going out of scope
 
-* g_autoptr - for structs / objects, will invoke the cleanup func created
-  by a previous use of G_DEFINE_AUTOPTR_CLEANUP_FUNC. This is
+* ``g_autoptr`` - for structs / objects, will invoke the cleanup func created
+  by a previous use of ``G_DEFINE_AUTOPTR_CLEANUP_FUNC``. This is
   supported for most GLib data types and GObjects
 
 For example, instead of
@@ -554,7 +556,7 @@ For example, instead of
         return ret;
     }
 
-Using g_autofree/g_autoptr enables the code to be written as:
+Using ``g_autofree/g_autoptr`` enables the code to be written as:
 
 .. code-block:: c
 
@@ -572,13 +574,13 @@ Using g_autofree/g_autoptr enables the code to be written as:
 While this generally results in simpler, less leak-prone code, there
 are still some caveats to beware of
 
-* Variables declared with g_auto* MUST always be initialized,
+* Variables declared with ``g_auto*`` MUST always be initialized,
   otherwise the cleanup function will use uninitialized stack memory
 
-* If a variable declared with g_auto* holds a value which must
+* If a variable declared with ``g_auto*`` holds a value which must
   live beyond the life of the function, that value must be saved
-  and the original variable NULL'd out. This can be simpler using
-  g_steal_pointer
+  and the original variable ``NULL``'d out. This can be simpler using
+  ``g_steal_pointer``.
 
 
 .. code-block:: c
