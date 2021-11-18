@@ -6,7 +6,7 @@ QEMU Coding Style
 
 .. contents:: Table of Contents
 
-Please use the script checkpatch.pl in the scripts directory to check
+Please use the script ``checkpatch.pl`` in the scripts directory to check
 patches before submitting.
 
 Formatting and style
@@ -197,9 +197,9 @@ blocks) are generally not allowed; declarations should be at the beginning
 of blocks.
 
 Every now and then, an exception is made for declarations inside a
-#ifdef or #ifndef block: if the code looks nicer, such declarations can
+``#ifdef`` or ``#ifndef`` block: if the code looks nicer, such declarations can
 be placed at the top of the block even if there are statements above.
-On the other hand, however, it's often best to move that #ifdef/#ifndef
+On the other hand, however, it's often best to move that ``#ifdef/#ifndef``
 block to a separate function altogether.
 
 Conditional statements
@@ -222,13 +222,13 @@ even when the constant is on the right.
 Comment style
 =============
 
-We use traditional C-style /``*`` ``*``/ comments and avoid // comments.
+We use traditional C-style ``/* */`` comments and avoid ``//`` comments.
 
-Rationale: The // form is valid in C99, so this is purely a matter of
+Rationale: The ``//`` form is valid in C99, so this is purely a matter of
 consistency of style. The checkpatch script will warn you about this.
 
 Multiline comment blocks should have a row of stars on the left,
-and the initial /``*`` and terminating ``*``/ both on their own lines:
+and the initial ``/*`` and terminating ``*/`` both on their own lines:
 
 .. code-block:: c
 
@@ -276,11 +276,11 @@ Order include directives as follows:
     #include "..."           /* and finally QEMU headers. */
 
 The "qemu/osdep.h" header contains preprocessor macros that affect the behavior
-of core system headers like <stdint.h>.  It must be the first include so that
-core system headers included by external libraries get the preprocessor macros
-that QEMU depends on.
+of core system headers like ``<stdint.h>``.  It must be the first include so
+that core system headers included by external libraries get the preprocessor
+macros that QEMU depends on.
 
-Do not include "qemu/osdep.h" from header files since the .c file will have
+Do not include ``"qemu/osdep.h"`` from header files since the .c file will have
 already included it.
 
 C types
@@ -354,9 +354,9 @@ casts, then reconsider or ask for help.
 Pointers
 --------
 
-Ensure that all of your pointers are "const-correct".
+Ensure that all of your pointers are "``const``-correct".
 Unless a pointer is used to modify the pointed-to storage,
-give it the "const" attribute.  That way, the reader knows
+give it the '``const``' attribute.  That way, the reader knows
 up-front that this is a read-only pointer.  Perhaps more
 importantly, if we're diligent about this, when you see a non-const
 pointer, you're guaranteed that it is used to modify the storage
@@ -507,7 +507,7 @@ painful. These are:
   the sign bit (ie it is an arithmetic shift, not a logical shift)
 
 In addition, QEMU assumes that the compiler does not use the latitude
-given in C99 and C11 to treat aspects of signed '<<' as undefined, as
+given in C99 and C11 to treat aspects of signed '``<<``' as undefined, as
 documented in the GNU Compiler Collection manual starting at version 4.0.
 
 .. _autofree-ref:
