@@ -113,7 +113,7 @@ Variables are lower_case_with_underscores; easy to type and read.  Structured
 type names are in CamelCase; harder to type but standing out.  Enum type
 names and function type names should also be in CamelCase.  Scalar type
 names are lower_case_with_underscores_ending_with_a_t, like the POSIX
-uint64_t and family.  Note that this last convention contradicts POSIX
+``uint64_t`` and family.  Note that this last convention contradicts POSIX
 and is therefore likely to be changed.
 
 Variable Naming Conventions
@@ -292,57 +292,57 @@ a few useful guidelines here.
 Scalars
 -------
 
-If you're using "int" or "long", odds are good that there's a better type.
-If a variable is counting something, it should be declared with an
-unsigned type.
+If you're using '``int``' or '``long``', odds are good that there's a better
+type.  If a variable is counting something, it should be declared with an
+*unsigned* type.
 
-If it's host memory-size related, size_t should be a good choice (use
-ssize_t only if required). Guest RAM memory offsets must use ram_addr_t,
+If it's host memory-size related, ``size_t`` should be a good choice (use
+``ssize_t`` only if required). Guest RAM memory offsets must use ``ram_addr_t``,
 but only for RAM, it may not cover whole guest address space.
 
-If it's file-size related, use off_t.
-If it's file-offset related (i.e., signed), use off_t.
-If it's just counting small numbers use "unsigned int";
+If it's file-size related, use ``off_t``.
+If it's file-offset related (i.e., signed), use ``off_t``.
+If it's just counting small numbers use '``unsigned int``';
 (on all but oddball embedded systems, you can assume that that
 type is at least four bytes wide).
 
 In the event that you require a specific width, use a standard type
-like int32_t, uint32_t, uint64_t, etc.  The specific types are
+like ``int32_t``, ``uint32_t``, ``uint64_t``, etc.  The specific types are
 mandatory for VMState fields.
 
-Don't use Linux kernel internal types like u32, __u32 or __le32.
+Don't use Linux kernel internal types like ``u32``, ``__u32`` or ``__le32``.
 
-Use hwaddr for guest physical addresses except pcibus_t
-for PCI addresses.  In addition, ram_addr_t is a QEMU internal address
+Use ``hwaddr`` for guest physical addresses except ``pcibus_t``
+for PCI addresses.  In addition, ``ram_addr_t`` is a QEMU internal address
 space that maps guest RAM physical addresses into an intermediate
 address space that can map to host virtual address spaces.  Generally
-speaking, the size of guest memory can always fit into ram_addr_t but
+speaking, the size of guest memory can always fit into ``ram_addr_t`` but
 it would not be correct to store an actual guest physical address in a
-ram_addr_t.
+``ram_addr_t``.
 
 For CPU virtual addresses there are several possible types.
-vaddr is the best type to use to hold a CPU virtual address in
+``vaddr`` is the best type to use to hold a CPU virtual address in
 target-independent code. It is guaranteed to be large enough to hold a
 virtual address for any target, and it does not change size from target
 to target. It is always unsigned.
-target_ulong is a type the size of a virtual address on the CPU; this means
+``target_ulong`` is a type the size of a virtual address on the CPU; this means
 it may be 32 or 64 bits depending on which target is being built. It should
 therefore be used only in target-specific code, and in some
 performance-critical built-per-target core code such as the TLB code.
-There is also a signed version, target_long.
-abi_ulong is for the ``*``-user targets, and represents a type the size of
-'void ``*``' in that target's ABI. (This may not be the same as the size of a
+There is also a signed version, ``target_long``.
+``abi_ulong`` is for the ``*-user`` targets, and represents a type the size of
+'``void *``' in that target's ABI. (This may not be the same as the size of a
 full CPU virtual address in the case of target ABIs which use 32 bit pointers
-on 64 bit CPUs, like sparc32plus.) Definitions of structures that must match
+on 64 bit CPUs, like *sparc32plus*.) Definitions of structures that must match
 the target's ABI must use this type for anything that on the target is defined
-to be an 'unsigned long' or a pointer type.
-There is also a signed version, abi_long.
+to be an '``unsigned long``' or a pointer type.
+There is also a signed version, ``abi_long``.
 
 Of course, take all of the above with a grain of salt.  If you're about
-to use some system interface that requires a type like size_t, pid_t or
-off_t, use matching types for any corresponding variables.
+to use some system interface that requires a type like ``size_t``, ``pid_t`` or
+``off_t``, use matching types for any corresponding variables.
 
-Also, if you try to use e.g., "unsigned int" as a type, and that
+Also, if you try to use e.g., '``unsigned int``' as a type, and that
 conflicts with the signedness of a related variable, sometimes
 it's best just to use the *wrong* type, if "pulling the thread"
 and fixing all related variables would be too invasive.
@@ -365,7 +365,7 @@ it points to, or it is aliased to another pointer that is.
 Typedefs
 --------
 
-Typedefs are used to eliminate the redundant 'struct' keyword, since type
+Typedefs are used to eliminate the redundant '``struct``' keyword, since type
 names have a different style than other identifiers ("CamelCase" versus
 "snake_case").  Each named struct type should have a CamelCase name and a
 corresponding typedef.
@@ -420,8 +420,9 @@ Calling ``g_malloc`` with a zero size is valid and will return NULL.
 Prefer ``g_new(T, n)`` instead of ``g_malloc(sizeof(T) * n)`` for the following
 reasons:
 
-* It catches multiplication overflowing size_t;
-* It returns T ``*`` instead of void ``*``, letting compiler catch more type errors.
+* It catches multiplication overflowing ``size_t``;
+* It returns ``T *`` instead of ``void *``, letting compiler catch more type
+  errors.
 
 Declarations like
 
