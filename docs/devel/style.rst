@@ -473,11 +473,11 @@ instead of plain strdup/strndup.
 Printf-style functions
 ======================
 
-Whenever you add a new printf-style function, i.e., one with a format
-string argument and following "..." in its prototype, be sure to use
-gcc's printf attribute directive in the prototype.
+Whenever you add a new ``printf()``-style function, i.e., one with a format
+string argument and following '``...``' in its prototype, be sure to use
+gcc's ``printf()`` attribute directive in the prototype.
 
-This makes it so gcc's -Wformat and -Wformat-security options can do
+This makes it so gcc's ``-Wformat`` and ``-Wformat-security`` options can do
 their jobs and cross-check format strings with the number and types
 of arguments.
 
@@ -661,10 +661,10 @@ Note that ``&error_fatal`` is just another way to ``exit(1)``, and
 trace-events style
 ==================
 
-0x prefix
----------
+``0x`` prefix
+-------------
 
-In trace-events files, use a '0x' prefix to specify hex numbers, as in:
+In trace-events files, use a '``0x``' prefix to specify hex numbers, as in:
 
 .. code-block:: c
 
@@ -678,27 +678,28 @@ PCI bus id):
 
     another_trace(int cssid, int ssid, int dev_num) "bus id: %x.%x.%04x"
 
-However, you can use '0x' for such groups if you want. Anyway, be sure that
+However, you can use '``0x``' for such groups if you want. Anyway, be sure that
 it is obvious that numbers are in hex, ex.:
 
 .. code-block:: c
 
     data_dump(uint8_t c1, uint8_t c2, uint8_t c3) "bytes (in hex): %02x %02x %02x"
 
-Rationale: hex numbers are hard to read in logs when there is no 0x prefix,
-especially when (occasionally) the representation doesn't contain any letters
-and especially in one line with other decimal numbers. Number groups are allowed
-to not use '0x' because for some things notations like %x.%x.%x are used not
-only in QEMU. Also dumping raw data bytes with '0x' is less readable.
+Rationale: hex numbers are hard to read in logs when there is no '``0x``'
+prefix, especially when (occasionally) the representation doesn't contain any
+letters and especially in one line with other decimal numbers. Number groups
+are allowed to not use '``0x``' because for some things notations like
+'``%x.%x.%x``' are used not only in QEMU. Also dumping raw data bytes with
+'``0x``' is less readable.
 
-'#' printf flag
----------------
+'``#``' printf flag
+-------------------
 
-Do not use printf flag '#', like '%#x'.
+Do not use printf flag '``#``', like '``%#x``'.
 
-Rationale: there are two ways to add a '0x' prefix to printed number: '0x%...'
-and '%#...'. For consistency the only one way should be used. Arguments for
-'0x%' are:
+Rationale: there are two ways to add a '``0x``' prefix to printed number:
+'``0x%...``' and '``%#...``'. For consistency the only one way should be used.
+Arguments for '``0x%``' are:
 
 * it is more popular
-* '%#' omits the 0x for the value 0 which makes output inconsistent
+* '``%#``' omits the ``0x`` for the value ``0`` which makes output inconsistent
