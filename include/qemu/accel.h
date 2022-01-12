@@ -91,4 +91,10 @@ void accel_cpu_instance_init(CPUState *cpu);
  */
 bool accel_cpu_realizefn(CPUState *cpu, Error **errp);
 
+/**
+ * accel_cpu_reset:
+ * @cpu: The CPU that needs to call accel-specific reset.
+ */
+void accel_cpu_reset(CPUState *cpu);
+
 #endif /* QEMU_ACCEL_H */

@@ -5923,10 +5923,6 @@ static void x86_cpu_reset(DeviceState *dev)
 
     s->halted = !cpu_is_bsp(cpu);
 
-    if (kvm_enabled()) {
-        kvm_arch_reset_vcpu(cpu);
-    }
-
     x86_cpu_set_sgxlepubkeyhash(env);
 
     if (env->features[FEAT_SVM] & CPUID_SVM_TSCSCALE) {
