@@ -168,7 +168,8 @@ static size_t vrpmb_iov_size(const struct iovec *iov,
 }
 
 
-static size_t vrpmb_iov_to_buf(const struct iovec *iov, const unsigned int iov_cnt,
+static size_t vrpmb_iov_to_buf(const struct iovec *iov,
+                               const unsigned int iov_cnt,
                                size_t offset, void *buf, size_t bytes)
 {
     size_t done;
