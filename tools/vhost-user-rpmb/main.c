@@ -310,6 +310,11 @@ static bool vrpmb_verify_mac_in_frame(VuRpmb *r, struct virtio_rpmb_frame *frm)
  * Handlers for individual control messages
  */
 
+struct resp_frames {
+    struct virtio_rpmb_frame *frames;
+    int len;
+};
+
 /*
  * vrpmb_handle_program_key:
  *
@@ -359,12 +364,12 @@ static void vrpmb_handle_program_key(VuDev *dev, struct virtio_rpmb_frame *frame
  *
  * We respond straight away with re-using the frame as sent.
  */
-static struct virtio_rpmb_frame *
+static struct resp_frames
 vrpmb_handle_get_write_counter(VuDev *dev, struct virtio_rpmb_frame *frame)
 {
     VuRpmb *r = container_of(dev, VuRpmb, dev.parent);
     struct virtio_rpmb_frame *resp = g_new0(struct virtio_rpmb_frame, 1);
-
+    struct resp_frames result = { .frames = resp, .len = 1 };
     /*
      * Run the checks from:
      * 5.12.6.1.2 Device Requirements: Device Operation: Get Write Counter
@@ -374,7 +379,7 @@ vrpmb_handle_get_write_counter(VuDev *dev, struct virtio_rpmb_frame *frame)
     if (!r->key) {
         g_debug("no key programmed");
         resp->result = htobe16(VIRTIO_RPMB_RES_NO_AUTH_KEY);
-        return resp;
+        return result;
     } else if (be16toh(frame->block_count) > 1) { /* allow 0 (NONCONF) */
         g_debug("invalid block count (%d)", be16toh(frame->block_count));
         resp->result = htobe16(VIRTIO_RPMB_RES_GENERAL_FAILURE);
@@ -387,7 +392,7 @@ vrpmb_handle_get_write_counter(VuDev *dev, struct virtio_rpmb_frame *frame)
     /* calculate MAC */
     vrpmb_update_mac_in_frame(r, resp);
 
-    return resp;
+    return result;
 }
 
 /*
@@ -403,11 +408,11 @@ static int vrpmb_handle_write(VuDev *dev, struct virtio_rpmb_frame *frame)
     int extra_frames = 0;
     uint16_t block_count = be16toh(frame->block_count);
     uint32_t write_counter = be32toh(frame->write_counter);
-    size_t offset;
+    size_t initial_offset;
 
     r->last_reqresp = VIRTIO_RPMB_RESP_DATA_WRITE;
     r->last_address = be16toh(frame->address);
-    offset =  r->last_address * RPMB_BLOCK_SIZE;
+    initial_offset =  r->last_address * RPMB_BLOCK_SIZE;
 
     /*
      * Run the checks from:
@@ -419,47 +424,58 @@ static int vrpmb_handle_write(VuDev *dev, struct virtio_rpmb_frame *frame)
     } else if (block_count == 0 ||
                block_count > r->virtio_config.max_wr_cnt) {
         r->last_result = VIRTIO_RPMB_RES_GENERAL_FAILURE;
-    } else if (false /* what does an expired write counter mean? */) {
+    } else if (r->write_count == UINT32_MAX) {
         r->last_result = VIRTIO_RPMB_RES_WRITE_COUNTER_EXPIRED;
-    } else if (offset > (r->virtio_config.capacity * (128 * KiB))) {
+    } else if (initial_offset > (r->virtio_config.capacity * (128 * KiB))) {
         r->last_result = VIRTIO_RPMB_RES_ADDR_FAILURE;
     } else if (!vrpmb_verify_mac_in_frame(r, frame)) {
         r->last_result = VIRTIO_RPMB_RES_AUTH_FAILURE;
     } else if (write_counter != r->write_count) {
+        g_info("failed write_counter check: %d/%d", write_counter, r->write_count);
         r->last_result = VIRTIO_RPMB_RES_COUNT_FAILURE;
     } else {
-        int i;
-        /* At this point we have a valid authenticated write request
-         * so the counter can incremented and we can attempt to
-         * update the backing device.
+        void *blk = r->flash_map + initial_offset;
+        /*
+         * At this point we have a valid authenticated write request.
+         * The only thing that can trip us up now is failure on our
+         * end.
          */
-        r->write_count++;
-        for (i = 0; i < block_count; i++) {
-            void *blk = r->flash_map + offset;
-            g_debug("%s: writing block %d", __func__, i);
-            if (mprotect(blk, RPMB_BLOCK_SIZE, PROT_WRITE) != 0) {
-                r->last_result =  VIRTIO_RPMB_RES_WRITE_FAILURE;
-                break;
+        if (mprotect(blk, RPMB_BLOCK_SIZE * block_count, PROT_WRITE) == 0) {
+            int i;
+            size_t offset = initial_offset;
+
+            r->write_count++;
+
+            for (i = 0; i < block_count; i++) {
+                blk = r->flash_map + offset;
+
+                g_debug("%s: writing block %d/%d -> %p", __func__,
+                        i, block_count, blk);
+
+                memcpy(blk, frame[i].data, RPMB_BLOCK_SIZE);
+
+                if (msync(blk, RPMB_BLOCK_SIZE, MS_SYNC) != 0) {
+                    g_warning("%s: failed to sync update", __func__);
+                }
+                offset += RPMB_BLOCK_SIZE;
             }
-            memcpy(blk, frame[i].data, RPMB_BLOCK_SIZE);
-            if (msync(blk, RPMB_BLOCK_SIZE, MS_SYNC) != 0) {
-                g_warning("%s: failed to sync update", __func__);
-                r->last_result = VIRTIO_RPMB_RES_WRITE_FAILURE;
-                break;
+
+            if (mprotect(blk, RPMB_BLOCK_SIZE * block_count, PROT_READ) != 0) {
+                g_warning("%s: failed to re-apply read protection (%s)",
+                          __func__, strerror(errno));
+                /* r->last_result = VIRTIO_RPMB_RES_GENERAL_FAILURE; */
             }
-            if (mprotect(blk, RPMB_BLOCK_SIZE, PROT_READ) != 0) {
-                g_warning("%s: failed to re-apply read protection", __func__);
-                r->last_result = VIRTIO_RPMB_RES_GENERAL_FAILURE;
-                break;
-            }
-            offset += RPMB_BLOCK_SIZE;
+
+            r->last_result = VIRTIO_RPMB_RES_OK;
+            extra_frames = i - 1;
+        } else {
+            g_warning("failed to give write access to backing file");
+            r->last_result =  VIRTIO_RPMB_RES_WRITE_FAILURE;
         }
-        r->last_result = VIRTIO_RPMB_RES_OK;
-        extra_frames = i - 1;
     }
 
     g_info("%s: %s (%x, %d extra frames processed), write_count=%d", __func__,
-           r->last_result == VIRTIO_RPMB_RES_OK ? "successful":"failed",
+           r->last_result == VIRTIO_RPMB_RES_OK ? "successful" : "failed",
            r->last_result, extra_frames, r->write_count);
 
     return extra_frames;
@@ -472,17 +488,22 @@ static int vrpmb_handle_write(VuDev *dev, struct virtio_rpmb_frame *frame)
  * read here. While the config specifies a maximum read count the spec
  * is limited to a single read at a time.
  */
-static struct virtio_rpmb_frame *
+static struct resp_frames
 vrpmb_handle_read(VuDev *dev, struct virtio_rpmb_frame *frame)
 {
     VuRpmb *r = container_of(dev, VuRpmb, dev.parent);
     size_t offset = be16toh(frame->address) * RPMB_BLOCK_SIZE;
     uint16_t block_count = be16toh(frame->block_count);
-    struct virtio_rpmb_frame *resp = g_new0(struct virtio_rpmb_frame, 1);
+    struct virtio_rpmb_frame *resp = g_new0(struct virtio_rpmb_frame,
+                                            block_count);
+    struct resp_frames result = { .frames = resp, .len = block_count };
 
+    /*
+     * The first block contains the start address and total frame
+     * count.
+     */
     resp->req_resp = htobe16(VIRTIO_RPMB_RESP_DATA_READ);
-    resp->address = frame->address;
-    resp->block_count = htobe16(1);
+    resp->block_count = htobe16(block_count);
 
     /*
      * Run the checks from:
@@ -491,20 +512,22 @@ vrpmb_handle_read(VuDev *dev, struct virtio_rpmb_frame *frame)
     if (!r->key) {
         g_warning("no key programmed");
         resp->result = htobe16(VIRTIO_RPMB_RES_NO_AUTH_KEY);
-    } else if (block_count != 1) {
-        /*
-         * Despite the config the spec only allows for reading one
-         * block at a time: "If block count has not been set to 1 then
-         * VIRTIO_RPMB_RES_GENERAL_FAILURE SHOULD be responded as
-         * result."
-         */
-        resp->result = htobe16(VIRTIO_RPMB_RES_GENERAL_FAILURE);
     } else if (offset > (r->virtio_config.capacity * (128 * KiB))) {
         resp->result = htobe16(VIRTIO_RPMB_RES_ADDR_FAILURE);
     } else {
-        void *blk = r->flash_map + offset;
-        g_debug("%s: reading block from %p (%zu)", __func__, blk, offset);
-        memcpy(resp->data, blk, RPMB_BLOCK_SIZE);
+        for (int i = 0; i < block_count; i++) {
+            struct virtio_rpmb_frame *f = &resp[i];
+            void *blk = r->flash_map + offset + (i * RPMB_BLOCK_SIZE);
+            g_debug("%s: reading block %d from %p (%zu)", __func__, i, blk, offset);
+            memcpy(f->data, blk, RPMB_BLOCK_SIZE);
+
+            f->req_resp = htobe16(VIRTIO_RPMB_RESP_DATA_READ);
+            f->address = htobe16(frame->address + i);
+
+            /* Copy nonce and calculate MAC */
+            memcpy(&f->nonce, &frame->nonce, sizeof(frame->nonce));
+            vrpmb_update_mac_in_frame(r, f);
+        }
         resp->result = htobe16(VIRTIO_RPMB_RES_OK);
     }
 
@@ -512,7 +535,7 @@ vrpmb_handle_read(VuDev *dev, struct virtio_rpmb_frame *frame)
     memcpy(&resp->nonce, &frame->nonce, sizeof(frame->nonce));
     vrpmb_update_mac_in_frame(r, resp);
 
-    return resp;
+    return result;
 }
 
 /*
@@ -522,10 +545,11 @@ vrpmb_handle_read(VuDev *dev, struct virtio_rpmb_frame *frame)
  *
  * The frame should be freed once sent.
  */
-static struct virtio_rpmb_frame * vrpmb_handle_result_read(VuDev *dev)
+static struct resp_frames vrpmb_handle_result_read(VuDev *dev)
 {
     VuRpmb *r = container_of(dev, VuRpmb, dev.parent);
     struct virtio_rpmb_frame *resp = g_new0(struct virtio_rpmb_frame, 1);
+    struct resp_frames result = { .frames = resp, .len = 1 };
 
     g_info("%s: for request:%x result:%x", __func__,
            r->last_reqresp, r->last_result);
@@ -552,7 +576,8 @@ static struct virtio_rpmb_frame * vrpmb_handle_result_read(VuDev *dev)
     g_info("%s: result = %x req_resp = %x", __func__,
            be16toh(resp->result),
            be16toh(resp->req_resp));
-    return resp;
+
+    return result;
 }
 
 static void fmt_bytes(GString *s, uint8_t *bytes, int len)
@@ -562,15 +587,15 @@ static void fmt_bytes(GString *s, uint8_t *bytes, int len)
         if (i % 16 == 0) {
             g_string_append_c(s, '\n');
         }
-        g_string_append_printf(s, "%x ", bytes[i]);
+        g_string_append_printf(s, "%02x ", bytes[i]);
     }
 }
 
-static void vrpmb_dump_frame(struct virtio_rpmb_frame *frame)
+static void vrpmb_dump_frame(struct virtio_rpmb_frame *frame, const char *name)
 {
     g_autoptr(GString) s = g_string_new("frame: ");
 
-    g_string_append_printf(s, " %p\n", frame);
+    g_string_append_printf(s, " %s/%p\n", name, frame);
     g_string_append_printf(s, "key_mac:");
     fmt_bytes(s, (uint8_t *) &frame->key_mac[0], 32);
     g_string_append_printf(s, "\ndata:");
@@ -582,7 +607,7 @@ static void vrpmb_dump_frame(struct virtio_rpmb_frame *frame)
     g_string_append_printf(s, "address: %#04x\n", be16toh(frame->address));
     g_string_append_printf(s, "block_count: %d\n", be16toh(frame->block_count));
     g_string_append_printf(s, "result: %d\n", be16toh(frame->result));
-    g_string_append_printf(s, "req_resp: %d\n", be16toh(frame->req_resp));
+    g_string_append_printf(s, "req_resp: %x\n", be16toh(frame->req_resp));
 
     g_debug("%s: %s\n", __func__, s->str);
 }
@@ -606,23 +631,25 @@ vrpmb_handle_ctrl(VuDev *dev, int qidx)
                 elem->in_num, elem->out_num);
 
         len = vrpmb_iov_size(elem->out_sg, elem->out_num);
-        frames = g_realloc(frames, len);
-        vrpmb_iov_to_buf(elem->out_sg, elem->out_num, 0, frames, len);
 
         if (len % frame_sz != 0) {
             g_warning("%s: incomplete frames %zu/%zu != 0\n",
                       __func__, len, frame_sz);
+            break;
         }
+
+        frames = g_realloc(frames, len);
+        vrpmb_iov_to_buf(elem->out_sg, elem->out_num, 0, frames, len);
 
         for (n = 0; n < len / frame_sz; n++) {
             struct virtio_rpmb_frame *f = &frames[n];
-            struct virtio_rpmb_frame *resp = NULL;
+            struct resp_frames resp = { .frames = NULL };
             uint16_t req_resp = be16toh(f->req_resp);
             bool responded = false;
 
             if (debug) {
                 g_info("req_resp=%x", req_resp);
-                vrpmb_dump_frame(f);
+                vrpmb_dump_frame(f, "incoming");
             }
 
             switch (req_resp) {
@@ -643,35 +670,39 @@ vrpmb_handle_ctrl(VuDev *dev, int qidx)
             case VIRTIO_RPMB_REQ_DATA_WRITE:
                 /* we can have multiple blocks handled */
                 n += vrpmb_handle_write(dev, f);
+                g_info("write data: %d / %ld", n, len);
                 break;
             case VIRTIO_RPMB_REQ_DATA_READ:
                 resp = vrpmb_handle_read(dev, f);
                 break;
             default:
-                g_debug("un-handled request: %x", f->req_resp);
+                g_debug("un-handled request: %x", req_resp);
                 break;
             }
 
             /*
              * Do we have a frame to send back?
              */
-            if (resp) {
-                g_debug("sending response frame: %p", resp);
+            if (resp.frames) {
+                size_t total_len = resp.len * sizeof(struct virtio_rpmb_frame);
+                g_debug("sending response %d frames: %p/%zu", resp.len,
+                        resp.frames, total_len);
                 if (debug) {
-                    vrpmb_dump_frame(resp);
+                    vrpmb_dump_frame(resp.frames, "response");
                 }
-                len = vrpmb_iov_from_buf(elem->in_sg,
-                                         elem->in_num, 0, resp, sizeof(*resp));
-                if (len != sizeof(*resp)) {
+                len = vrpmb_iov_from_buf(elem->in_sg, elem->in_num,
+                                         0, resp.frames, total_len);
+                if (len != total_len) {
                     g_critical("%s: response size incorrect %zu vs %zu",
-                               __func__, len, sizeof(*resp));
+                               __func__, len, total_len);
                 } else {
                     vu_queue_push(dev, vq, elem, len);
                     vu_queue_notify(dev, vq);
                     responded = true;
                 }
 
-                g_free(resp);
+                g_free(resp.frames);
+                resp.frames = NULL;
             }
         }
     }
@@ -750,8 +781,8 @@ static bool vrpmb_load_flash_image(VuRpmb *r, char *img_path)
         map_size = statbuf.st_size;
     }
     r->virtio_config.capacity = map_size / (128 * KiB);
-    r->virtio_config.max_wr_cnt = 1;
-    r->virtio_config.max_rd_cnt = 1;
+    r->virtio_config.max_wr_cnt = 4;
+    r->virtio_config.max_rd_cnt = 4;
 
     r->flash_map = mmap(NULL, map_size, PROT_READ, MAP_SHARED, r->flash_fd, 0);
     if (r->flash_map == MAP_FAILED) {
