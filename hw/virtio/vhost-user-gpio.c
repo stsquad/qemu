@@ -14,9 +14,13 @@
 #include "qemu/error-report.h"
 #include "standard-headers/linux/virtio_ids.h"
 
+/* do no other vhost-user daemons need this? */
+#define VHOST_USER_F_PROTOCOL_FEATURES 30
+
 static const int feature_bits[] = {
     VIRTIO_F_VERSION_1,
     VIRTIO_GPIO_F_IRQ,
+    VHOST_USER_F_PROTOCOL_FEATURES,
     VHOST_INVALID_FEATURE_BIT
 };
 
@@ -65,7 +69,11 @@ static int vu_gpio_start(VirtIODevice *vdev)
         goto err_host_notifiers;
     }
 
-    gpio->vhost_dev.acked_features = vdev->guest_features;
+    /*
+     * Before we start up we need to ensure we have the final feature
+     * set needed for the vhost configuration.
+     */
+    vhost_ack_features(&gpio->vhost_dev, feature_bits, vdev->backend_features);
 
     ret = vhost_dev_start(&gpio->vhost_dev, vdev);
     if (ret < 0) {
@@ -140,15 +148,18 @@ static void vu_gpio_set_status(VirtIODevice *vdev, uint8_t status)
     }
 }
 
-static uint64_t vu_gpio_get_features(VirtIODevice *vdev,
-                                    uint64_t requested_features, Error **errp)
+static uint64_t vu_gpio_get_features(VirtIODevice *vdev, uint64_t features, Error **errp)
 {
     VHostUserGPIO *gpio = VHOST_USER_GPIO(vdev);
 
-    virtio_add_feature(&requested_features, VIRTIO_GPIO_F_IRQ);
-    virtio_add_feature(&requested_features, VIRTIO_F_VERSION_1);
+    /* take into account the features advertised by the host */
+    features |= vdev->host_features;
 
-    return vhost_get_features(&gpio->vhost_dev, feature_bits, requested_features);
+    virtio_add_feature(&features, VIRTIO_GPIO_F_IRQ);
+    virtio_add_feature(&features, VIRTIO_F_VERSION_1);
+
+    vdev->backend_features = vhost_get_features(&gpio->vhost_dev, feature_bits, features);
+    return vdev->backend_features;
 }
 
 static void vu_gpio_handle_output(VirtIODevice *vdev, VirtQueue *vq)
