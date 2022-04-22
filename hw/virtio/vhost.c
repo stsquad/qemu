@@ -1738,7 +1738,7 @@ int vhost_dev_get_inflight(struct vhost_dev *dev, uint16_t queue_size,
 int vhost_dev_start(struct vhost_dev *hdev, VirtIODevice *vdev)
 {
     int i, r;
-
+    fprintf(stderr, "%s: %p %p\n", __func__, hdev, vdev);
     /* should only be called after backend is connected */
     assert(hdev->vhost_ops);
 

@@ -753,6 +753,8 @@ static void *vhost_user_test_setup(GString *cmd_line, void *arg)
     TestServer *server = test_server_new("vhost-user-test", arg);
     test_server_listen(server);
 
+    fprintf(stderr, "%s: %s\n", __func__, cmd_line->str);
+
     append_mem_opts(server, cmd_line, 256, TEST_MEMFD_AUTO);
     server->vu_ops->append_opts(server, cmd_line, "");
 
@@ -778,9 +780,13 @@ static void test_read_guest_mem(void *obj, void *arg, QGuestAllocator *alloc)
 {
     TestServer *server = arg;
 
+    fprintf(stderr, "%s: start\n", __func__);
+
     if (!wait_for_fds(server)) {
         return;
     }
+
+    fprintf(stderr, "%s: run test\n", __func__);
 
     read_guest_mem_server(global_qtest, server);
 }
@@ -1008,6 +1014,8 @@ static void test_multiqueue(void *obj, void *arg, QGuestAllocator *alloc)
 static void vu_net_set_features(TestServer *s, CharBackend *chr,
         VhostUserMsg *msg)
 {
+    fprintf(stderr, "%s: 0x%"PRIx64"\n", __func__, msg->payload.u64);
+
     g_assert_cmpint(msg->payload.u64 &
             (0x1ULL << VHOST_USER_F_PROTOCOL_FEATURES), !=, 0ULL);
     if (s->test_flags == TEST_FLAGS_DISCONNECT) {
@@ -1027,6 +1035,9 @@ static void vu_net_get_protocol_features(TestServer *s, CharBackend *chr,
     if (s->queues > 1) {
         msg->payload.u64 |= 1 << VHOST_USER_PROTOCOL_F_MQ;
     }
+
+    fprintf(stderr, "%s: 0x%"PRIx64"\n", __func__, msg->payload.u64);
+
     qemu_chr_fe_write_all(chr, (uint8_t *)msg, VHOST_USER_HDR_SIZE + msg->size);
 }
 
@@ -1098,6 +1109,8 @@ static void vu_gpio_get_protocol_features(TestServer *s, CharBackend *chr,
     msg->size = sizeof(m.payload.u64);
     msg->payload.u64 = 1ULL << VHOST_USER_PROTOCOL_F_LOG_SHMFD;
     msg->payload.u64 |= 1ULL << VHOST_USER_PROTOCOL_F_CONFIG;
+
+    fprintf(stderr, "%s: 0x%"PRIx64"\n", __func__, msg->payload.u64);
 
     qemu_chr_fe_write_all(chr, (uint8_t *)msg, VHOST_USER_HDR_SIZE + msg->size);
 }
