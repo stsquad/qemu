@@ -372,6 +372,17 @@ static void chr_read(void *opaque, const uint8_t *buf, int size)
         }
         break;
 
+    case VHOST_USER_GET_CONFIG:
+        /*
+         * Treat GET_CONFIG as a NOP and just reply and let the guest
+         * consider we have updated its memory. Tests currently don't
+         * require working configs.
+         */
+        msg.flags |= VHOST_USER_REPLY_MASK;
+        p = (uint8_t *) &msg;
+        qemu_chr_fe_write_all(chr, p, VHOST_USER_HDR_SIZE + msg.size);
+        break;
+
     case VHOST_USER_SET_PROTOCOL_FEATURES:
         /*
          * We did set VHOST_USER_F_PROTOCOL_FEATURES so its valid for
