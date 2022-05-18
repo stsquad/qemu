@@ -15,7 +15,9 @@
 #include "standard-headers/linux/virtio_ids.h"
 
 static const int feature_bits[] = {
-    VIRTIO_GPIO_F_IRQ
+    VIRTIO_F_VERSION_1,
+    VIRTIO_GPIO_F_IRQ,
+    VHOST_INVALID_FEATURE_BIT
 };
 
 static void vu_gpio_get_config(VirtIODevice *vdev, uint8_t *config)
@@ -144,6 +146,8 @@ static uint64_t vu_gpio_get_features(VirtIODevice *vdev,
     VHostUserGPIO *gpio = VHOST_USER_GPIO(vdev);
 
     virtio_add_feature(&requested_features, VIRTIO_GPIO_F_IRQ);
+    virtio_add_feature(&requested_features, VIRTIO_F_VERSION_1);
+
     return vhost_get_features(&gpio->vhost_dev, feature_bits, requested_features);
 }
 
