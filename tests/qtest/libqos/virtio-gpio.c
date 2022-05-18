@@ -141,6 +141,7 @@ static void *virtio_gpio_pci_create(void *pci_bus, QGuestAllocator *t_alloc,
 
     virtio_pci_init(&virtio_spci->pci_vdev, pci_bus, addr);
     interface->vdev = &virtio_spci->pci_vdev.vdev;
+    alloc = t_alloc;
 
     obj->get_driver = qvirtio_gpio_pci_get_driver;
     obj->start_hw= qvirtio_gpio_pci_start_hw;
