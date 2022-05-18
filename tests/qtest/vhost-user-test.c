@@ -32,6 +32,7 @@
 #include "standard-headers/linux/vhost_types.h"
 #include "standard-headers/linux/virtio_ids.h"
 #include "standard-headers/linux/virtio_net.h"
+#include "standard-headers/linux/virtio_gpio.h"
 
 #ifdef CONFIG_LINUX
 #include <sys/vfs.h>
@@ -53,6 +54,8 @@
 #define VHOST_MAX_VIRTQUEUES    0x100
 
 #define VHOST_USER_F_PROTOCOL_FEATURES 30
+#define VIRTIO_F_VERSION_1		32
+
 #define VHOST_USER_PROTOCOL_F_MQ 0
 #define VHOST_USER_PROTOCOL_F_LOG_SHMFD 1
 #define VHOST_USER_PROTOCOL_F_CROSS_ENDIAN   6
@@ -177,6 +180,8 @@ struct vhost_user_ops {
             VhostUserMsg *msg);
     void (*get_protocol_features)(TestServer *s,
             CharBackend *chr, VhostUserMsg *msg);
+    void (*get_config)(TestServer *s, CharBackend *chr,
+                       VhostUserMsg *msg);
 };
 
 static const char *init_hugepagefs(void);
@@ -357,7 +362,8 @@ static void chr_read(void *opaque, const uint8_t *buf, int size)
         msg.flags |= VHOST_USER_REPLY_MASK;
         msg.size = sizeof(m.payload.u64);
         msg.payload.u64 = 0x1ULL << VHOST_F_LOG_ALL |
-            0x1ULL << VHOST_USER_F_PROTOCOL_FEATURES;
+            0x1ULL << VHOST_USER_F_PROTOCOL_FEATURES |
+            0x1ULL << VIRTIO_F_VERSION_1;
         if (s->queues > 1) {
             msg.payload.u64 |= 0x1ULL << VIRTIO_NET_F_MQ;
         }
@@ -1102,8 +1108,9 @@ libqos_init(register_vhost_user_test);
  * talking to a read vhost-user daemon.
  */
 static void vu_gpio_get_protocol_features(TestServer *s, CharBackend *chr,
-        VhostUserMsg *msg)
+                                          VhostUserMsg *msg)
 {
+    int r;
     /* send back features to qemu */
     msg->flags |= VHOST_USER_REPLY_MASK;
     msg->size = sizeof(m.payload.u64);
@@ -1112,7 +1119,29 @@ static void vu_gpio_get_protocol_features(TestServer *s, CharBackend *chr,
 
     fprintf(stderr, "%s: 0x%"PRIx64"\n", __func__, msg->payload.u64);
 
-    qemu_chr_fe_write_all(chr, (uint8_t *)msg, VHOST_USER_HDR_SIZE + msg->size);
+    r = qemu_chr_fe_write_all(chr, (uint8_t *)msg, VHOST_USER_HDR_SIZE + msg->size);
+
+    fprintf(stderr, "%s: sent %d byte reply\n", __func__, r);
+}
+
+/*
+ * The VHOST_USER_GET_CONFIG passes a memory reference to the guest
+ * memory for us to copy the config data too. For the purposes of this
+ * test we just pretend we wrote something to that memory.
+ */
+static void vu_gpio_get_config(TestServer *s, CharBackend *chr,
+                               VhostUserMsg *msg)
+{
+    int r;
+    /* struct virtio_gpio_config config = { .ngpio = 1 }; */
+
+    fprintf(stderr, "%s: size:%d/%lu\n", __func__, msg->size, sizeof(struct virtio_gpio_config));
+
+    msg->flags |= VHOST_USER_REPLY_MASK;
+
+    r = qemu_chr_fe_write_all(chr, (uint8_t *)msg, VHOST_USER_HDR_SIZE + msg->size);
+
+    fprintf(stderr, "%s: sent %d byte reply\n", __func__, r);
 }
 
 static struct vhost_user_ops g_vu_gpio_ops = {
@@ -1122,6 +1151,7 @@ static struct vhost_user_ops g_vu_gpio_ops = {
 
     .set_features = vu_net_set_features,
     .get_protocol_features = vu_gpio_get_protocol_features,
+    .get_config = vu_gpio_get_config,
 };
 
 static void register_vhost_gpio_test(void)
