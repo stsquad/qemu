@@ -32,10 +32,8 @@ static void virtio_gpio_setup(QVhostUserGPIO *gpio)
     int i;
 
     features = qvirtio_get_features(vdev);
-    features &= ~(QVIRTIO_F_BAD_FEATURE |
-                  (1ull << VIRTIO_RING_F_INDIRECT_DESC) |
-                  (1ull << VIRTIO_RING_F_EVENT_IDX));
-    qvirtio_set_features(vdev, features);
+    features &= ~(QVIRTIO_F_BAD_FEATURE);
+    qvirtio_set_features(vdev, features | (1ull << 30));
 
     gpio->queues = g_new(QVirtQueue *, 2);
     for (i = 0; i < 2; i++) {

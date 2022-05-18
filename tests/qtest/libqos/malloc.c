@@ -44,6 +44,8 @@ static MemBlock *mlist_find_space(MemList *head, uint64_t size)
 {
     MemBlock *node;
 
+    fprintf(stderr, "%s: %p/%ld\n", __func__, head, size);
+
     QTAILQ_FOREACH(node, head, MLIST_ENTNAME) {
         if (node->size >= size) {
             return node;
@@ -255,6 +257,8 @@ uint64_t guest_alloc(QGuestAllocator *allocator, size_t size)
     uint64_t rsize = size;
     uint64_t naddr;
 
+    fprintf(stderr, "%s: %ld\n", __func__, size);
+
     if (!size) {
         return 0;
     }
@@ -264,8 +268,11 @@ uint64_t guest_alloc(QGuestAllocator *allocator, size_t size)
     g_assert_cmpint((allocator->start + rsize), <=, allocator->end);
     g_assert_cmpint(rsize, >=, size);
 
+    fprintf(stderr, "%s: passed the asserts\n", __func__);
+
     naddr = mlist_alloc(allocator, rsize);
     if (allocator->opts & ALLOC_PARANOID) {
+        fprintf(stderr, "%s: doing check\n", __func__);
         mlist_check(allocator);
     }
 

@@ -371,11 +371,15 @@ static void chr_read(void *opaque, const uint8_t *buf, int size)
             msg.payload.u64 = 0;
             s->test_flags = TEST_FLAGS_END;
         }
+
+        fprintf(stderr, "%s: get_features %lx\n", __func__, msg.payload.u64);
+
         p = (uint8_t *) &msg;
         qemu_chr_fe_write_all(chr, p, VHOST_USER_HDR_SIZE + msg.size);
         break;
 
     case VHOST_USER_SET_FEATURES:
+        fprintf(stderr, "%s: user_set_features %lx\n", __func__, msg.payload.u64);
         if (s->vu_ops->set_features) {
             s->vu_ops->set_features(s, chr, &msg);
         }
@@ -390,6 +394,7 @@ static void chr_read(void *opaque, const uint8_t *buf, int size)
         break;
 
     case VHOST_USER_GET_PROTOCOL_FEATURES:
+        fprintf(stderr, "%s: user_get_protocol_features %lx\n", __func__, msg.payload.u64);
         if (s->vu_ops->get_protocol_features) {
             s->vu_ops->get_protocol_features(s, chr, &msg);
         }
