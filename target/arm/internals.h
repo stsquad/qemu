@@ -1525,4 +1525,15 @@ bool check_watchpoint_in_range(int i, target_ulong addr);
 CPUWatchpoint *find_hw_watchpoint(CPUState *cpu, target_ulong addr);
 int insert_hw_watchpoint(target_ulong addr, target_ulong len, int type);
 int delete_hw_watchpoint(target_ulong addr, target_ulong len, int type);
+
+/* Hooks to enroll registers with the register API */
+
+void arm_enroll_registers(ARMCPU *cpu);
+void aarch64_enroll_registers(ARMCPU *cpu);
+
+/**
+ * aarch64_enroll_pstate: register pstate virtual register
+ */
+void aarch64_enroll_pstate(void);
+
 #endif

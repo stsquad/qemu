@@ -22,6 +22,7 @@
 #include "translate-a64.h"
 #include "qemu/log.h"
 #include "disas/disas.h"
+#include "registers/api.h"
 #include "arm_ldst.h"
 #include "semihosting/semihost.h"
 #include "cpregs.h"
@@ -87,21 +88,29 @@ typedef struct AArch64DecodeTable {
 } AArch64DecodeTable;
 
 /* initialize TCG globals.  */
+static TCGv_i64 create_and_register_i64(intptr_t offset, const char *name)
+{
+    reg_add_env(name, NULL, offset, 8);
+    return tcg_global_mem_new_i64(cpu_env, offset, name);
+}
+
 void a64_translate_init(void)
 {
     int i;
 
-    cpu_pc = tcg_global_mem_new_i64(cpu_env,
-                                    offsetof(CPUARMState, pc),
-                                    "pc");
     for (i = 0; i < 32; i++) {
-        cpu_X[i] = tcg_global_mem_new_i64(cpu_env,
-                                          offsetof(CPUARMState, xregs[i]),
-                                          regnames[i]);
+        cpu_X[i] = create_and_register_i64(offsetof(CPUARMState, xregs[i]),
+                                           regnames[i]);
     }
+
+    /* Register 32 */
+    cpu_pc = create_and_register_i64(offsetof(CPUARMState, pc), "pc");
 
     cpu_exclusive_high = tcg_global_mem_new_i64(cpu_env,
         offsetof(CPUARMState, exclusive_high), "exclusive_high");
+
+    /* Reg 33 */
+    aarch64_enroll_pstate();
 }
 
 /*

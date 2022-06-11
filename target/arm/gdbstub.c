@@ -133,55 +133,6 @@ int arm_cpu_gdb_write_register(CPUState *cs, uint8_t *mem_buf, int n)
     return 0;
 }
 
-static int vfp_gdb_get_reg(CPUARMState *env, GByteArray *buf, int reg)
-{
-    ARMCPU *cpu = env_archcpu(env);
-    int nregs = cpu_isar_feature(aa32_simd_r32, cpu) ? 32 : 16;
-
-    /* VFP data registers are always little-endian.  */
-    if (reg < nregs) {
-        return gdb_get_reg64(buf, *aa32_vfp_dreg(env, reg));
-    }
-    if (arm_feature(env, ARM_FEATURE_NEON)) {
-        /* Aliases for Q regs.  */
-        nregs += 16;
-        if (reg < nregs) {
-            uint64_t *q = aa32_vfp_qreg(env, reg - 32);
-            return gdb_get_reg128(buf, q[0], q[1]);
-        }
-    }
-    switch (reg - nregs) {
-    case 0:
-        return gdb_get_reg32(buf, vfp_get_fpscr(env));
-    }
-    return 0;
-}
-
-static int vfp_gdb_set_reg(CPUARMState *env, uint8_t *buf, int reg)
-{
-    ARMCPU *cpu = env_archcpu(env);
-    int nregs = cpu_isar_feature(aa32_simd_r32, cpu) ? 32 : 16;
-
-    if (reg < nregs) {
-        *aa32_vfp_dreg(env, reg) = ldq_le_p(buf);
-        return 8;
-    }
-    if (arm_feature(env, ARM_FEATURE_NEON)) {
-        nregs += 16;
-        if (reg < nregs) {
-            uint64_t *q = aa32_vfp_qreg(env, reg - 32);
-            q[0] = ldq_le_p(buf);
-            q[1] = ldq_le_p(buf + 8);
-            return 16;
-        }
-    }
-    switch (reg - nregs) {
-    case 0:
-        vfp_set_fpscr(env, ldl_p(buf));
-        return 4;
-    }
-    return 0;
-}
 
 static int vfp_gdb_get_sysreg(CPUARMState *env, GByteArray *buf, int reg)
 {

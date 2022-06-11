@@ -2,9 +2,9 @@ arm_ss = ss.source_set()
 arm_ss.add(files(
   'cpu.c',
   'debug_helper.c',
-  'gdbstub.c',
   'helper.c',
   'vfp_helper.c',
+  'registers.c',
 ))
 arm_ss.add(zlib)
 
@@ -13,7 +13,7 @@ arm_ss.add(when: 'CONFIG_HVF', if_true: files('hyp_gdbstub.c'))
 
 arm_ss.add(when: 'TARGET_AARCH64', if_true: files(
   'cpu64.c',
-  'gdbstub64.c',
+  'registers64.c',
 ))
 
 arm_system_ss = ss.source_set()
