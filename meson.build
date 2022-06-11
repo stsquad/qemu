@@ -3177,6 +3177,7 @@ hwcore_ss = ss.source_set()
 io_ss = ss.source_set()
 qmp_ss = ss.source_set()
 qom_ss = ss.source_set()
+registers_ss = ss.source_set()
 system_ss = ss.source_set()
 specific_fuzz_ss = ss.source_set()
 specific_ss = ss.source_set()
@@ -3443,6 +3444,7 @@ subdir('fpu')
 subdir('accel')
 subdir('plugins')
 subdir('ebpf')
+subdir('registers')
 
 common_user_inc = []
 
@@ -3650,6 +3652,14 @@ libhwcore = static_library('hwcore', sources: hwcore_ss.sources() + genh,
                            build_by_default: false)
 hwcore = declare_dependency(link_whole: libhwcore)
 common_ss.add(hwcore)
+
+registers_ss = registers_ss.apply(config_host, strict: false)
+libregisters = static_library('registers', registers_ss.sources(),
+                              name_suffix: 'fa',
+                              dependencies: registers_ss.dependencies(),
+                              build_by_default: false)
+registers = declare_dependency(link_whole: libregisters)
+common_ss.add(registers)
 
 ###########
 # Targets #
