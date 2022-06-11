@@ -138,3 +138,13 @@ void reg_finalize_definitions(void);
  */
 int reg_get_number(const char *grp);
 
+/**
+ * reg_dump_cpu_state() - dump the current register state to a FD
+ * @cs: abstract CPU state pointer
+ * @f: FILE descriptor for output
+ * @flags: register type selection
+ *
+ * This function is meant to be a drop in replacement for architecture
+ * specific CPUClass dump_state function.
+ */
+void reg_cpu_dump_state(CPUState *cs, FILE *f, int flags);
