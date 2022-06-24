@@ -27,6 +27,7 @@
 #include "monitor/qdev.h"
 #include "net/slirp.h"
 #include "sysemu/device_tree.h"
+#include "registers/api.h"
 #include "monitor/hmp-target.h"
 #include "monitor/hmp.h"
 #include "block/block-hmp-cmds.h"
@@ -93,7 +94,16 @@ int get_monitor_def(Monitor *mon, int64_t *pval, const char *name)
     uint64_t tmp = 0;
     int ret;
 
-    if (cs == NULL || md == NULL) {
+    if (cs == NULL) {
+        return -1;
+    }
+
+    /* Try the register API first, fall back to monitor defs */
+    if (reg_get_value_hmp(cs, name, pval)) {
+        return 0;
+    }
+
+    if (md == NULL) {
         return -1;
     }
 

@@ -179,6 +179,15 @@ static void test_registration(void)
     g_assert(reg_get_number("vectors") == 2);
 }
 
+static void set_test_values(void)
+{
+    /* Some test data for registers */
+    fcpu.reg32[0] = 0x12345678;
+    fcpu.reg32[1] = 0xabcdef01;
+    fcpu.reg64[0] = 0xabababababababab;
+    fcpu.reg64[1] = 0xcccccccccccccccc;
+}
+
 static void test_dump(void)
 {
     g_autofree char *tdir = g_strdup_printf("%s/registers.test.XXXXXX",
@@ -192,11 +201,7 @@ static void test_dump(void)
     tfile = g_strdup_printf("%s/output", tdir);
     output = g_fopen(tfile, "w");
 
-    /* Some test data for registers */
-    fcpu.reg32[0] = 0x12345678;
-    fcpu.reg32[1] = 0xabcdef01;
-    fcpu.reg64[0] = 0xabababababababab;
-    fcpu.reg64[1] = 0xcccccccccccccccc;
+    set_test_values();
 
     reg_cpu_dump_state(NULL, output, 0);
 
@@ -209,11 +214,33 @@ static void test_dump(void)
                     "r64_0=0xabababababababab r64_1=0xcccccccccccccccc\n");
 }
 
+static void test_hmp_get(void)
+{
+    /* HMP stores everything as a 64 bit value */
+    int64_t value;
+
+    set_test_values();
+
+    g_assert(reg_get_value_hmp(NULL, "r32_0", &value));
+    g_assert(value == 0x12345678);
+    g_assert(reg_get_value_hmp(NULL, "r32_1", &value));
+    g_assert(value == 0xabcdef01);
+    g_assert(reg_get_value_hmp(NULL, "r64_0", &value));
+    g_assert(value == 0xabababababababab);
+    g_assert(reg_get_value_hmp(NULL, "r64_1", &value));
+    g_assert(value == 0xcccccccccccccccc);
+
+    /* Also check we fail for fake registers */
+    g_assert_false(reg_get_value_hmp(NULL, "fake_reg", &value));
+}
+
+
 int main(int argc, char *argv[])
 {
     g_test_init(&argc, &argv, NULL);
     g_test_add_func("/registers/registration", test_registration);
     g_test_add_func("/registers/dump", test_dump);
+    g_test_add_func("/registers/hmp_get", test_hmp_get);
     g_test_run();
     return 0;
 }

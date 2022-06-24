@@ -40,6 +40,31 @@ static void fmt_env_reg_string(GString *s, uintptr_t env, RegDef *reg)
     }
 }
 
+bool reg_get_value_hmp(CPUState *cs, const char *name, int64_t *val)
+{
+    RegDef *reg = reg_find_defintion(name);
+
+    if (reg) {
+        /* HMP can't handle more than 64bit values */
+        if (reg->size > 8) {
+            return false;
+        }
+        switch (reg->size) {
+        case 8:
+            *val = reg_read_64bit_value(cs, reg);
+            return true;
+        case 4:
+            *val = reg_read_32bit_value(cs, reg);
+            return true;
+        default:
+            return false;
+        }
+    }
+
+    return false;
+}
+
+
 void reg_cpu_dump_state(CPUState *cs, FILE *f, int flags)
 {
     GArray *registers = reg_get_registers();

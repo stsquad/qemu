@@ -148,3 +148,17 @@ int reg_get_number(const char *grp);
  * specific CPUClass dump_state function.
  */
 void reg_cpu_dump_state(CPUState *cs, FILE *f, int flags);
+
+/**
+ * reg_get_value_hmp(): get the value of a register for HMP
+ * @cs: CPU for which we want the value
+ * @name: name of the register
+ * @val: pointer to int64_t for value
+ *
+ * This is a temporary API function for the slightly clunky HMP API
+ * which can be replaced with nicer code once the old
+ * target_monitor_defs code is replaced.
+ *
+ * Returns true if found and set, false otherwise.
+ */
+bool reg_get_value_hmp(CPUState *cs, const char *name, int64_t *val);

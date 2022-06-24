@@ -71,5 +71,27 @@ typedef struct {
  * @group: the register group it belongs to
  */
 void reg_add_definition(RegDef def, const char *group);
+
+/**
+ * reg_find_defintion: recall regdef
+ * @name: name of register as a string
+ *
+ * Search through the list of registers for @name and return the
+ * definition if found. The search is case insensitive.
+ *
+ * Returns a RegDef or NULL if not found.
+ */
+RegDef *reg_find_defintion(const char *name);
+
+uint64_t reg_read_64bit_value(CPUState *cs, RegDef *def);
+uint32_t reg_read_32bit_value(CPUState *cs, RegDef *def);
+
+/**
+ * reg_get_registers: return GArray of RegDef's
+ */
 GArray *reg_get_registers(void);
+
+/**
+ * reg_get_group: return GArray of indexes to reg_get_registers
+ */
 GArray *reg_get_group(const char *group);

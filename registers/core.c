@@ -8,6 +8,7 @@
  */
 
 #include "qemu/osdep.h"
+#include "hw/core/cpu.h"
 #include "registers/api.h"
 #include "internals.h"
 
@@ -64,11 +65,73 @@ void reg_add_definition(RegDef def, const char *group)
     g_array_append_val(grp_index, new_reg_idx);
 }
 
+RegDef *reg_find_defintion(const char *name)
+{
+    int i;
+
+    for (i = 0; i < registers->len; i++) {
+        RegDef *reg = &g_array_index(registers, RegDef, i);
+        if (g_ascii_strncasecmp(reg->name, name, strlen(reg->name)) == 0) {
+            return reg;
+        }
+    }
+
+    return NULL;
+}
+
 GArray *reg_get_registers(void)
 {
     return registers;
 }
 
+/*
+ * Get values
+ */
+uint64_t reg_read_64bit_value(CPUState *cs, RegDef *reg)
+{
+    switch (reg->type) {
+    case REG_DIRECT_ENV:
+    {
+        uintptr_t env = (uintptr_t) cs->env_ptr;
+        uintptr_t ptr = env + reg->access.env.offset;
+        g_assert(reg->size == 8);
+        return *(uint64_t *) ptr;
+        break;
+    }
+    case REG_64BIT_HELPER:
+    {
+        void *opaque = reg->access.helper64.opaque;
+        return reg->access.helper64.read(cs, opaque);
+    }
+    default:
+        g_assert_not_reached();
+    }
+
+    return 0;
+}
+
+uint32_t reg_read_32bit_value(CPUState *cs, RegDef *reg)
+{
+    switch (reg->type) {
+    case REG_DIRECT_ENV:
+    {
+        uintptr_t env = (uintptr_t) cs->env_ptr;
+        uintptr_t ptr = env + reg->access.env.offset;
+        g_assert(reg->size == 4);
+        return *(uint32_t *) ptr;
+        break;
+    }
+    case REG_32BIT_HELPER:
+    {
+        void *opaque = reg->access.helper64.opaque;
+        return reg->access.helper64.read(cs, opaque);
+    }
+    default:
+        g_assert_not_reached();
+    }
+
+    return 0;
+}
 
 __attribute__((constructor))
 static void registers_init(void)
