@@ -62,6 +62,10 @@ typedef struct {
 } RegGroup;
 
 /*
+ * Opaque handles used outside of the register subsystem
+ */
+
+/*
  * Internal API functions, shouldn't be used by the wider code base.
  */
 
@@ -87,11 +91,46 @@ uint64_t reg_read_64bit_value(CPUState *cs, RegDef *def);
 uint32_t reg_read_32bit_value(CPUState *cs, RegDef *def);
 
 /**
- * reg_get_registers: return GArray of RegDef's
+ * reg_get_groups(): return internal RegGroup array
  */
-GArray *reg_get_registers(void);
+GArray *reg_get_groups(void);
 
 /**
- * reg_get_group: return GArray of indexes to reg_get_registers
+ * reg_get_group(): return GArray of indexes to reg_get_registers
+ * @group: name of group
+ *
+ * If group is not found it will create it and return a GArray of
+ * indexs into reg_get_registers.
  */
 GArray *reg_get_group(const char *group);
+
+/**
+ * reg_find_group(): return RegGroup for @group
+ * @group: name of group
+ *
+ * Returns pointer to RegGroup or NULL if not found.
+ */
+RegGroup *reg_find_group(const char *group);
+
+/**
+ * reg_get_definition() - recall a regdef
+ * @idx: global index of register
+ *
+ * Return the definition of a register based on its index. This will
+ * come from either the core register list or one of the groups.
+ */
+RegDef *reg_get_definition(int index);
+
+/**
+ * reg_get_indirect_defintion() - recall a RegDef via a group array
+ * @idx: index into group array
+ *
+ * Return the definition of a register based on its indirect group
+ * index.
+ */
+static inline RegDef *reg_get_indirect_definition(GArray *grp, int grp_index)
+{
+    int *global_idx =  &g_array_index(grp, int, grp_index);
+    g_assert(g_array_get_element_size(grp) == sizeof(int));
+    return reg_get_definition(*global_idx);
+}

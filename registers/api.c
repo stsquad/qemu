@@ -80,6 +80,14 @@ void reg_add_vector(const char *name, const char *grp, void *opaque,
 
 void reg_finalize_definitions(void)
 {
+
+}
+
+/* TODO: interpret register lists, but who would free dynamic groups? */
+struct RegGroupHandle *reg_get_group_handle(const char *name)
+{
+    RegGroup *grp = reg_find_group(name);
+    return grp ? (struct RegGroupHandle *) grp->registers : NULL;
 }
 
 int reg_get_number(const char *grp)

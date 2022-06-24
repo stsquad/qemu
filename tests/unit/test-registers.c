@@ -234,6 +234,13 @@ static void test_hmp_get(void)
     g_assert_false(reg_get_value_hmp(NULL, "fake_reg", &value));
 }
 
+static void test_reg_groups(void)
+{
+    g_assert(reg_get_group_handle("flags"));
+    g_assert(reg_get_group_handle("vectors"));
+    g_assert_false(reg_get_group_handle(NULL));
+    g_assert_false(reg_get_group_handle("fake group"));
+}
 
 int main(int argc, char *argv[])
 {
@@ -241,6 +248,7 @@ int main(int argc, char *argv[])
     g_test_add_func("/registers/registration", test_registration);
     g_test_add_func("/registers/dump", test_dump);
     g_test_add_func("/registers/hmp_get", test_hmp_get);
+    g_test_add_func("/registers/groups", test_reg_groups);
     g_test_run();
     return 0;
 }

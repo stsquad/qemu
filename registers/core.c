@@ -21,34 +21,46 @@ static GArray *core_gdb;
 /* Array of RegGroup, each contains an array of indexes into @registers */
 static GArray *groups;
 
-static GArray *new_group(const char *grp)
+static GArray *new_group(const char *group)
 {
+    const char *grp = g_intern_static_string(group);
     RegGroup new_grp = { .name = grp, .global_base = registers->len };
     new_grp.registers = g_array_new(true, true, sizeof(int));
     groups = g_array_append_val(groups, new_grp);
     return new_grp.registers;
 }
 
+RegGroup *reg_find_group(const char *group)
+{
+    const char *grp = g_intern_static_string(group);
+    int i;
+
+    for (i = 0; i < groups->len; i++) {
+        RegGroup *rg = &g_array_index(groups, RegGroup, i);
+        if (rg->name == grp) {
+            return rg;
+        }
+    }
+
+    return NULL;
+}
+
 GArray *reg_get_group(const char *group)
 {
-    int i;
-    const char *grp = g_intern_static_string(group);
+    RegGroup *rg;
 
     /* no group name is a core register */
     if (!group) {
         return core_gdb;
     }
 
-    /* search our existing groups */
-    for (i = 0; i < groups->len; i++) {
-        RegGroup *rg = &g_array_index(groups, RegGroup, i);
-        if (rg->name == grp) {
-            return rg->registers;
-        }
+    rg = reg_find_group(group);
+    if (rg) {
+        return rg->registers;
     }
 
     /* create a new group */
-    return new_group(grp);
+    return new_group(group);
 }
 
 /*
@@ -65,6 +77,12 @@ void reg_add_definition(RegDef def, const char *group)
     g_array_append_val(grp_index, new_reg_idx);
 }
 
+RegDef *reg_get_definition(int index)
+{
+    g_assert(index < registers->len);
+    return &g_array_index(registers, RegDef, index);
+}
+
 RegDef *reg_find_defintion(const char *name)
 {
     int i;
@@ -79,9 +97,9 @@ RegDef *reg_find_defintion(const char *name)
     return NULL;
 }
 
-GArray *reg_get_registers(void)
+GArray *reg_get_groups(void)
 {
-    return registers;
+    return groups;
 }
 
 /*

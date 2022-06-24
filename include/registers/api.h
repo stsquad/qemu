@@ -162,3 +162,30 @@ void reg_cpu_dump_state(CPUState *cs, FILE *f, int flags);
  * Returns true if found and set, false otherwise.
  */
 bool reg_get_value_hmp(CPUState *cs, const char *name, int64_t *val);
+
+/* Anonymous handle for a register group */
+struct RegGroupHandle;
+
+/**
+ * reg_get_group_handle(): return a handle for a group of register
+ * @name: name of group
+ *
+ * Returns a handle for a group of registers or NULL if not found.
+ */
+struct RegGroupHandle *reg_get_group_handle(const char *name);
+
+/**
+ * reg_group_as_string(): return string with register state for group
+ * @cs: CPU State pointer
+ * @handle: opaque RegGroupHandle
+ *
+ * Returns an allocated GString, caller frees
+ */
+GString *reg_group_as_string(CPUState *cs, struct RegGroupHandle *handle);
+
+/**
+ * reg_group_list_as_string(): return string with list of groups
+ *
+ * Returns an allocated GString, caller frees
+ */
+GString *reg_group_list_as_string(void);

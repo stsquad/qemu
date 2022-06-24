@@ -100,8 +100,8 @@ ERST
 
     {
         .name       = "registers",
-        .args_type  = "cpustate_all:-a,vcpu:i?",
-        .params     = "[-a|vcpu]",
+        .args_type  = "cpustate_all:-a,vcpu:i?,group:s?",
+        .params     = "[-a|vcpu] [group|?]",
         .help       = "show the cpu registers (-a: show register info for all cpus;"
                       " vcpu: specific vCPU to query; show the current CPU's registers if"
                       " no argument is specified)",

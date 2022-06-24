@@ -27,6 +27,7 @@
 #include "exec/address-spaces.h"
 #include "monitor/hmp-target.h"
 #include "monitor/monitor-internal.h"
+#include "registers/api.h"
 #include "qapi/error.h"
 #include "qapi/qmp/qdict.h"
 #include "sysemu/hw_accel.h"
@@ -95,9 +96,20 @@ void hmp_info_registers(Monitor *mon, const QDict *qdict)
 {
     bool all_cpus = qdict_get_try_bool(qdict, "cpustate_all", false);
     int vcpu = qdict_get_try_int(qdict, "vcpu", -1);
+    const char *group = qdict_get_try_str(qdict, "group");
     CPUState *cs;
 
-    if (all_cpus) {
+    if (group) {
+        struct RegGroupHandle *handle = reg_get_group_handle(group);
+        cs = mon_get_cpu(mon);
+        if (handle && cs) {
+            g_autoptr(GString) regs = reg_group_as_string(cs, handle);
+            monitor_printf(mon, "%s", regs->str);
+        } else {
+            g_autoptr(GString) group_list = reg_group_list_as_string();
+            monitor_printf(mon, "groups: %s\n", group_list->str);
+        }
+    } else if (all_cpus) {
         CPU_FOREACH(cs) {
             monitor_printf(mon, "\nCPU#%d\n", cs->cpu_index);
             cpu_dump_state(cs, NULL, CPU_DUMP_FPU);

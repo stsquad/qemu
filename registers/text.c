@@ -40,6 +40,72 @@ static void fmt_env_reg_string(GString *s, uintptr_t env, RegDef *reg)
     }
 }
 
+/* Append a formatted representation of the register to a GString */
+static void fmt_register(GString *s, CPUState *cs, RegDef *reg)
+{
+    g_autoptr(GString) fmt = g_string_new("");
+    gchar *last_newline = g_strrstr(s->str, "\n");
+    int line_len;
+
+    switch (reg->type) {
+    case REG_DIRECT_ENV:
+    {
+        uintptr_t env = (uintptr_t) cs->env_ptr;
+        fmt_env_reg_string(fmt, env, reg);
+        break;
+    }
+    case REG_32BIT_HELPER:
+    {
+        void *opaque = reg->access.helper32.opaque;
+        if (reg->access.helper32.format) {
+            reg->access.helper32.format(fmt, cs, opaque);
+        } else {
+            uint32_t v = reg->access.helper32.read(cs, opaque);
+            g_string_printf(fmt, "%3s=0x%08" PRIx32, reg->name, v);
+        }
+        break;
+    }
+    case REG_64BIT_HELPER:
+    {
+        void *opaque = reg->access.helper64.opaque;
+        if (reg->access.helper64.format) {
+            reg->access.helper64.format(fmt, cs, opaque);
+        } else {
+            uint64_t v = reg->access.helper64.read(cs, opaque);
+            g_string_printf(fmt, "%3s=0x%016" PRIx64, reg->name, v);
+        }
+        break;
+    }
+    case REG_VECTOR_HELPER:
+    {
+        void *opaque = reg->access.helpervec.opaque;
+        if (reg->access.helpervec.format) {
+            reg->access.helpervec.format(fmt, cs, opaque);
+        } else {
+            g_string_printf(fmt, "%3s=[TODO]", reg->name);
+        }
+        break;
+    }
+    default:
+        g_assert_not_reached();
+    }
+
+    /* attempt to flow the formatting somewhat */
+    if (last_newline) {
+        line_len = (s->str + s->len) - last_newline;
+    } else {
+        line_len = s->len;
+    }
+    if (line_len + fmt->len > 84) {
+        g_string_append_c(s, '\n');
+    } else if (line_len > 0) {
+        g_string_append_c(s, ' ');
+    }
+    g_string_append(s, fmt->str);
+}
+
+
+
 bool reg_get_value_hmp(CPUState *cs, const char *name, int64_t *val)
 {
     RegDef *reg = reg_find_defintion(name);
@@ -64,68 +130,39 @@ bool reg_get_value_hmp(CPUState *cs, const char *name, int64_t *val)
     return false;
 }
 
+GString *reg_group_as_string(CPUState *cs, struct RegGroupHandle *handle)
+{
+    GString *str = g_string_new("");
+    GArray *group = (GArray *) handle;
+    int i;
+
+    for (i = 0; i < group->len; i++) {
+        RegDef *reg = reg_get_indirect_definition(group, i);
+        fmt_register(str, cs, reg);
+    }
+
+    return str;
+}
 
 void reg_cpu_dump_state(CPUState *cs, FILE *f, int flags)
 {
-    GArray *registers = reg_get_registers();
     GArray *core_regs = reg_get_group(NULL);
-    g_autoptr(GString) fmt = g_string_new("");
+    g_autoptr(GString) fmt =
+        reg_group_as_string(cs, (struct RegGroupHandle *) core_regs);
+    g_string_append_c(fmt, '\n');
+    qemu_fprintf(f, "%s", fmt->str);
+}
 
+GString *reg_group_list_as_string(void)
+{
+    GArray *groups = reg_get_groups();
+    GString *grp_txt = g_string_new("");
     int i;
 
-    for (i = 0; i < core_regs->len; i++) {
-        int *idx =  &g_array_index(core_regs, int, i);
-        RegDef *reg = &g_array_index(registers, RegDef, *idx);
-
-        switch (reg->type) {
-        case REG_DIRECT_ENV:
-        {
-            uintptr_t env = (uintptr_t) cs->env_ptr;
-            fmt_env_reg_string(fmt, env, reg);
-            break;
-        }
-        case REG_32BIT_HELPER:
-        {
-            void *opaque = reg->access.helper32.opaque;
-            if (reg->access.helper32.format) {
-                reg->access.helper32.format(fmt, cs, opaque);
-            } else {
-                uint32_t v = reg->access.helper32.read(cs, opaque);
-                g_string_printf(fmt, "%3s=0x%08" PRIx32, reg->name, v);
-            }
-            break;
-        }
-        case REG_64BIT_HELPER:
-        {
-            void *opaque = reg->access.helper64.opaque;
-            if (reg->access.helper64.format) {
-                reg->access.helper64.format(fmt, cs, opaque);
-            } else {
-                uint64_t v = reg->access.helper64.read(cs, opaque);
-                g_string_printf(fmt, "%3s=0x%016" PRIx64, reg->name, v);
-            }
-            break;
-        }
-        case REG_VECTOR_HELPER:
-        {
-            void *opaque = reg->access.helpervec.opaque;
-            if (reg->access.helpervec.format) {
-                reg->access.helpervec.format(fmt, cs, opaque);
-            } else {
-                g_string_printf(fmt, "%3s=[TODO]", reg->name);
-            }
-            break;
-        }
-        default:
-            g_assert_not_reached();
-        }
-
-        qemu_fprintf(f, "%s", fmt->str);
-
-        if ((i % 4) == 3) {
-            qemu_fprintf(f, "\n");
-        } else {
-            qemu_fprintf(f, " ");
-        }
+    for (i = 0; i < groups->len; i++) {
+        RegGroup *rg = &g_array_index(groups, RegGroup, i);
+        g_string_append_printf(grp_txt, "%s ", rg->name);
     }
+
+    return grp_txt;
 }
