@@ -56,6 +56,9 @@ static int vu_gpio_start(VirtIODevice *vdev)
     struct vhost_dev *vhost_dev = &gpio->vhost_dev;
     int ret, i;
 
+    fprintf(stderr, "%s: called while %s\n", __func__,
+            vhost_dev_is_started(vhost_dev) ? "started" : "stopped");
+
     if (!k->set_guest_notifiers) {
         error_report("binding does not support guest notifiers");
         return -ENOSYS;
@@ -124,6 +127,9 @@ static void vu_gpio_stop(VirtIODevice *vdev)
     struct vhost_dev *vhost_dev = &gpio->vhost_dev;
     int ret;
 
+    fprintf(stderr, "%s: called while %s\n", __func__,
+            vhost_dev_is_started(vhost_dev) ? "started" : "stopped");
+
     if (!k->set_guest_notifiers) {
         return;
     }
@@ -139,6 +145,9 @@ static void vu_gpio_stop(VirtIODevice *vdev)
 
     vhost_dev_stop(vhost_dev, vdev);
 
+    fprintf(stderr, "%s: stop called (%s)\n", __func__,
+            vhost_dev_is_started(vhost_dev) ? "started" : "stopped");
+
     ret = k->set_guest_notifiers(qbus->parent, vhost_dev->nvqs, false);
     if (ret < 0) {
         error_report("vhost guest notifier cleanup failed: %d", ret);
@@ -146,6 +155,8 @@ static void vu_gpio_stop(VirtIODevice *vdev)
     }
 
     vhost_dev_disable_notifiers(vhost_dev, vdev);
+
+    fprintf(stderr, "%s: end of stop\n", __func__);
 }
 
 static void vu_gpio_set_status(VirtIODevice *vdev, uint8_t status)

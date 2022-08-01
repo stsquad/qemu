@@ -29,6 +29,7 @@
 #include "qemu/error-report.h"
 #include "qemu/log.h"
 #include "qemu/module.h"
+#include "qemu/backtrace.h"
 #include "hw/pci/msi.h"
 #include "hw/pci/msix.h"
 #include "hw/loader.h"
@@ -1004,7 +1005,13 @@ static int virtio_pci_set_guest_notifiers(DeviceState *d, int nvqs, bool assign)
     if (!assign && !proxy->nvqs_with_notifiers) {
         return 0;
     }
-    assert(assign || nvqs == proxy->nvqs_with_notifiers);
+    if (!assign && nvqs != proxy->nvqs_with_notifiers) {
+        g_autoptr(GString) bt = qemu_backtrace(10);
+        fprintf(stderr, "%s: assign = %s\n", __func__, assign ? "true" : "false");
+        fprintf(stderr, "%s: nvqs = %d, proxy = %d\n", __func__, nvqs, proxy->nvqs_with_notifiers);
+        fprintf(stderr, "backtrace:\n%s", bt->str);
+        exit(-1);
+    }
 
     proxy->nvqs_with_notifiers = nvqs;
 
