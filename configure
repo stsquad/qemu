@@ -1394,6 +1394,12 @@ else
   pie="no"
 fi
 
+# Meson currently only handles pie as a boolean for now so if we have
+# explicitly disabled PIE we need to extend our cflags because it wont.
+if test "$pie" = "no"; then
+    QEMU_CFLAGS="-fno-pie -no-pie $QEMU_CFLAGS"
+fi
+
 # Detect support for PT_GNU_RELRO + DT_BIND_NOW.
 # The combination is known as "full relro", because .got.plt is read-only too.
 if compile_prog "" "-Wl,-z,relro -Wl,-z,now" ; then
