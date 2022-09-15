@@ -19,6 +19,7 @@
 #include "hw/virtio/virtio-gpu.h"
 #include "hw/virtio/virtio-gpu-bswap.h"
 #include "hw/virtio/virtio-iommu.h"
+#include <epoxy/egl.h>
 
 #include "ui/egl-helpers.h"
 
@@ -741,8 +742,13 @@ static int virgl_make_context_current(void *opaque, int scanout_idx,
                                    qctx);
 }
 
+static void *virgl_get_egl_display(void *opaque)
+{
+    return eglGetCurrentDisplay();
+}
+
 static struct virgl_renderer_callbacks virtio_gpu_3d_cbs = {
-    .version             = 1,
+    .version             = 4,
     .write_fence         = virgl_write_fence,
     .create_gl_context   = virgl_create_context,
     .destroy_gl_context  = virgl_destroy_context,
@@ -821,6 +827,9 @@ int virtio_gpu_virgl_init(VirtIOGPU *g)
     flags |= VIRGL_RENDERER_VENUS;
     flags |= VIRGL_RENDERER_RENDER_SERVER;
 #endif
+
+    if (eglGetCurrentDisplay())
+        virtio_gpu_3d_cbs.get_egl_display = virgl_get_egl_display;
 
     ret = virgl_renderer_init(g, flags, &virtio_gpu_3d_cbs);
     if (ret != 0) {
