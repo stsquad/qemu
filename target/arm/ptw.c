@@ -2872,7 +2872,7 @@ hwaddr arm_cpu_get_phys_page_attrs_debug(CPUState *cs, vaddr addr,
         .in_secure = arm_is_secure(env),
         .in_debug = true,
     };
-    GetPhysAddrResult res = {};
+    GetPhysAddrResult res = { .f.attrs = MEMTXATTRS_CPU(cs) };
     ARMMMUFaultInfo fi = {};
     bool ret;
 
