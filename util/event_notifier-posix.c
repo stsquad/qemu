@@ -101,9 +101,8 @@ int event_notifier_get_wfd(const EventNotifier *e)
     return e->wfd;
 }
 
-int event_notifier_set(EventNotifier *e)
+int event_notifier_write(EventNotifier *e, uint64_t value)
 {
-    static const uint64_t value = 1;
     ssize_t ret;
 
     if (!e->initialized) {
@@ -112,13 +111,14 @@ int event_notifier_set(EventNotifier *e)
 
     do {
         ret = write(e->wfd, &value, sizeof(value));
-    } while (ret < 0 && errno == EINTR);
+    } while (ret < 0 && (errno == EINTR || errno == EAGAIN));
 
-    /* EAGAIN is fine, a read must be pending.  */
-    if (ret < 0 && errno != EAGAIN) {
-        return -errno;
-    }
     return 0;
+}
+
+int event_notifier_set(EventNotifier *e)
+{
+    return event_notifier_write(e, 1);
 }
 
 int event_notifier_test_and_clear(EventNotifier *e)
@@ -139,4 +139,19 @@ int event_notifier_test_and_clear(EventNotifier *e)
     } while ((len == -1 && errno == EINTR) || len == sizeof(buffer));
 
     return value;
+}
+
+int event_notifier_read(EventNotifier *e, uint64_t *value)
+{
+    ssize_t ret;
+
+    do {
+        ret = read(e->rfd, value, sizeof(*value));
+    } while ((ret == -1 && errno == EINTR));
+
+    if (ret < 0) {
+        return -errno;
+    }
+
+    return 0;
 }

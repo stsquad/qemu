@@ -34,6 +34,8 @@ int event_notifier_init(EventNotifier *, int active);
 void event_notifier_cleanup(EventNotifier *);
 int event_notifier_set(EventNotifier *);
 int event_notifier_test_and_clear(EventNotifier *);
+int event_notifier_write(EventNotifier *e, uint64_t value);
+int event_notifier_read(EventNotifier *e, uint64_t *value);
 
 #ifdef CONFIG_POSIX
 void event_notifier_init_fd(EventNotifier *, int fd);
