@@ -634,21 +634,23 @@ static void apic_timer(void *opaque)
     apic_timer_update(s, s->next_time);
 }
 
-static uint64_t apic_mem_read(void *opaque, hwaddr addr, unsigned size)
+static MemTxResult apic_mem_read(void *opaque, hwaddr addr, uint64_t *data,
+                                 unsigned int size, MemTxAttrs attrs)
 {
     DeviceState *dev;
     APICCommonState *s;
     uint32_t val;
     int index;
 
+    if (attrs.requester_type != MTRT_CPU) {
+        return MEMTX_ACCESS_ERROR;
+    }
+    dev = cpu_get_current_apic(attrs.requester_id);
+
     if (size < 4) {
-        return 0;
+        return MEMTX_ERROR;
     }
 
-    dev = cpu_get_current_apic();
-    if (!dev) {
-        return 0;
-    }
     s = APIC(dev);
 
     index = (addr >> 4) & 0xff;
@@ -719,7 +721,8 @@ static uint64_t apic_mem_read(void *opaque, hwaddr addr, unsigned size)
         break;
     }
     trace_apic_mem_readl(addr, val);
-    return val;
+    *data = val;
+    return MEMTX_OK;
 }
 
 static void apic_send_msi(MSIMessage *msi)
@@ -735,15 +738,20 @@ static void apic_send_msi(MSIMessage *msi)
     apic_deliver_irq(dest, dest_mode, delivery, vector, trigger_mode);
 }
 
-static void apic_mem_write(void *opaque, hwaddr addr, uint64_t val,
-                           unsigned size)
+static MemTxResult apic_mem_write(void *opaque, hwaddr addr, uint64_t val,
+                                  unsigned int size, MemTxAttrs attrs)
 {
     DeviceState *dev;
     APICCommonState *s;
     int index = (addr >> 4) & 0xff;
 
+    if (attrs.requester_type != MTRT_CPU) {
+        return MEMTX_ACCESS_ERROR;
+    }
+    dev = cpu_get_current_apic(attrs.requester_id);
+
     if (size < 4) {
-        return;
+        return MEMTX_ERROR;
     }
 
     if (addr > 0xfff || !index) {
@@ -754,13 +762,9 @@ static void apic_mem_write(void *opaque, hwaddr addr, uint64_t val,
          * MSI registers are reserved in APIC MMIO and vice versa. */
         MSIMessage msi = { .address = addr, .data = val };
         apic_send_msi(&msi);
-        return;
+        return MEMTX_OK;
     }
 
-    dev = cpu_get_current_apic();
-    if (!dev) {
-        return;
-    }
     s = APIC(dev);
 
     trace_apic_mem_writel(addr, val);
@@ -839,6 +843,8 @@ static void apic_mem_write(void *opaque, hwaddr addr, uint64_t val,
         s->esr |= APIC_ESR_ILLEGAL_ADDRESS;
         break;
     }
+
+    return MEMTX_OK;
 }
 
 static void apic_pre_save(APICCommonState *s)
@@ -856,8 +862,8 @@ static void apic_post_load(APICCommonState *s)
 }
 
 static const MemoryRegionOps apic_io_ops = {
-    .read = apic_mem_read,
-    .write = apic_mem_write,
+    .read_with_attrs = apic_mem_read,
+    .write_with_attrs = apic_mem_write,
     .impl.min_access_size = 1,
     .impl.max_access_size = 4,
     .valid.min_access_size = 1,
