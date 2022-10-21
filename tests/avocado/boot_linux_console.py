@@ -15,6 +15,7 @@ import shutil
 
 from avocado import skip
 from avocado import skipUnless
+from avocado import skipIf
 from avocado_qemu import QemuSystemTest
 from avocado_qemu import exec_command
 from avocado_qemu import exec_command_and_wait_for_pattern
