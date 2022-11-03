@@ -1632,21 +1632,27 @@ static void virtio_pci_common_write(void *opaque, hwaddr addr,
         break;
     case VIRTIO_PCI_COMMON_Q_DESCLO:
         proxy->vqs[vdev->queue_sel].desc[0] = val;
+        printf("%s: offset 0x%"HWADDR_PRIx" val %"PRIx64"\n", __func__, addr, val);
         break;
     case VIRTIO_PCI_COMMON_Q_DESCHI:
         proxy->vqs[vdev->queue_sel].desc[1] = val;
+        printf("%s: offset 0x%"HWADDR_PRIx" val %"PRIx64"\n", __func__, addr, val);
         break;
     case VIRTIO_PCI_COMMON_Q_AVAILLO:
         proxy->vqs[vdev->queue_sel].avail[0] = val;
+        printf("%s: offset 0x%"HWADDR_PRIx" val %"PRIx64"\n", __func__, addr, val);
         break;
     case VIRTIO_PCI_COMMON_Q_AVAILHI:
         proxy->vqs[vdev->queue_sel].avail[1] = val;
+        printf("%s: offset 0x%"HWADDR_PRIx" val %"PRIx64"\n", __func__, addr, val);
         break;
     case VIRTIO_PCI_COMMON_Q_USEDLO:
         proxy->vqs[vdev->queue_sel].used[0] = val;
+        printf("%s: offset 0x%"HWADDR_PRIx" val %"PRIx64"\n", __func__, addr, val);
         break;
     case VIRTIO_PCI_COMMON_Q_USEDHI:
         proxy->vqs[vdev->queue_sel].used[1] = val;
+        printf("%s: offset 0x%"HWADDR_PRIx" val %"PRIx64"\n", __func__, addr, val);
         break;
     case VIRTIO_PCI_COMMON_Q_RESET:
         if (val == 1) {

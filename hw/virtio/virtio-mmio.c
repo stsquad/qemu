@@ -445,6 +445,7 @@ static void virtio_mmio_write(void *opaque, hwaddr offset, uint64_t value,
             return;
         }
         proxy->vqs[vdev->queue_sel].desc[0] = value;
+        printf("%s: offset 0x%"HWADDR_PRIx" val %"PRIx64"\n", __func__, offset, value);
         break;
     case VIRTIO_MMIO_QUEUE_DESC_HIGH:
         if (proxy->legacy) {
@@ -455,6 +456,7 @@ static void virtio_mmio_write(void *opaque, hwaddr offset, uint64_t value,
             return;
         }
         proxy->vqs[vdev->queue_sel].desc[1] = value;
+        printf("%s: offset 0x%"HWADDR_PRIx" val %"PRIx64"\n", __func__, offset, value);
         break;
     case VIRTIO_MMIO_QUEUE_AVAIL_LOW:
         if (proxy->legacy) {
@@ -465,6 +467,7 @@ static void virtio_mmio_write(void *opaque, hwaddr offset, uint64_t value,
             return;
         }
         proxy->vqs[vdev->queue_sel].avail[0] = value;
+        printf("%s: offset 0x%"HWADDR_PRIx" val %"PRIx64"\n", __func__, offset, value);
         break;
     case VIRTIO_MMIO_QUEUE_AVAIL_HIGH:
         if (proxy->legacy) {
@@ -475,6 +478,7 @@ static void virtio_mmio_write(void *opaque, hwaddr offset, uint64_t value,
             return;
         }
         proxy->vqs[vdev->queue_sel].avail[1] = value;
+        printf("%s: offset 0x%"HWADDR_PRIx" val %"PRIx64"\n", __func__, offset, value);
         break;
     case VIRTIO_MMIO_QUEUE_USED_LOW:
         if (proxy->legacy) {
@@ -485,6 +489,7 @@ static void virtio_mmio_write(void *opaque, hwaddr offset, uint64_t value,
             return;
         }
         proxy->vqs[vdev->queue_sel].used[0] = value;
+        printf("%s: offset 0x%"HWADDR_PRIx" val %"PRIx64"\n", __func__, offset, value);
         break;
     case VIRTIO_MMIO_QUEUE_USED_HIGH:
         if (proxy->legacy) {
@@ -494,6 +499,7 @@ static void virtio_mmio_write(void *opaque, hwaddr offset, uint64_t value,
                           __func__, offset);
             return;
         }
+        printf("%s: offset 0x%"HWADDR_PRIx" val %"PRIx64"\n", __func__, offset, value);
         proxy->vqs[vdev->queue_sel].used[1] = value;
         break;
     case VIRTIO_MMIO_MAGIC_VALUE:
