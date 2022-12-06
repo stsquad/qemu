@@ -151,6 +151,17 @@ int reg_get_number(const char *grp);
 void reg_cpu_dump_state(CPUState *cs, FILE *f, int flags);
 
 /**
+ * reg_set_group_gdb_name() - set the GDB name for a group of registers
+ * @grp: the QEMU name for the group
+ * @gdb: the org.qemu.gdb.ARCH.FEATURE name
+ *
+ * While the XML for a group can use any name it wants there are some
+ * times when we want to report a specific gdb feature name. This
+ * allows for GDB to use
+ */
+
+
+/**
  * reg_get_value_hmp(): get the value of a register for HMP
  * @cs: CPU for which we want the value
  * @name: name of the register
