@@ -72,3 +72,4 @@ typedef struct {
  */
 void reg_add_definition(RegDef def, const char *group);
 GArray *reg_get_registers(void);
+GArray *reg_get_group(const char *group);

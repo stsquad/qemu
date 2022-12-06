@@ -128,3 +128,13 @@ void reg_add_vector(const char *name, const char *grp, void *opaque,
  * finalize the definitions and inform other sub-systems (like gdb).
  */
 void reg_finalize_definitions(void);
+
+/**
+ * reg_get_number() - return the number of registers in a group.
+ * @grp: name of register group, NULL indicates core registers
+ *
+ * Return the number of registers in a group. This is mostly helpful
+ * for unit tests and verifying
+ */
+int reg_get_number(const char *grp);
+

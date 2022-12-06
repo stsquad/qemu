@@ -81,3 +81,9 @@ void reg_add_vector(const char *name, const char *grp, void *opaque,
 void reg_finalize_definitions(void)
 {
 }
+
+int reg_get_number(const char *grp)
+{
+    GArray *regs = reg_get_group(grp);
+    return regs->len;
+}
