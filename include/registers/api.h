@@ -123,11 +123,12 @@ void reg_add_vector(const char *name, const char *grp, void *opaque,
 
 /**
  * reg_finalize_definitions(): finalize the register definitions
+ * @cs: CPUState
  *
  * Call once all the registers have been declared so the system can
  * finalize the definitions and inform other sub-systems (like gdb).
  */
-void reg_finalize_definitions(void);
+void reg_finalize_definitions(CPUState *cs);
 
 /**
  * reg_get_number() - return the number of registers in a group.
@@ -189,3 +190,36 @@ GString *reg_group_as_string(CPUState *cs, struct RegGroupHandle *handle);
  * Returns an allocated GString, caller frees
  */
 GString *reg_group_list_as_string(void);
+
+/**
+ * reg_gdb_read_register(): read register into byte array
+ * @cs: CPU state pointer
+ * @buf: GByteArray to fill with data
+ * @reg: gdb register number
+ *
+ * returns the number of bytes read
+ */
+int reg_gdb_read_register(CPUState *cpu, GByteArray *buf, int reg);
+
+/**
+ * reg_gdb_write_register(): write register from buffer into CPU state
+ * @cs: CPU state pointer
+ * @buf: byte array of data
+ * @reg: gdb register number
+ *
+ * returns the number of bytes written
+ */
+int reg_gdb_write_register(CPUState *cpu, uint8_t *buf, int reg);
+
+/**
+ * reg_gdb_get_dynamic_xml(): return gdb register XML for a group of registers
+ * @cs: CPU state pointer
+ * @xmlname: name of group (suffixed with .xml)
+ *
+ * Return the XML for a register group. The core library will generate
+ * it *once* if it does not already hold a copy and the returned
+ * pointer is stable for the lifetime of the process. The caller may
+ * not alter the returned memory.
+ */
+const char *reg_gdb_get_dynamic_xml(CPUState *cs, const char *xmlname);
+

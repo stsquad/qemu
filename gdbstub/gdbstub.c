@@ -421,15 +421,23 @@ static int gdb_read_register(CPUState *cpu, GByteArray *buf, int reg)
     CPUArchState *env = cpu->env_ptr;
     GDBRegisterState *r;
 
+    fprintf(stderr, "%s: %d\n", __func__, reg);
+
     if (reg < cc->gdb_num_core_regs) {
         return cc->gdb_read_register(cpu, buf, reg);
     }
 
     for (r = cpu->gdb_regs; r; r = r->next) {
         if (r->base_reg <= reg && reg < r->base_reg + r->num_regs) {
-            return r->get_reg(env, buf, reg - r->base_reg);
+            if (r->get_reg) {
+                return r->get_reg(env, buf, reg - r->base_reg);
+            } else {
+                return cc->gdb_read_register(cpu, buf, reg);
+            }
         }
     }
+
+    trace_gdbstub_err_regno(reg);
     return 0;
 }
 
@@ -439,15 +447,23 @@ static int gdb_write_register(CPUState *cpu, uint8_t *mem_buf, int reg)
     CPUArchState *env = cpu->env_ptr;
     GDBRegisterState *r;
 
+    fprintf(stderr, "%s: %d\n", __func__, reg);
+
     if (reg < cc->gdb_num_core_regs) {
         return cc->gdb_write_register(cpu, mem_buf, reg);
     }
 
     for (r = cpu->gdb_regs; r; r = r->next) {
         if (r->base_reg <= reg && reg < r->base_reg + r->num_regs) {
-            return r->set_reg(env, mem_buf, reg - r->base_reg);
+            if (r->set_reg) {
+                return r->set_reg(env, mem_buf, reg - r->base_reg);
+            } else {
+                return cc->gdb_write_register(cpu, mem_buf, reg);
+            }
         }
     }
+
+    trace_gdbstub_err_regno(reg);
     return 0;
 }
 
@@ -1580,6 +1596,9 @@ static void handle_query_xfer_features(GArray *params, void *user_ctx)
     addr = get_param(params, 1)->val_ul;
     len = get_param(params, 2)->val_ul;
     total_len = strlen(xml);
+
+    fprintf(stderr, "%s: %lx/%lx of %lx\n", __func__, addr, len, total_len);
+
     if (addr > total_len) {
         gdb_put_packet("E00");
         return;

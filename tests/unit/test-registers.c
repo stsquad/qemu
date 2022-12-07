@@ -8,6 +8,7 @@
 
 #include "qemu/osdep.h"
 #include <glib/gstdio.h>
+#include "exec/gdbstub.h"
 #include "registers/api.h"
 
 /*
@@ -18,11 +19,13 @@ typedef CPUState CPUState;
 
 #define REGS 2
 #define VEC_SIZE 16
+#define BIG_VEC_SIZE 128
 
 typedef struct {
     uint64_t reg64[REGS];
     uint32_t reg32[REGS];
     uint8_t reg_vec[REGS * VEC_SIZE];
+    uint8_t reg_big_vec[REGS * BIG_VEC_SIZE];
     bool flag_a;
     bool flag_b;
     bool flag_c;
@@ -131,6 +134,20 @@ static void fmtvec(GString *s, CPUState *cs, const void *opaque)
     }
     g_string_truncate(s, s->len - 1);
 }
+/* "big" vectors */
+static GByteArray *readbvec(CPUState *cs, const void *opaque)
+{
+    unsigned int idx = GPOINTER_TO_UINT(opaque);
+    uint8_t *ptr = &fcpu.reg_big_vec[idx * BIG_VEC_SIZE];
+    return g_byte_array_new_take(ptr, VEC_SIZE);
+}
+static void writebvec(CPUState *cs, const void *opaque, GByteArray *reg)
+{
+    unsigned int idx = GPOINTER_TO_UINT(opaque);
+    uint8_t *dst = &fcpu.reg_big_vec[idx * BIG_VEC_SIZE];
+    g_assert(reg->len == VEC_SIZE);
+    memcpy(dst, reg->data, VEC_SIZE);
+}
 
 static void test_registration(void)
 {
@@ -165,13 +182,21 @@ static void test_registration(void)
      * helpers to access them.
      */
     reg_add_vector("v0", "vectors", GUINT_TO_POINTER(0), VEC_SIZE * 8,
-                   REG_VEC_UINT64 | REG_VEC_UINT32 | REG_VEC_UINT16 | REG_VEC_UINT8,
+                   REG_VEC_ALL64 | REG_VEC_ALL32 |  REG_VEC_UINT8,
                    readvec, writevec, fmtvec);
     reg_add_vector("v1", "vectors", GUINT_TO_POINTER(1), VEC_SIZE * 8,
-                   REG_VEC_UINT64 | REG_VEC_UINT32 | REG_VEC_UINT16 | REG_VEC_UINT8,
+                   REG_VEC_ALL64 | REG_VEC_ALL32 |  REG_VEC_UINT8,
                    readvec, writevec, fmtvec);
 
-    reg_finalize_definitions();
+    /* these are more like SVE in size */
+    reg_add_vector("b0", "BigVectors", GUINT_TO_POINTER(0), BIG_VEC_SIZE * 8,
+                   REG_VEC_ALL128 | REG_VEC_IEEEDOUBLE | REG_VEC_IEEESINGLE | REG_VEC_IEEEHALF,
+                   readbvec, writebvec, NULL);
+    reg_add_vector("b1", "BigVectors", GUINT_TO_POINTER(1), BIG_VEC_SIZE * 8,
+                   REG_VEC_ALL128 | REG_VEC_IEEEDOUBLE | REG_VEC_IEEESINGLE | REG_VEC_IEEEHALF,
+                   readbvec, writebvec, NULL);
+
+    reg_finalize_definitions(NULL);
 
     g_assert(reg_get_number(NULL) == 4);
     g_assert(reg_get_number("env_regs") == 4);
@@ -242,6 +267,48 @@ static void test_reg_groups(void)
     g_assert_false(reg_get_group_handle("fake group"));
 }
 
+/*
+ * gdbstub support
+ */
+
+void gdb_register_coprocessor(CPUState *cpu,
+                              gdb_get_reg_cb get_reg, gdb_set_reg_cb set_reg,
+                              int num_regs, const char *xml, int g_pos)
+{
+    /* do nothing stub */
+}
+
+static const GMarkupParser gdb_xml_parser = {
+
+};
+
+static bool do_one_gdb_xml(const char *group)
+{
+    g_autoptr(GMarkupParseContext) context = NULL;
+    g_autoptr(GError) err = NULL;
+    const char *xml = reg_gdb_get_dynamic_xml(NULL, group);
+    bool ok;
+
+    /* create a parser to validate the XML */
+    context = g_markup_parse_context_new(&gdb_xml_parser, 0, NULL, NULL);
+    ok = g_markup_parse_context_parse(context, xml, strlen(xml), &err);
+    g_assert(ok);
+    ok = g_markup_parse_context_end_parse(context, &err);
+
+    if (g_test_verbose()) {
+        fprintf(stderr, "%s: XML for %s\n%s", __func__, group, xml);
+    }
+
+    return ok;
+}
+
+static void test_gdb_xml(void)
+{
+    g_assert(do_one_gdb_xml("flags"));
+    g_assert(do_one_gdb_xml("vectors"));
+    g_assert(do_one_gdb_xml("BigVectors"));
+}
+
 int main(int argc, char *argv[])
 {
     g_test_init(&argc, &argv, NULL);
@@ -249,6 +316,7 @@ int main(int argc, char *argv[])
     g_test_add_func("/registers/dump", test_dump);
     g_test_add_func("/registers/hmp_get", test_hmp_get);
     g_test_add_func("/registers/groups", test_reg_groups);
+    g_test_add_func("/registers/gdbxml", test_gdb_xml);
     g_test_run();
     return 0;
 }

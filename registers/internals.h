@@ -55,8 +55,20 @@ typedef struct {
     } access;
 } RegDef;
 
+/**
+ * struct RegGroup - internal tracking for groups of registers
+ * @name: internal QEMU name for registers
+ * @gdb_name: optional org.gnu.gdb.ARCH.FEATURE name for GDB
+ * @xml: cached gdb XML for this group
+ * @global_base: gdb-ism
+ * @registers: array of RegDef definitions
+ *
+ * If @gdb_name is not set we report org.qemu.gdb.@name to GDB.
+ */
 typedef struct {
     const char *name;
+    const char *gdb_name;
+    const char *xml;
     int global_base;
     GArray *registers;
 } RegGroup;
@@ -134,3 +146,11 @@ static inline RegDef *reg_get_indirect_definition(GArray *grp, int grp_index)
     g_assert(g_array_get_element_size(grp) == sizeof(int));
     return reg_get_definition(*global_idx);
 }
+
+/**
+ * reg_register_with_gdb(): register things with gdb
+ * @cs: CPUState
+ *
+ * Internal function to register all our definitions with the gdbstub.
+ */
+void reg_register_with_gdb(CPUState *cs);

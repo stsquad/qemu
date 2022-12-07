@@ -12,6 +12,7 @@
  */
 
 #include "qemu/osdep.h"
+#include "hw/register.h"
 #include "registers/api.h"
 #include "internals.h"
 
@@ -78,9 +79,9 @@ void reg_add_vector(const char *name, const char *grp, void *opaque,
     reg_add_definition(reg, grp);
 }
 
-void reg_finalize_definitions(void)
+void reg_finalize_definitions(CPUState *cs)
 {
-
+    reg_register_with_gdb(cs);
 }
 
 /* TODO: interpret register lists, but who would free dynamic groups? */
