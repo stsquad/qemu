@@ -32,6 +32,8 @@
 #include "qapi/error.h"
 #include "qemu/error-report.h"
 
+#include <virglrenderer.h>
+
 #define VIRTIO_GPU_VM_VERSION 1
 
 static struct virtio_gpu_simple_resource *
@@ -892,8 +894,25 @@ void virtio_gpu_cleanup_mapping_iov(VirtIOGPU *g,
     g_free(iov);
 }
 
+int virtio_gpu_virgl_resource_unmap(VirtIOGPU *g,
+                                    struct virtio_gpu_simple_resource *res)
+{
+    if (!res->mapped) {
+        qemu_log_mask(LOG_GUEST_ERROR, "%s: resource already unmapped %d\n",
+                      __func__, res->resource_id);
+        return VIRTIO_GPU_RESP_ERR_INVALID_RESOURCE_ID;
+    }
+
+    memory_region_set_enabled(&res->region, false);
+    memory_region_del_subregion(&g->parent_obj.hostmem, &res->region);
+    object_unparent(OBJECT(&res->region));
+
+    res->mapped = false;
+    return virgl_renderer_resource_unmap(res->resource_id);
+}
+
 void virtio_gpu_cleanup_mapping(VirtIOGPU *g,
-                                struct virtio_gpu_simple_resource *res)
+				struct virtio_gpu_simple_resource *res)
 {
     if (res->mapped) {
         virtio_gpu_virgl_resource_unmap(g, res);

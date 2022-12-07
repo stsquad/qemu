@@ -544,23 +544,6 @@ static void virgl_cmd_resource_map_blob(VirtIOGPU *g,
     virtio_gpu_ctrl_response(g, cmd, &resp.hdr, sizeof(resp));
 }
 
-int virtio_gpu_virgl_resource_unmap(VirtIOGPU *g,
-                                    struct virtio_gpu_simple_resource *res)
-{
-    if (!res->mapped) {
-        qemu_log_mask(LOG_GUEST_ERROR, "%s: resource already unmapped %d\n",
-                      __func__, res->resource_id);
-        return VIRTIO_GPU_RESP_ERR_INVALID_RESOURCE_ID;
-    }
-
-    memory_region_set_enabled(&res->region, false);
-    memory_region_del_subregion(&g->parent_obj.hostmem, &res->region);
-    object_unparent(OBJECT(&res->region));
-
-    res->mapped = NULL;
-    return virgl_renderer_resource_unmap(res->resource_id);
-}
-
 static void virgl_cmd_resource_unmap_blob(VirtIOGPU *g,
                                         struct virtio_gpu_ctrl_command *cmd)
 {
