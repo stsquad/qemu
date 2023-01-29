@@ -214,6 +214,11 @@ struct VirtIOGPU {
     } dmabuf;
 
     GArray *capset_ids;
+
+    int read_pipe;
+    int write_pipe;
+
+    QemuMutex pipe_lock;
 };
 
 struct VirtIOGPUClass {
