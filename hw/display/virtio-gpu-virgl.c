@@ -25,6 +25,9 @@
 
 #include <virglrenderer.h>
 
+static bool use_async_cb = true;
+static bool use_per_ctx_fence = true;
+
 #if VIRGL_RENDERER_CALLBACKS_VERSION >= 4
 static void *
 virgl_get_egl_display(G_GNUC_UNUSED void *cookie)
@@ -682,13 +685,150 @@ void virtio_gpu_virgl_process_cmd(VirtIOGPU *g,
     }
 
     trace_virtio_gpu_fence_ctrl(cmd->cmd_hdr.fence_id, cmd->cmd_hdr.type);
-    virgl_renderer_create_fence(cmd->cmd_hdr.fence_id, cmd->cmd_hdr.type);
+
+    if (use_per_ctx_fence && (cmd->cmd_hdr.flags & VIRTIO_GPU_FLAG_INFO_RING_IDX)) {
+        uint32_t flags = 0;
+
+        virgl_renderer_context_create_fence(cmd->cmd_hdr.ctx_id, flags,
+                                            cmd->cmd_hdr.ring_idx,
+                                            cmd->cmd_hdr.fence_id);
+    } else {
+        virgl_renderer_create_fence(cmd->cmd_hdr.fence_id, 0);
+    }
+}
+
+static int virtio_gpu_virgl_fence_read(VirtIOGPU *g, uint64_t *value)
+{
+    ssize_t ret;
+
+    do {
+        ret = read(g->read_pipe, value, sizeof(*value));
+    } while ((ret == -1 && errno == EINTR));
+
+    if (ret < 0) {
+        if (errno != EAGAIN)
+            error_report("%s: failed: %s", __func__, strerror(errno));
+        return -errno;
+    }
+
+    return 0;
+}
+
+static int virtio_gpu_virgl_fence_write(VirtIOGPU *g, uint64_t value)
+{
+    ssize_t ret;
+
+    do {
+        ret = write(g->write_pipe, &value, sizeof(value));
+    } while (ret < 0 && (errno == EINTR || errno == EAGAIN));
+
+    if (ret < 0) {
+        error_report("%s: failed: %s", __func__, strerror(errno));
+        return ret;
+    }
+
+    return 0;
+}
+
+static void virtio_gpu_virgl_fence_event(void *opaque)
+{
+    struct virtio_gpu_ctrl_command *cmd;
+    VirtIOGPU *g = opaque;
+    uint64_t fence;
+
+    QTAILQ_FOREACH(cmd, &g->fenceq, next) {
+        if (!virtio_queue_ready(cmd->vq)) {
+            return;
+        }
+    }
+
+    while (!virtio_gpu_virgl_fence_read(g, &fence)) {
+        QTAILQ_FOREACH(cmd, &g->fenceq, next) {
+            /*
+             * the guest can end up emitting fences out of order
+             * so we should check all fenced cmds not just the first one.
+             */
+            if (cmd->cmd_hdr.fence_id > fence) {
+                continue;
+            }
+            trace_virtio_gpu_fence_resp(cmd->cmd_hdr.fence_id);
+            virtio_gpu_ctrl_response_nodata(g, cmd, VIRTIO_GPU_RESP_OK_NODATA);
+            QTAILQ_REMOVE(&g->fenceq, cmd, next);
+            g_free(cmd);
+            g->inflight--;
+            if (virtio_gpu_stats_enabled(g->parent_obj.conf)) {
+                fprintf(stderr, "inflight: %3d (-)\r", g->inflight);
+            }
+        }
+    }
+}
+
+struct context_fence {
+    uint32_t ctx_id;
+    uint64_t queue_id;
+    uint64_t fence_id;
+    uint32_t ctx_fence;
+};
+
+static int
+virtio_gpu_virgl_write_context_fence(VirtIOGPU *g, uint32_t ctx_id,
+                                     uint32_t queue_id, uint64_t fence_id,
+                                     bool ctx_fence)
+{
+    struct context_fence *f = g_malloc(sizeof(*f));
+
+    f->ctx_id = ctx_id;
+    f->queue_id = queue_id;
+    f->fence_id = fence_id;
+    f->ctx_fence = ctx_fence;
+
+    int err = virtio_gpu_virgl_fence_write(g, (uintptr_t)f);
+    if (err) {
+        g_free(f);
+        return err;
+    }
+
+    return 0;
+}
+
+static int
+virtio_gpu_virgl_read_context_fence(VirtIOGPU *g, uint32_t *ctx_id,
+                                     uint64_t *queue_id, uint64_t *fence_id,
+                                     uint32_t *ctx_fence)
+{
+    struct context_fence *f;
+    uint64_t ptr;
+
+    int err = virtio_gpu_virgl_fence_read(g, &ptr);
+    if (err)
+        return err;
+
+    f = (void *)ptr;
+    *ctx_id = f->ctx_id;
+    *queue_id = f->queue_id;
+    *fence_id = f->fence_id;
+    *ctx_fence = f->ctx_fence;
+
+    g_free(f);
+
+    return 0;
+}
+
+static void virgl_write_fence_async(VirtIOGPU *g, uint32_t fence)
+{
+    if (use_per_ctx_fence)
+        virtio_gpu_virgl_write_context_fence(g, 0, 0, fence, false);
+    else
+        virtio_gpu_virgl_fence_write(g, fence);
 }
 
 static void virgl_write_fence(void *opaque, uint32_t fence)
 {
     VirtIOGPU *g = opaque;
     struct virtio_gpu_ctrl_command *cmd, *tmp;
+
+    if (use_async_cb)
+        return virgl_write_fence_async(g, fence);
 
     QTAILQ_FOREACH_SAFE(cmd, &g->fenceq, next, tmp) {
         /*
@@ -707,6 +847,62 @@ static void virgl_write_fence(void *opaque, uint32_t fence)
             fprintf(stderr, "inflight: %3d (-)\r", g->inflight);
         }
     }
+}
+
+static void virtio_gpu_virgl_context_fence_event(void *opaque)
+{
+    struct virtio_gpu_ctrl_command *cmd;
+    VirtIOGPU *g = opaque;
+    uint64_t fence_id;
+    uint64_t queue_id;
+    uint32_t ctx_id;
+    uint32_t ctx_fence;
+
+    QTAILQ_FOREACH(cmd, &g->fenceq, next) {
+        if (!virtio_queue_ready(cmd->vq)) {
+            return;
+        }
+    }
+
+    while (!virtio_gpu_virgl_read_context_fence(g, &ctx_id, &queue_id,
+                                                &fence_id, &ctx_fence)) {
+        QTAILQ_FOREACH(cmd, &g->fenceq, next) {
+            /*
+             * the guest can end up emitting fences out of order
+             * so we should check all fenced cmds not just the first one.
+             */
+            if (cmd->cmd_hdr.fence_id > fence_id) {
+                continue;
+            }
+            if (!!(cmd->cmd_hdr.flags & VIRTIO_GPU_FLAG_INFO_RING_IDX) ^ !!ctx_fence) {
+                continue;
+            }
+            if (cmd->cmd_hdr.flags & VIRTIO_GPU_FLAG_INFO_RING_IDX) {
+                if (cmd->cmd_hdr.ring_idx != queue_id) {
+                    continue;
+                }
+                if (cmd->cmd_hdr.ctx_id != ctx_id) {
+                    continue;
+                }
+            }
+            trace_virtio_gpu_fence_resp(cmd->cmd_hdr.fence_id);
+            virtio_gpu_ctrl_response_nodata(g, cmd, VIRTIO_GPU_RESP_OK_NODATA);
+            QTAILQ_REMOVE(&g->fenceq, cmd, next);
+            g_free(cmd);
+            g->inflight--;
+            if (virtio_gpu_stats_enabled(g->parent_obj.conf)) {
+                fprintf(stderr, "inflight: %3d (-)\r", g->inflight);
+            }
+        }
+    }
+}
+
+static void virgl_write_context_fence(void *opaque, uint32_t ctx_id,
+                                      uint32_t queue_id, uint64_t fence_id)
+{
+    VirtIOGPU *g = opaque;
+
+    virtio_gpu_virgl_write_context_fence(g, ctx_id, queue_id, fence_id, true);
 }
 
 static virgl_renderer_gl_context
@@ -750,6 +946,7 @@ static void *TMP_virgl_get_egl_display(void *opaque)
 static struct virgl_renderer_callbacks virtio_gpu_3d_cbs = {
     .version             = 4,
     .write_fence         = virgl_write_fence,
+    .write_context_fence = virgl_write_context_fence,
     .create_gl_context   = virgl_create_context,
     .destroy_gl_context  = virgl_destroy_context,
     .make_current        = virgl_make_context_current,
@@ -806,6 +1003,33 @@ void virtio_gpu_virgl_reset(VirtIOGPU *g)
     virgl_renderer_reset();
 }
 
+static int virtio_gpu_virgl_init_pipe(VirtIOGPU *g)
+{
+    int fds[2];
+    int ret;
+
+    if (!g_unix_open_pipe(fds, FD_CLOEXEC, NULL)) {
+        return -errno;
+    }
+    if (!g_unix_set_fd_nonblocking(fds[0], true, NULL)) {
+        ret = -errno;
+        goto fail;
+    }
+    if (!g_unix_set_fd_nonblocking(fds[1], true, NULL)) {
+        ret = -errno;
+        goto fail;
+    }
+    g->read_pipe = fds[0];
+    g->write_pipe = fds[1];
+
+    return 0;
+
+fail:
+    close(fds[0]);
+    close(fds[1]);
+    return ret;
+}
+
 int virtio_gpu_virgl_init(VirtIOGPU *g)
 {
     int ret;
@@ -836,11 +1060,27 @@ int virtio_gpu_virgl_init(VirtIOGPU *g)
     if (eglGetCurrentDisplay())
         virtio_gpu_3d_cbs.get_egl_display = TMP_virgl_get_egl_display;
 
+    if (use_async_cb)
+        flags |= VIRGL_RENDERER_ASYNC_FENCE_CB;
+    if (use_per_ctx_fence)
+        flags |= VIRGL_RENDERER_THREAD_SYNC;
+
     ret = virgl_renderer_init(g, flags, &virtio_gpu_3d_cbs);
     if (ret != 0) {
         error_report("virgl could not be initialized: %d", ret);
         return ret;
     }
+
+    ret = virtio_gpu_virgl_init_pipe(g);
+    if (ret != 0) {
+        error_report("fence notifier could not be initialized: %d", ret);
+        return ret;
+    }
+
+    if (use_per_ctx_fence)
+        qemu_set_fd_handler(g->read_pipe, virtio_gpu_virgl_context_fence_event, NULL, g);
+    else
+        qemu_set_fd_handler(g->read_pipe, virtio_gpu_virgl_fence_event, NULL, g);
 
     g->fence_poll = timer_new_ms(QEMU_CLOCK_VIRTUAL,
                                  virtio_gpu_fence_poll, g);
