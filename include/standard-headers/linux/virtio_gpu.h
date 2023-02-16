@@ -65,6 +65,11 @@
  */
 #define VIRTIO_GPU_F_CONTEXT_INIT        4
 
+/*
+ * VIRTIO_GPU_CMD_SUBMIT_3D
+ */
+#define VIRTIO_GPU_F_FENCE_PASSING       5
+
 enum virtio_gpu_ctrl_type {
 	VIRTIO_GPU_UNDEFINED = 0,
 
@@ -133,6 +138,14 @@ enum virtio_gpu_shm_id {
  * of the command ring that needs to used when creating the fence
  */
 #define VIRTIO_GPU_FLAG_INFO_RING_IDX (1 << 1)
+/*
+ * The out-fence is shareable between contexts on host if flag is set.
+ *
+ * NOTE: This is experimental flag and may be removed in the future.
+ *       For non-shareable fences likely should be enough to have private
+ *       context-specific protocol flag. Requested by Gurchetan Singh.
+ */
+#define VIRTIO_GPU_FLAG_FENCE_SHAREABLE (1 << 2)
 
 struct virtio_gpu_ctrl_hdr {
 	uint32_t type;
@@ -304,7 +317,7 @@ struct virtio_gpu_ctx_resource {
 struct virtio_gpu_cmd_submit {
 	struct virtio_gpu_ctrl_hdr hdr;
 	uint32_t size;
-	uint32_t padding;
+	uint32_t num_in_fences;
 };
 
 #define VIRTIO_GPU_CAPSET_VIRGL 1

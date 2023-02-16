@@ -23,6 +23,7 @@
 
 #include "ui/egl-helpers.h"
 
+#define VIRGL_RENDERER_UNSTABLE_APIS    1
 #include <virglrenderer.h>
 
 static bool use_async_cb = true;
@@ -470,15 +471,47 @@ static void virgl_cmd_submit_3d(VirtIOGPU *g,
                                 struct virtio_gpu_ctrl_command *cmd)
 {
     struct virtio_gpu_cmd_submit cs;
-    void *buf;
+    uint64_t *in_fences = NULL;
+    size_t in_fences_size = 0;
+    void *buf = NULL;
     size_t s;
 
     VIRTIO_GPU_FILL_CMD(cs);
     trace_virtio_gpu_cmd_ctx_submit(cs.hdr.ctx_id, cs.size);
 
+    if (g->parent_obj.guest_fence_passing_enabled && cs.num_in_fences) {
+        int i;
+
+        if (cs.num_in_fences > UINT32_MAX / sizeof(*in_fences)) {
+            qemu_log_mask(LOG_GUEST_ERROR, "%s: fence size overflow", __func__);
+            cmd->error = VIRTIO_GPU_RESP_ERR_INVALID_PARAMETER;
+            goto out;
+        }
+
+        in_fences_size = sizeof(*in_fences) * cs.num_in_fences;
+        in_fences = g_malloc(in_fences_size);
+        s = iov_to_buf(cmd->elem.out_sg, cmd->elem.out_num,
+                       sizeof(cs), in_fences, in_fences_size);
+        if (s != in_fences_size) {
+            qemu_log_mask(LOG_GUEST_ERROR, "%s: fence size mismatch (%zd/%zd)",
+                        __func__, s, in_fences_size);
+            cmd->error = VIRTIO_GPU_RESP_ERR_INVALID_PARAMETER;
+            goto out;
+        }
+
+        for (i = 0; i < cs.num_in_fences; i++)
+            in_fences[i] = le64_to_cpu(in_fences[i]);
+
+    } else if (!g->parent_obj.guest_fence_passing_enabled && cs.num_in_fences) {
+        qemu_log_mask(LOG_GUEST_ERROR, "%s: guest doesn't support fence passing",
+                      __func__);
+        cmd->error = VIRTIO_GPU_RESP_ERR_INVALID_PARAMETER;
+        goto out;
+    }
+
     buf = g_malloc(cs.size);
     s = iov_to_buf(cmd->elem.out_sg, cmd->elem.out_num,
-                   sizeof(cs), buf, cs.size);
+                   sizeof(cs) + in_fences_size, buf, cs.size);
     if (s != cs.size) {
         qemu_log_mask(LOG_GUEST_ERROR, "%s: size mismatch (%zd/%d)",
                       __func__, s, cs.size);
@@ -491,9 +524,11 @@ static void virgl_cmd_submit_3d(VirtIOGPU *g,
         g->stats.bytes_3d += cs.size;
     }
 
-    virgl_renderer_submit_cmd(buf, cs.hdr.ctx_id, cs.size / 4);
+    virgl_renderer_submit_cmd2(buf, cs.hdr.ctx_id, cs.size / 4,
+                               in_fences, cs.num_in_fences);
 
 out:
+    g_free(in_fences);
     g_free(buf);
 }
 
