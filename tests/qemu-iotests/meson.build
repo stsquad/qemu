@@ -64,6 +64,7 @@ foreach format, speed: qemu_iotests_formats
            depends: qemu_iotests_binaries,
            env: qemu_iotests_env,
            protocol: 'tap',
+           is_parallel : false,
            timeout: 180,
            suite: suites)
   endforeach
