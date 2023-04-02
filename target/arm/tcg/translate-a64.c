@@ -28,7 +28,6 @@
 #include "internals.h"
 #include "qemu/host-utils.h"
 #include "semihosting/semihost.h"
-#include "exec/gen-icount.h"
 #include "exec/log.h"
 #include "cpregs.h"
 #include "translate-a64.h"
@@ -1855,6 +1854,7 @@ static void handle_sys(DisasContext *s, uint32_t insn, bool isread,
     uint32_t key = ENCODE_AA64_CP_REG(CP_REG_ARM64_SYSREG_CP,
                                       crn, crm, op0, op1, op2);
     const ARMCPRegInfo *ri = get_arm_cp_reginfo(s->cp_regs, key);
+    bool need_exit_tb = false;
     TCGv_ptr tcg_ri = NULL;
     TCGv_i64 tcg_rt;
 
@@ -1982,8 +1982,9 @@ static void handle_sys(DisasContext *s, uint32_t insn, bool isread,
         return;
     }
 
-    if ((tb_cflags(s->base.tb) & CF_USE_ICOUNT) && (ri->type & ARM_CP_IO)) {
-        gen_io_start();
+    if (ri->type & ARM_CP_IO) {
+        /* I/O operations must end the TB here (whether read or write) */
+        need_exit_tb = translator_io_start(&s->base);
     }
 
     tcg_rt = cpu_reg(s, rt);
@@ -2013,10 +2014,6 @@ static void handle_sys(DisasContext *s, uint32_t insn, bool isread,
         }
     }
 
-    if ((tb_cflags(s->base.tb) & CF_USE_ICOUNT) && (ri->type & ARM_CP_IO)) {
-        /* I/O operations must end the TB here (whether read or write) */
-        s->base.is_jmp = DISAS_UPDATE_EXIT;
-    }
     if (!isread && !(ri->type & ARM_CP_SUPPRESS_TB_END)) {
         /*
          * A write to any coprocessor regiser that ends a TB
@@ -2028,6 +2025,9 @@ static void handle_sys(DisasContext *s, uint32_t insn, bool isread,
          * but allow this to be suppressed by the register definition
          * (usually only necessary to work around guest bugs).
          */
+        need_exit_tb = true;
+    }
+    if (need_exit_tb) {
         s->base.is_jmp = DISAS_UPDATE_EXIT;
     }
 }
@@ -2335,10 +2335,7 @@ static void disas_uncond_b_reg(DisasContext *s, uint32_t insn)
         default:
             goto do_unallocated;
         }
-        if (tb_cflags(s->base.tb) & CF_USE_ICOUNT) {
-            gen_io_start();
-        }
-
+        translator_io_start(&s->base);
         gen_helper_exception_return(cpu_env, dst);
         /* Must exit loop to check un-masked IRQs */
         s->base.is_jmp = DISAS_EXIT;
