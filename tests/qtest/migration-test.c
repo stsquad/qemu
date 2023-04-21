@@ -1892,6 +1892,21 @@ static void test_validate_uuid_dst_not_set(void)
  * To make things even worse, we need to run the initial stage at
  * 3MB/s so we enter autoconverge even when host is (over)loaded.
  */
+/*
+ * The way auto_converge works, we need to do too many passes to
+ * run this test.  Auto_converge logic is only run once every
+ * three iterations, so:
+ *
+ * - 3 iterations without auto_converge enabled
+ * - 3 iterations with pct = 5
+ * - 3 iterations with pct = 30
+ * - 3 iterations with pct = 55
+ * - 3 iterations with pct = 80
+ * - 3 iterations with pct = 95 (max(95, 80 + 25))
+ *
+ * To make things even worse, we need to run the initial stage at
+ * 3MB/s so we enter autoconverge even when host is (over)loaded.
+ */
 static void test_migrate_auto_converge(void)
 {
     g_autofree char *uri = g_strdup_printf("unix:%s/migsocket", tmpfs);
