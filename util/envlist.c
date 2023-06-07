@@ -202,6 +202,62 @@ envlist_unsetenv(envlist_t *envlist, const char *env)
 }
 
 /*
+ * Appends environment value to envlist. If the environment
+ * variable already exists, the new value is appended to the
+ * existing one.
+ *
+ * Returns 0 in success, errno otherwise.
+ */
+int
+envlist_appendenv(envlist_t *envlist, const char *env, const char *separator)
+{
+    struct envlist_entry *entry = NULL;
+    const char *eq_sign;
+    size_t envname_len;
+
+    if ((envlist == NULL) || (env == NULL)) {
+        return (EINVAL);
+    }
+
+    /* find out first equals sign in given env */
+    eq_sign = strchr(env, '=');
+    if (eq_sign == NULL) {
+        return (EINVAL);
+    }
+    envname_len = eq_sign - env + 1;
+
+    /*
+     * If there already exists variable with given name,
+     * we append the new value to the existing one.
+     */
+    for (entry = envlist->el_entries.lh_first; entry != NULL;
+        entry = entry->ev_link.le_next) {
+        if (strncmp(entry->ev_var, env, envname_len) == 0) {
+            break;
+        }
+    }
+
+    if (entry != NULL) {
+        char *new_env_value = NULL;
+        size_t new_env_len = strlen(entry->ev_var) + strlen(eq_sign)
+            + strlen(separator) + 1;
+        new_env_value = g_malloc(new_env_len);
+        strcpy(new_env_value, entry->ev_var);
+        strcat(new_env_value, separator);
+        strcat(new_env_value, eq_sign + 1);
+        g_free((char *)entry->ev_var);
+        entry->ev_var = new_env_value;
+    } else {
+        envlist->el_count++;
+        entry = g_malloc(sizeof(*entry));
+        entry->ev_var = g_strdup(env);
+        QLIST_INSERT_HEAD(&envlist->el_entries, entry, ev_link);
+    }
+
+    return (0);
+}
+
+/*
  * Returns given envlist as array of strings (in same form that
  * global variable environ is).  Caller must free returned memory
  * by calling g_free for each element and the array.

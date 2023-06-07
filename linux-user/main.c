@@ -125,6 +125,8 @@ static void usage(int exitcode);
 static const char *interp_prefix = CONFIG_QEMU_INTERP_PREFIX;
 const char *qemu_uname_release;
 
+static const char *native_lib;
+
 #if !defined(TARGET_DEFAULT_STACK_SIZE)
 /* XXX: on x86 MAP_GROWSDOWN only works if ESP <= address + 32, so
    we allocate a bigger stack. Need a better solution, for example
@@ -292,6 +294,13 @@ static void handle_arg_set_env(const char *arg)
     }
     free(r);
 }
+
+#if defined(CONFIG_USER_ONLY)  && defined(CONFIG_USER_NATIVE_CALL)
+static void handle_arg_native_bypass(const char *arg)
+{
+    native_lib = arg;
+}
+#endif
 
 static void handle_arg_unset_env(const char *arg)
 {
@@ -522,6 +531,10 @@ static const struct qemu_argument arg_table[] = {
      "",           "Generate a /tmp/perf-${pid}.map file for perf"},
     {"jitdump",    "QEMU_JITDUMP",     false, handle_arg_jitdump,
      "",           "Generate a jit-${pid}.dump file for perf"},
+#if defined(CONFIG_USER_ONLY)  && defined(CONFIG_USER_NATIVE_CALL)
+    {"native-bypass", "QEMU_NATIVE_BYPASS", true, handle_arg_native_bypass,
+     "",           "native bypass for library calls in user mode only."},
+#endif
     {NULL, NULL, false, NULL, NULL, NULL}
 };
 
@@ -823,6 +836,16 @@ int main(int argc, char **argv, char **envp)
         if (err) {
             error_reportf_err(err, "cannot initialize crypto: ");
             exit(1);
+        }
+    }
+
+    /* Set the library for native bypass  */
+    if (native_lib != NULL) {
+        char *token = malloc(strlen(native_lib) + 12);
+        strcpy(token, "LD_PRELOAD=");
+        strcat(token, native_lib);
+         if (envlist_appendenv(envlist, token, ":") != 0) {
+            usage(EXIT_FAILURE);
         }
     }
 
