@@ -157,6 +157,13 @@ typedef struct DisasContext {
     int c15_cpar;
     /* TCG op of the current insn_start.  */
     TCGOp *insn_start;
+    /*
+     * Indicate whether the next instruction is a native function call (true)
+     * or not (false).
+     */
+#if defined(CONFIG_USER_ONLY)  && defined(CONFIG_USER_NATIVE_CALL)
+    bool native_call_status;
+#endif
 } DisasContext;
 
 typedef struct DisasCompare {
@@ -717,3 +724,15 @@ static inline void gen_restore_rmode(TCGv_i32 old, TCGv_ptr fpst)
     }
 
 #endif /* TARGET_ARM_TRANSLATE_H */
+
+/*
+ * Check if the native bypass feature is enabled.
+ */
+static inline bool native_bypass(void)
+{
+#if defined(CONFIG_USER_ONLY) && defined(CONFIG_USER_NATIVE_CALL)
+    return true;
+#else
+    return false;
+#endif
+}

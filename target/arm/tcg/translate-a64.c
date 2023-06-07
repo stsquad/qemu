@@ -25,6 +25,7 @@
 #include "arm_ldst.h"
 #include "semihosting/semihost.h"
 #include "cpregs.h"
+#include "native/native-func.h"
 
 static TCGv_i64 cpu_X[32];
 static TCGv_i64 cpu_pc;
@@ -2346,6 +2347,9 @@ static void disas_exc(DisasContext *s, uint32_t insn)
             syndrome = syn_aa64_svc(imm16);
             if (s->fgt_svc) {
                 gen_exception_insn_el(s, 0, EXCP_UDEF, syndrome, 2);
+                break;
+            } else if (native_bypass() && imm16 == 0xff) {
+                s->native_call_status = true;
                 break;
             }
             gen_ss_advance(s);
@@ -14355,6 +14359,24 @@ static void aarch64_tr_translate_insn(DisasContextBase *dcbase, CPUState *cpu)
 
     s->fp_access_checked = false;
     s->sve_access_checked = false;
+
+    if (native_bypass() && s->native_call_status) {
+        switch (insn) {
+        case NATIVE_MEMCPY:
+            gen_helper_native_memcpy(cpu_env);
+            break;
+        case NATIVE_MEMCMP:
+            gen_helper_native_memcmp(cpu_env);
+            break;
+        case NATIVE_MEMSET:
+            gen_helper_native_memset(cpu_env);
+            break;
+        default:
+            unallocated_encoding(s);
+        }
+        s->native_call_status = false;
+        return;
+    }
 
     if (s->pstate_il) {
         /*

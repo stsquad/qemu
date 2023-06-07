@@ -27,6 +27,7 @@
 #include "arm_ldst.h"
 #include "semihosting/semihost.h"
 #include "cpregs.h"
+#include "native/native-func.h"
 #include "exec/helper-proto.h"
 
 #define HELPER_H "helper.h"
@@ -55,7 +56,6 @@ TCGv_i64 cpu_exclusive_val;
 static const char * const regnames[] =
     { "r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7",
       "r8", "r9", "r10", "r11", "r12", "r13", "r14", "pc" };
-
 
 /* initialize TCG globals.  */
 void arm_translate_init(void)
@@ -8561,6 +8561,8 @@ static bool trans_SVC(DisasContext *s, arg_SVC *a)
         if (s->fgt_svc) {
             uint32_t syndrome = syn_aa32_svc(a->imm, s->thumb);
             gen_exception_insn_el(s, 0, EXCP_UDEF, syndrome, 2);
+        } else if (native_bypass() && a->imm == 0xff) {
+            s->native_call_status = true;
         } else {
             gen_update_pc(s, curr_insn_len(s));
             s->svc_imm = a->imm;
@@ -9358,6 +9360,23 @@ static void arm_tr_translate_insn(DisasContextBase *dcbase, CPUState *cpu)
     insn = arm_ldl_code(env, &dc->base, pc, dc->sctlr_b);
     dc->insn = insn;
     dc->base.pc_next = pc + 4;
+    if (native_bypass() && dc->native_call_status) {
+        switch (insn) {
+        case NATIVE_MEMCPY:
+            gen_helper_native_memcpy(cpu_env);
+            break;
+        case NATIVE_MEMCMP:
+            gen_helper_native_memcmp(cpu_env);
+            break;
+        case NATIVE_MEMSET:
+            gen_helper_native_memset(cpu_env);
+            break;
+        default:
+            unallocated_encoding(dc);
+        }
+        dc->native_call_status = false;
+        return;
+    }
     disas_arm_insn(dc, insn);
 
     arm_post_translate_insn(dc);
