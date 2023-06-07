@@ -240,3 +240,15 @@ static inline bool cpu_is_bigendian(DisasContext *ctx)
 }
 
 #endif
+
+/*
+ * Check if the native bypass feature is enabled.
+ */
+static inline bool native_bypass(void)
+{
+#if defined(CONFIG_USER_ONLY) && defined(CONFIG_USER_NATIVE_CALL)
+    return true;
+#else
+    return false;
+#endif
+}

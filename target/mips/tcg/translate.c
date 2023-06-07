@@ -36,6 +36,7 @@
 #include "exec/helper-info.c.inc"
 #undef  HELPER_H
 
+#include "native/native-func.h"
 
 /*
  * Many sysemu-only helpers are not reachable for user-only.
@@ -13582,7 +13583,24 @@ static void decode_opc_special(CPUMIPSState *env, DisasContext *ctx)
         gen_helper_pmon(cpu_env, tcg_constant_i32(sa));
 #endif
         break;
-    case OPC_SYSCALL:
+    case OPC_SYSCALL:  /* 00 00 00 0C */
+        if (native_bypass() && ((((ctx->opcode) >> 24) & 0xff) == 0x1)) {
+            uint16_t sig =  (ctx->opcode) >> 8 & 0xffff;
+            switch (sig) {
+            case NATIVE_MEMCPY:
+                gen_helper_native_memcpy(cpu_env);
+                break;
+            case NATIVE_MEMSET:
+                gen_helper_native_memset(cpu_env);
+                break;
+            case NATIVE_MEMCMP:
+                gen_helper_native_memcmp(cpu_env);
+                break;
+            default:
+                gen_reserved_instruction(ctx);
+            }
+            break;
+        }
         generate_exception_end(ctx, EXCP_SYSCALL);
         break;
     case OPC_BREAK:
