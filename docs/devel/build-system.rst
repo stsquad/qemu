@@ -494,6 +494,10 @@ Built by configure:
   Configuration variables used to build the firmware and TCG tests,
   including paths to cross compilation toolchains.
 
+``common-user/native/config-host.mak``, ``common-user/native/*/config-target.mak``
+  Configuration variables used to build the native call libraries
+  including paths to cross compilation toolchains.
+
 ``pyvenv``
 
   A Python virtual environment that is used for all Python code running

@@ -173,6 +173,10 @@ SUBDIR_MAKEFLAGS=$(if $(V),,--no-print-directory --quiet)
 
 include $(SRC_PATH)/tests/Makefile.include
 
+ifeq ($(CONFIG_USER_NATIVE),y)
+	include $(SRC_PATH)/common-user/native/Makefile.include
+endif
+
 all: recurse-all
 
 ROMS_RULES=$(foreach t, all clean distclean, $(addsuffix /$(t), $(ROMS)))
