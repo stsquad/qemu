@@ -225,6 +225,17 @@ void page_reset_target_data(target_ulong start, target_ulong last);
 int page_check_range(target_ulong start, target_ulong len, int flags);
 
 /**
+ * page_check_range_empty:
+ * @start: first byte of range
+ * @last: last byte of range
+ *
+ * Return true if the entire range [@start, @last] is unmapped.
+ * The memory lock must be held, as the caller will want to ensure
+ * the result stays true until a new mapping can be installed.
+ */
+bool page_check_range_empty(target_ulong start, target_ulong last);
+
+/**
  * page_get_target_data(address)
  * @address: guest virtual address
  *
