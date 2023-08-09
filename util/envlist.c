@@ -233,15 +233,11 @@ envlist_appendenv(envlist_t *envlist, const char *env, const char *separator)
     }
 
     if (entry != NULL) {
-        char *new_env_value = NULL;
-        size_t new_env_len = strlen(entry->ev_var) + strlen(eq_sign)
-            + strlen(separator) + 1;
-        new_env_value = g_malloc(new_env_len);
-        strcpy(new_env_value, entry->ev_var);
-        strcat(new_env_value, separator);
-        strcat(new_env_value, eq_sign + 1);
-        g_free((char *)entry->ev_var);
-        entry->ev_var = new_env_value;
+        GString *new_val = g_string_new(entry->ev_var);
+        g_string_append(new_val, separator);
+        g_string_append(new_val, eq_sign + 1);
+        g_free(entry->ev_var);
+        entry->ev_var = g_string_free(new_val, false);
     } else {
         envlist->el_count++;
         entry = g_malloc(sizeof(*entry));

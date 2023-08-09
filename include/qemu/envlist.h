@@ -4,7 +4,7 @@
 #include "qemu/queue.h"
 
 struct envlist_entry {
-    const char *ev_var;            /* actual env value */
+    char *ev_var;            /* actual env value */
     QLIST_ENTRY(envlist_entry) ev_link;
 };
 
