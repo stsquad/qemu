@@ -1815,6 +1815,8 @@ for target in $target_list; do
       continue
       ;;
     *-softmmu)
+      # skip installing config-target.mak when we have no tests to build
+      test -f "$source_path/tests/tcg/$arch/Makefile.softmmu-target" || continue
       qemu="qemu-system-$arch"
       ;;
     *-linux-user|*-bsd-user)
