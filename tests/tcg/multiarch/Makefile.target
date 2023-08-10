@@ -138,13 +138,18 @@ run-plugin-semiconsole-with-%:
 TESTS += semihosting semiconsole
 endif
 
-nativecall: native/nativecall.c
-	$(CC) $(CFLAGS) $(EXTRA_CFLAGS) $< -o $@ $(filter-out -static,$(LDFLAGS))
-
 ifneq ($(LD_PREFIX),)
 ifneq ($(wildcard $(LIBNATIVE)),)
+VPATH += $(MULTIARCH_SRC)/native
+
+nativecall: nativecall.c
+	$(CC) $(CFLAGS) $(EXTRA_CFLAGS) $< -o $@ $(filter-out -static,$(LDFLAGS))
+
 run-nativecall: nativecall
-	$(call run-test,$<, $(QEMU) -L $(LD_PREFIX) --native-bypass $(LIBNATIVE) $<, "nativecall")
+	$(call run-test,$<, $(QEMU) -L $(LD_PREFIX) \
+		--native-bypass $(LIBNATIVE) $<, "nativecall")
+
+TESTS += nativecall
 else
 run-nativecall: nativecall
 	$(call skip-test, $<, "no native library found")
@@ -153,7 +158,6 @@ else
 run-nativecall: nativecall
 	$(call skip-test, $<, "no elf interpreter prefix found")
 endif
-EXTRA_RUNS += run-nativecall
 
 # Update TESTS
 TESTS += $(MULTIARCH_TESTS)
