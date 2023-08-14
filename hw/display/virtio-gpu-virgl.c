@@ -97,6 +97,8 @@ virgl_gpu_find_resource(VirtIOGPU *g, uint32_t resource_id)
 
 static bool use_async_cb = true;
 static bool use_per_ctx_fence = true;
+static struct virgl_renderer_callbacks virtio_gpu_3d_cbs;
+static struct virgl_renderer_callbacks virtio_gpu_3d_cbs_egl;
 
 #if VIRGL_RENDERER_CALLBACKS_VERSION >= 4
 static void *
@@ -1190,6 +1192,15 @@ static int virgl_make_context_current(void *opaque, int scanout_idx,
 
 static struct virgl_renderer_callbacks virtio_gpu_3d_cbs = {
     .version             = 1,
+    .version             = 1,
+    .write_fence         = virgl_write_fence,
+    .create_gl_context   = virgl_create_context,
+    .destroy_gl_context  = virgl_destroy_context,
+    .make_current        = virgl_make_context_current,
+};
+
+static struct virgl_renderer_callbacks virtio_gpu_3d_cbs_egl = {
+    .version             = 4,
     .write_fence         = virgl_write_fence,
     .write_context_fence = virgl_write_context_fence,
     .create_gl_context   = virgl_create_context,
@@ -1279,6 +1290,8 @@ int virtio_gpu_virgl_init(VirtIOGPU *g)
 {
     int ret;
     uint32_t flags = 0;
+    struct virgl_renderer_callbacks *callbacks;
+    const char *var = g_getenv("SDL_VIDEODRIVER");
 
 #if VIRGL_RENDERER_CALLBACKS_VERSION >= 4
     if (qemu_egl_display) {
@@ -1301,7 +1314,12 @@ int virtio_gpu_virgl_init(VirtIOGPU *g)
     if (use_per_ctx_fence)
         flags |= VIRGL_RENDERER_THREAD_SYNC;
 
-    ret = virgl_renderer_init(g, flags, &virtio_gpu_3d_cbs);
+    if (var && !strcmp(var, "wayland"))
+	    callbacks = &virtio_gpu_3d_cbs_egl;
+    else
+	    callbacks = &virtio_gpu_3d_cbs;
+
+    ret = virgl_renderer_init(g, flags, callbacks);
     if (ret != 0) {
         error_report("virgl could not be initialized: %d", ret);
         return ret;
