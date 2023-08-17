@@ -20,6 +20,7 @@
 #include "trace.h"
 #include "sysemu/dma.h"
 #include "sysemu/sysemu.h"
+#include "sysemu/xen.h"
 #include "hw/virtio/virtio.h"
 #include "migration/qemu-file-types.h"
 #include "hw/virtio/virtio-gpu.h"
@@ -1500,7 +1501,7 @@ void virtio_gpu_device_realize(DeviceState *qdev, Error **errp)
 
     if (virtio_gpu_blob_enabled(g->parent_obj.conf)) {
         if (!virtio_gpu_rutabaga_enabled(g->parent_obj.conf) &&
-            !virtio_gpu_have_udmabuf()) {
+            (!xen_enabled() && !virtio_gpu_have_udmabuf())) {
             error_setg(errp, "need rutabaga or udmabuf for blob resources");
             return;
         }
