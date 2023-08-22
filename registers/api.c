@@ -20,7 +20,7 @@
 void reg_add_env(const char *name, const char *grp, intptr_t offset, int bytes)
 {
     RegDef reg = {
-        .name = name,
+        .name = g_intern_string(name),
         .size = bytes,
         .type = REG_DIRECT_ENV,
         .access.env.offset = offset
@@ -33,7 +33,7 @@ void reg_add_i32_virt(const char *name, const char *grp, void *opaque,
                       reg_read32_fn rfn, reg_write32_fn wfn, reg_fmt32_fn ffn)
 {
     RegDef reg = {
-        .name = name,
+        .name = g_intern_string(name),
         .size = 4,
         .type = REG_32BIT_HELPER,
         .access.helper32.read = rfn,
@@ -49,7 +49,7 @@ void reg_add_i64_virt(const char *name, const char *grp, void *opaque,
                       reg_read64_fn rfn, reg_write64_fn wfn, reg_fmt64_fn ffn)
 {
     RegDef reg = {
-        .name = name,
+        .name = g_intern_string(name),
         .size = 8,
         .type = REG_64BIT_HELPER,
         .access.helper64.read = rfn,
@@ -66,7 +66,7 @@ void reg_add_vector(const char *name, const char *grp, void *opaque,
                     reg_readvec_fn rfn, reg_writevec_fn wfn, reg_fmtvec_fn ffn)
 {
     RegDef reg = {
-        .name = name,
+        .name = g_intern_string(name),
         .size = size,
         .type = REG_VECTOR_HELPER,
         .access.helpervec.read = rfn,
