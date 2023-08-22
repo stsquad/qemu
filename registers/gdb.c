@@ -53,6 +53,13 @@ int reg_gdb_read_register(CPUState *cpu, GByteArray *buf, int index)
         g_byte_array_append(buf, (uint8_t *) &value, 8);
         return 8;
     }
+    case REG_VECTOR_HELPER:
+    {
+        void *opaque = reg->access.helpervec.opaque;
+        g_autoptr(GByteArray) vec = reg->access.helpervec.read(cpu, opaque);
+        g_byte_array_append(buf, vec->data, vec->len);
+        return vec->len;
+    }
     default:
         g_assert_not_reached();
     }
@@ -353,7 +360,7 @@ void reg_register_with_gdb(CPUState *cs)
             RegGroup *rg = &g_array_index(groups, RegGroup, i);
             char *xml_name = g_strdup_printf("%s.xml", rg->name);
             gdb_register_coprocessor(cs, NULL, NULL,
-                                     rg->registers->len, xml_name, rg->global_base);
+                                     rg->registers->len, xml_name, 0);
         }
     }
 }
