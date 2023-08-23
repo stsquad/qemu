@@ -72,6 +72,14 @@ int reg_gdb_write_register(CPUState *cpu, uint8_t *buf, int index)
     return 0;
 }
 
+void reg_set_group_gdb_name(const char *grp, const char *gdb)
+{
+    RegGroup *group = reg_find_group(grp);
+    g_assert(group);
+    g_assert(!group->gdb_name);
+    group->gdb_name = g_intern_string(gdb);
+}
+
 /*
  * GDB XML Handling
  */
@@ -127,6 +135,16 @@ static const char * get_gdb_type(RegDef *reg)
     return "unknown";
 }
 
+static char get_gdb_size(int bitsize)
+{
+    for (int i = 0; i < ARRAY_SIZE(gdb_types); i++) {
+        if (bitsize == gdb_types[i].size) {
+            return gdb_types[i].sz;
+        }
+    }
+    return 'x';
+}
+
 /*
  * For vectors we need to generate the appropriate union types for
  * every combination of union possible in this set of registers. If
@@ -134,6 +152,7 @@ static const char * get_gdb_type(RegDef *reg)
  */
 typedef struct {
     int size;
+    const gchar *pfx;
     RegVecFormats fmts;
 } RegVecUnion;
 
@@ -157,7 +176,8 @@ static GArray *maybe_add_new_union(GArray *unions, RegDef *reg)
     if (!already_matched) {
         RegVecUnion new_union = {
             .size = this_size,
-            .fmts = this_fmt
+            .pfx = reg->access.helpervec.gtp ? reg->access.helpervec.gtp : "vector",
+            .fmts = this_fmt,
         };
         unions = g_array_append_val(unions, new_union);
     }
@@ -168,9 +188,8 @@ static GArray *maybe_add_new_union(GArray *unions, RegDef *reg)
 static GString * generate_vector_unions(RegGroup *rg, GString *xml)
 {
     g_autoptr(GArray) unions = g_array_new(true, true, sizeof(RegVecUnion));
-    int i;
 
-    for (i = 0; i < rg->registers->len; i++) {
+    for (int i = 0; i < rg->registers->len; i++) {
         RegDef *reg = reg_get_indirect_definition(rg->registers, i);
         if (reg->type == REG_VECTOR_HELPER) {
             unions = maybe_add_new_union(unions, reg);
@@ -180,43 +199,62 @@ static GString * generate_vector_unions(RegGroup *rg, GString *xml)
     /*
      * If we found any vector formats we need to generate the types of
      * form:
-     *  <vector id="vector8u" type="uint16" count="8"/>
+     *  <vector id="vNT" type="uint16" count="8"/>
      * where:
      *   id = vNT (N is number, T is base type)
      * this will be related to the maximum vector size.
      *
-     * We then generate the forms all fields of the same size:
-     *   <union id="vnh">
-     *     <field name="u" type="v8u"/>
-     *     <field name="s" type="v8i"/>
-     *   </union>
+     * If the vector only has a single lane type we can use it
+     * directly. Otherwise we need to generate unions for all fields
+     * of the same size:
+     *
+     * <union id="vnT">
+     *   <field name="S" type="vNS"/>
+     *   ... for each lane type of the same size ...
+     * </union>
      * where:
-     *  id = unique for given vector size
-     *  fields = each field in the vector
-     *  type = the vector type from above.
-     * then a final type union where:
-     *  type = includes the previous union names
+     *  id = vnT (T is the base type for lanes)
+     *  fields = S of type vNS (S suffix, N is lanes)
+     *
+     * then a final type union:
+     *
+     * <union id="v">
+     *   <field name="T" type="vnT">
+     *   ...for each vnT previously...
+     * </union>
      *
      * Finally the individual registers:
-     *   <reg name="v0" bitsize="128" type="final_type"/>
+     *   <reg name="v0" bitsize="128" type="v"/>
      */
     if (unions->len) {
         g_autoptr(GString) ts = g_string_new("");
-        int bits, j, k;
+        g_autoptr(GPtrArray) udefs = g_ptr_array_new_with_free_func(g_free);
 
-        for (i = 0; i < unions->len; i++) {
+        for (int i = 0; i < unions->len; i++) {
             RegVecUnion *u = &g_array_index(unions, RegVecUnion, i);
+            bool no_union = ctpopl(u->fmts) == 1;
+
+            udefs = g_ptr_array_remove_range(udefs, 0, udefs->len);
 
             /* e.g. <vector id="vector8u" type="uint16" count="8"/> */
-            for (j = 0; j < ARRAY_SIZE(gdb_types); j++) {
+            for (int j = 0; j < ARRAY_SIZE(gdb_types); j++) {
                 int count = u->size / gdb_types[j].size;
                 if (gdb_types[j].fmts & u->fmts) {
-                    g_string_printf(ts, "%-s_%d_%c%c", rg->name, count,
-                                    gdb_types[j].sz, gdb_types[j].suffix);
+                    if (no_union) {
+                        /* we will use the vector type directly */
+                        g_string_printf(ts, "%s", u->pfx);
+                    } else {
+                        g_string_printf(ts, "%s%c%c", u->pfx, gdb_types[j].sz, gdb_types[j].suffix);
+                    }
                     g_string_append_printf(xml,
                                            "\t<vector id=\"%s\" type=\"%s\" count=\"%d\"/>\n",
                                            ts->str, gdb_types[j].gdb_type, count);
                 }
+            }
+
+            /* If we don't need the unions skip to the next set */
+            if (no_union) {
+                continue;
             }
 
             /*
@@ -224,32 +262,32 @@ static GString * generate_vector_unions(RegGroup *rg, GString *xml)
              * signed and potentially float versions of each size from 128 to
              * 8 bits depending on the formats required by the vector register.
              */
-            for (bits = 128, j = 0; bits >= 8; bits /= 2, j++) {
-                const char suf[] = { 'q', 'd', 's', 'h', 'b' };
+            for (int bits = 128; bits >= 8; bits /= 2) {
                 g_autoptr(GString) fields = g_string_new("");
-                for (k = 0; k < ARRAY_SIZE(gdb_types); k++) {
+                for (int k = 0; k < ARRAY_SIZE(gdb_types); k++) {
                     if (gdb_types[k].size == bits && gdb_types[k].fmts & u->fmts) {
-                        int count = u->size / gdb_types[k].size;
-                        g_string_printf(ts, "%-s_%d_%c%c", rg->name,
-                                        count,
-                                        gdb_types[k].sz, gdb_types[k].suffix);
+                        g_string_printf(ts, "%s%c%c", u->pfx, gdb_types[k].sz, gdb_types[k].suffix);
                         g_string_append_printf(fields, "\t\t<field name=\"%c\" type=\"%s\"/>\n",
-                                               gdb_types[j].suffix, ts->str);
+                                               gdb_types[k].suffix, ts->str);
                     }
                 }
                 /* only emit union if we have fields that matched the formats we need */
                 if (fields->len) {
-                    g_string_append_printf(xml, "\t<union id=\"%-s_%c\">\n%s\t</union>\n",
-                                           rg->name, suf[j], fields->str);
+                    gchar sz = get_gdb_size(bits);
+                    gchar *uname = g_strdup_printf("%sn%c", u->pfx, sz);
+                    g_string_append_printf(xml, "\t<union id=\"%s\">\n%s\t</union>\n",
+                                           uname, fields->str);
+                    g_ptr_array_add(udefs, uname);
                 }
             }
 
-            /* final union on unions for the size of the vector */
-            g_string_append_printf(xml, "\t<union id=\"%-s_%d\">\n", rg->name, u->size * 8);
-            for (bits = 128, j = 0; bits >= 8; bits /= 2, j++) {
-                const char suf[] = { 'q', 'd', 's', 'h', 'b' };
-                g_string_append_printf(xml, "\t\t<field name=\"%c\" type=\"%-s_%c\"/>\n",
-                                       suf[j], rg->name, suf[j]);
+            /* final union of unions for the size of the vector */
+            g_string_append_printf(xml, "\t<union id=\"%s\">\n", u->pfx);
+            for (int u = 0; u < udefs->len; u++) {
+                gchar *uname = g_ptr_array_index(udefs, u);
+                gchar suffix = uname[strlen(uname)-1];
+                g_string_append_printf(xml, "\t\t<field name=\"%c\" type=\"%s\"/>\n",
+                                       suffix, uname);
             }
             g_string_append(xml, "\t</union>\n");
         }
@@ -289,10 +327,11 @@ static const char * generate_gdb_xml(RegGroup *rg)
         case REG_VECTOR_HELPER:
         {
             int bits = reg->size * 8;
+            const char * pfx = reg->access.helpervec.gtp ? reg->access.helpervec.gtp : "vector";
             g_string_append_printf(xml,
                                    "<reg name=\"%s\" bitsize=\"%d\""
-                                   " regnum=\"%d\" type=\"%-s_%d\"/>\n",
-                                   reg->name, bits, i, rg->name, bits);
+                                   " regnum=\"%d\" type=\"%s\"/>\n",
+                                   reg->name, bits, i, pfx);
             break;
         }
         default:
@@ -301,6 +340,8 @@ static const char * generate_gdb_xml(RegGroup *rg)
     }
 
     g_string_append_printf(xml, "</feature>");
+
+    fprintf(stderr, "%s: xml for %s is:\n%s", __func__, rg->name, xml->str);
 
     return g_string_free(xml, false);
 }
@@ -359,6 +400,11 @@ void reg_register_with_gdb(CPUState *cs)
         for (i = 0; i < groups->len; i++) {
             RegGroup *rg = &g_array_index(groups, RegGroup, i);
             char *xml_name = g_strdup_printf("%s.xml", rg->name);
+            /*
+             * We don't register specific handlers for each section as
+             * we have a generic handler which understands all the
+             * registers.
+             */
             gdb_register_coprocessor(cs, NULL, NULL,
                                      rg->registers->len, xml_name, 0);
         }

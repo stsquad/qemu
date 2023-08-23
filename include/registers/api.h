@@ -104,6 +104,7 @@ typedef void reg_fmtvec_fn(GString *s, CPUState *cs, const void *opaque);
  * reg_add_vector: add a vector register
  * @name: name of register
  * @grp: register group
+ * @gtp: optional gdb type prefix
  * @opaque: data for callback
  * @size: total size in bits
  * @fmts: bitmask of lane sizes
@@ -117,8 +118,8 @@ typedef void reg_fmtvec_fn(GString *s, CPUState *cs, const void *opaque);
  * vector.
  */
 
-void reg_add_vector(const char *name, const char *grp, void *opaque,
-                    int size, RegVecFormats fmts,
+void reg_add_vector(const char *name, const char *grp, const char *gtp,
+                    void *opaque, int size, RegVecFormats fmts,
                     reg_readvec_fn rfn, reg_writevec_fn wfn, reg_fmtvec_fn ffn);
 
 /**
@@ -153,13 +154,14 @@ void reg_cpu_dump_state(CPUState *cs, FILE *f, int flags);
 /**
  * reg_set_group_gdb_name() - set the GDB name for a group of registers
  * @grp: the QEMU name for the group
- * @gdb: the org.qemu.gdb.ARCH.FEATURE name
+ * @gdb: the fully qualified org.gnu.gdb.ARCH.FEATURE name
  *
  * While the XML for a group can use any name it wants there are some
  * times when we want to report a specific gdb feature name. This
- * allows for GDB to use
+ * allows for GDB to use special handling. Care must also be taken to
+ * ensure the correct gdb type prefix is set in reg_add_vector().
  */
-
+void reg_set_group_gdb_name(const char *grp, const char *gdb);
 
 /**
  * reg_get_value_hmp(): get the value of a register for HMP

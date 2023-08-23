@@ -181,18 +181,18 @@ static void test_registration(void)
      * vector registers may be directly in memory but we always use
      * helpers to access them.
      */
-    reg_add_vector("v0", "vectors", GUINT_TO_POINTER(0), VEC_SIZE * 8,
+    reg_add_vector("v0", "vectors", NULL, GUINT_TO_POINTER(0), VEC_SIZE * 8,
                    REG_VEC_ALL64 | REG_VEC_ALL32 |  REG_VEC_UINT8,
                    readvec, writevec, fmtvec);
-    reg_add_vector("v1", "vectors", GUINT_TO_POINTER(1), VEC_SIZE * 8,
+    reg_add_vector("v1", "vectors", NULL, GUINT_TO_POINTER(1), VEC_SIZE * 8,
                    REG_VEC_ALL64 | REG_VEC_ALL32 |  REG_VEC_UINT8,
                    readvec, writevec, fmtvec);
 
     /* these are more like SVE in size */
-    reg_add_vector("b0", "BigVectors", GUINT_TO_POINTER(0), BIG_VEC_SIZE * 8,
+    reg_add_vector("b0", "BigVectors", NULL, GUINT_TO_POINTER(0), BIG_VEC_SIZE * 8,
                    REG_VEC_ALL128 | REG_VEC_IEEEDOUBLE | REG_VEC_IEEESINGLE | REG_VEC_IEEEHALF,
                    readbvec, writebvec, NULL);
-    reg_add_vector("b1", "BigVectors", GUINT_TO_POINTER(1), BIG_VEC_SIZE * 8,
+    reg_add_vector("b1", "BigVectors", NULL, GUINT_TO_POINTER(1), BIG_VEC_SIZE * 8,
                    REG_VEC_ALL128 | REG_VEC_IEEEDOUBLE | REG_VEC_IEEESINGLE | REG_VEC_IEEEHALF,
                    readbvec, writebvec, NULL);
 

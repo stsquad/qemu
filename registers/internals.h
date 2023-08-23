@@ -41,11 +41,12 @@ typedef struct {
     reg_fmtvec_fn *format;
     void *opaque;
     RegVecFormats fmts;
+    const char *gtp;
 } HelperVecReg;
 
 typedef struct {
     const char *name;
-    int size;
+    int size; /* in bytes */
     RegType type;
     union {
         EnvReg env;

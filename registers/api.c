@@ -61,7 +61,7 @@ void reg_add_i64_virt(const char *name, const char *grp, void *opaque,
     reg_add_definition(reg, grp);
 }
 
-void reg_add_vector(const char *name, const char *grp, void *opaque,
+void reg_add_vector(const char *name, const char *grp, const char *gtp, void *opaque,
                     int size, RegVecFormats fmts,
                     reg_readvec_fn rfn, reg_writevec_fn wfn, reg_fmtvec_fn ffn)
 {
@@ -75,6 +75,10 @@ void reg_add_vector(const char *name, const char *grp, void *opaque,
         .access.helpervec.opaque = opaque,
         .access.helpervec.fmts = fmts
     };
+
+    if (gtp) {
+        reg.access.helpervec.gtp = g_intern_string(gtp);
+    }
 
     reg_add_definition(reg, grp);
 }
