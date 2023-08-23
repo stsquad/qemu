@@ -24,7 +24,11 @@ static GArray *groups;
 static GArray *new_group(const char *group)
 {
     const char *grp = g_intern_string(group);
-    RegGroup new_grp = { .name = grp, .global_base = registers->len };
+    RegGroup new_grp = {
+        .name = grp,
+        .global_base = registers->len,
+        .registers = g_array_new(true, true, sizeof(int))
+    };
     groups = g_array_append_val(groups, new_grp);
     return new_grp.registers;
 }

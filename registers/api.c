@@ -67,7 +67,7 @@ void reg_add_vector(const char *name, const char *grp, void *opaque,
 {
     RegDef reg = {
         .name = g_intern_string(name),
-        .size = size,
+        .size = size / 8,
         .type = REG_VECTOR_HELPER,
         .access.helpervec.read = rfn,
         .access.helpervec.write = wfn,
