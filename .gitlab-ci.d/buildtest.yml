@@ -582,11 +582,6 @@ pages:
     - job: build-tools-and-docs-debian
   script:
     - mkdir -p public
-    # HTML-ised source tree
-    - make gtags
-    - htags -anT --tree-view=filetree -m qemu_init
-        -t "Welcome to the QEMU sourcecode"
-    - mv HTML public/src
     # Project documentation
     - make -C build install DESTDIR=$(pwd)/temp-install
     - mv temp-install/usr/local/share/doc/qemu/* public/
@@ -596,3 +591,13 @@ pages:
       - public
   variables:
     QEMU_JOB_PUBLISH: 1
+
+code_navigation:
+  extends: .base_job_template
+  image: sourcegraph/lsif-clang
+  allow_failure: true
+  script:
+    - lsif-clang --project-root=$(pwd)
+  artifacts:
+    reports:
+      lsif: dump.lsif
