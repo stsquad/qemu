@@ -79,6 +79,8 @@ typedef struct VirtIOSoundPCMParams VirtIOSoundPCMParams;
 
 typedef struct VirtIOSoundPCM VirtIOSoundPCM;
 
+typedef struct VirtIOSoundPCMBlock VirtIOSoundPCMBlock;
+
 /* Stream params */
 struct VirtIOSoundPCMParams {
     uint32_t features;
@@ -87,6 +89,15 @@ struct VirtIOSoundPCMParams {
     uint8_t channels;
     uint8_t format;
     uint8_t rate;
+};
+
+struct VirtIOSoundPCMBlock {
+    QSIMPLEQ_ENTRY(VirtIOSoundPCMBlock) entry;
+    VirtQueueElement *elem;
+    VirtQueue *vq;
+    size_t size;
+    uint64_t offset;
+    uint8_t data[];
 };
 
 struct VirtIOSoundPCM {
