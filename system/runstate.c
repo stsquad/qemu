@@ -59,6 +59,7 @@
 #include "sysemu/runstate-action.h"
 #include "sysemu/sysemu.h"
 #include "sysemu/tpm.h"
+#include "tcg/tb-stats.h"
 #include "trace.h"
 
 static NotifierList exit_notifiers =
@@ -856,6 +857,7 @@ void qemu_cleanup(int status)
     /* No more vcpu or device emulation activity beyond this point */
     vm_shutdown();
     replay_finish();
+    tb_stats_dump_atexit();
 
     /*
      * We must cancel all block jobs while the block layer is drained,
