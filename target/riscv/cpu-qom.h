@@ -67,5 +67,7 @@ struct RISCVCPUClass {
     /*< public >*/
     DeviceRealize parent_realize;
     ResettablePhases parent_phases;
+    uint32_t misa_mxl_max;  /* max mxl for this cpu */
+    uint32_t misa_ext_mask; /* max ext for this cpu */
 };
 #endif /* RISCV_CPU_QOM_H */

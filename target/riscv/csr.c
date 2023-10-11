@@ -1393,6 +1393,7 @@ static RISCVException write_misa(CPURISCVState *env, int csrno,
                                  target_ulong val)
 {
     RISCVCPU *cpu = env_archcpu(env);
+    RISCVCPUClass *mcc = RISCV_CPU_GET_CLASS(cpu);
     uint32_t orig_misa_ext = env->misa_ext;
     Error *local_err = NULL;
 
@@ -1402,7 +1403,7 @@ static RISCVException write_misa(CPURISCVState *env, int csrno,
     }
 
     /* Mask extensions that are not supported by this hart */
-    val &= env->misa_ext_mask;
+    val &= mcc->misa_ext_mask;
 
     /*
      * Suppress 'C' if next instruction is not aligned

@@ -41,6 +41,11 @@
 /* RISC-V CPU definitions */
 static const char riscv_single_letter_exts[] = "IEMAFDQCPVH";
 
+typedef struct RISCVCPUClassData {
+    RISCVMXL misa_mxl_max;
+    uint32_t misa_ext_mask;
+} RISCVCPUClassData;
+
 struct isa_ext_data {
     const char *name;
     int min_version;
@@ -271,12 +276,6 @@ const char *riscv_cpu_get_trap_name(target_ulong cause, bool async)
     }
 }
 
-static void set_misa(CPURISCVState *env, RISCVMXL mxl, uint32_t ext)
-{
-    env->misa_mxl_max = env->misa_mxl = mxl;
-    env->misa_ext_mask = env->misa_ext = ext;
-}
-
 #ifndef CONFIG_USER_ONLY
 static uint8_t satp_mode_from_str(const char *satp_mode_str)
 {
@@ -371,15 +370,20 @@ static void set_satp_mode_default_map(RISCVCPU *cpu)
 }
 #endif
 
+static const RISCVCPUClassData riscv_any_cpu_class_data = {
+#if defined(TARGET_RISCV32)
+    .misa_mxl_max = MXL_RV32,
+    .misa_ext_mask = RVI | RVM | RVA | RVF | RVD | RVC | RVU
+#else
+    .misa_mxl_max = MXL_RV64,
+    .misa_ext_mask = RVI | RVM | RVA | RVF | RVD | RVC | RVU
+#endif
+};
+
 static void riscv_any_cpu_init(Object *obj)
 {
     RISCVCPU *cpu = RISCV_CPU(obj);
     CPURISCVState *env = &cpu->env;
-#if defined(TARGET_RISCV32)
-    set_misa(env, MXL_RV32, RVI | RVM | RVA | RVF | RVD | RVC | RVU);
-#elif defined(TARGET_RISCV64)
-    set_misa(env, MXL_RV64, RVI | RVM | RVA | RVF | RVD | RVC | RVU);
-#endif
 
 #ifndef CONFIG_USER_ONLY
     set_satp_mode_max_supported(RISCV_CPU(obj),
@@ -397,11 +401,13 @@ static void riscv_any_cpu_init(Object *obj)
 }
 
 #if defined(TARGET_RISCV64)
+static const RISCVCPUClassData rv64_base_cpu_class_data = {
+    .misa_mxl_max = MXL_RV64
+};
+
 static void rv64_base_cpu_init(Object *obj)
 {
     CPURISCVState *env = &RISCV_CPU(obj)->env;
-    /* We set this in the realise function */
-    set_misa(env, MXL_RV64, 0);
     riscv_cpu_add_user_properties(obj);
     /* Set latest version of privileged specification */
     env->priv_ver = PRIV_VERSION_LATEST;
@@ -410,11 +416,15 @@ static void rv64_base_cpu_init(Object *obj)
 #endif
 }
 
+static const RISCVCPUClassData rv64_sifive_u_cpu_class_data = {
+    .misa_mxl_max = MXL_RV64,
+    .misa_ext_mask = RVI | RVM | RVA | RVF | RVD | RVC | RVS | RVU
+};
+
 static void rv64_sifive_u_cpu_init(Object *obj)
 {
     RISCVCPU *cpu = RISCV_CPU(obj);
     CPURISCVState *env = &cpu->env;
-    set_misa(env, MXL_RV64, RVI | RVM | RVA | RVF | RVD | RVC | RVS | RVU);
     env->priv_ver = PRIV_VERSION_1_10_0;
 #ifndef CONFIG_USER_ONLY
     set_satp_mode_max_supported(RISCV_CPU(obj), VM_1_10_SV39);
@@ -427,12 +437,16 @@ static void rv64_sifive_u_cpu_init(Object *obj)
     cpu->cfg.pmp = true;
 }
 
+static const RISCVCPUClassData rv64_sifive_e_cpu_class_data = {
+    .misa_mxl_max = MXL_RV64,
+    .misa_ext_mask = RVI | RVM | RVA | RVC | RVU
+};
+
 static void rv64_sifive_e_cpu_init(Object *obj)
 {
     CPURISCVState *env = &RISCV_CPU(obj)->env;
     RISCVCPU *cpu = RISCV_CPU(obj);
 
-    set_misa(env, MXL_RV64, RVI | RVM | RVA | RVC | RVU);
     env->priv_ver = PRIV_VERSION_1_10_0;
 #ifndef CONFIG_USER_ONLY
     set_satp_mode_max_supported(cpu, VM_1_10_MBARE);
@@ -444,12 +458,16 @@ static void rv64_sifive_e_cpu_init(Object *obj)
     cpu->cfg.pmp = true;
 }
 
+static const RISCVCPUClassData rv64_thead_c906_cpu_class_data = {
+    .misa_mxl_max = MXL_RV64,
+    .misa_ext_mask = RVG | RVC | RVS | RVU
+};
+
 static void rv64_thead_c906_cpu_init(Object *obj)
 {
     CPURISCVState *env = &RISCV_CPU(obj)->env;
     RISCVCPU *cpu = RISCV_CPU(obj);
 
-    set_misa(env, MXL_RV64, RVG | RVC | RVS | RVU);
     env->priv_ver = PRIV_VERSION_1_11_0;
 
     cpu->cfg.ext_zfa = true;
@@ -475,12 +493,16 @@ static void rv64_thead_c906_cpu_init(Object *obj)
     cpu->cfg.pmp = true;
 }
 
+static const RISCVCPUClassData rv64_veyron_v1_cpu_class_data = {
+    .misa_mxl_max = MXL_RV64,
+    .misa_ext_mask = RVG | RVC | RVS | RVU | RVH
+};
+
 static void rv64_veyron_v1_cpu_init(Object *obj)
 {
     CPURISCVState *env = &RISCV_CPU(obj)->env;
     RISCVCPU *cpu = RISCV_CPU(obj);
 
-    set_misa(env, MXL_RV64, RVG | RVC | RVS | RVU | RVH);
     env->priv_ver = PRIV_VERSION_1_12_0;
 
     /* Enable ISA extensions */
@@ -515,6 +537,10 @@ static void rv64_veyron_v1_cpu_init(Object *obj)
 #endif
 }
 
+static const RISCVCPUClassData rv128_base_cpu_class_data = {
+    .misa_mxl_max = MXL_RV128
+};
+
 static void rv128_base_cpu_init(Object *obj)
 {
     if (qemu_tcg_mttcg_enabled()) {
@@ -524,8 +550,6 @@ static void rv128_base_cpu_init(Object *obj)
         exit(EXIT_FAILURE);
     }
     CPURISCVState *env = &RISCV_CPU(obj)->env;
-    /* We set this in the realise function */
-    set_misa(env, MXL_RV128, 0);
     riscv_cpu_add_user_properties(obj);
     /* Set latest version of privileged specification */
     env->priv_ver = PRIV_VERSION_LATEST;
@@ -534,11 +558,13 @@ static void rv128_base_cpu_init(Object *obj)
 #endif
 }
 #else
+static const RISCVCPUClassData rv32_base_cpu_class_data = {
+    .misa_mxl_max = MXL_RV32
+};
+
 static void rv32_base_cpu_init(Object *obj)
 {
     CPURISCVState *env = &RISCV_CPU(obj)->env;
-    /* We set this in the realise function */
-    set_misa(env, MXL_RV32, 0);
     riscv_cpu_add_user_properties(obj);
     /* Set latest version of privileged specification */
     env->priv_ver = PRIV_VERSION_LATEST;
@@ -547,11 +573,15 @@ static void rv32_base_cpu_init(Object *obj)
 #endif
 }
 
+static const RISCVCPUClassData rv32_sifive_u_cpu_class_data = {
+    .misa_mxl_max = MXL_RV32,
+    .misa_ext_mask = RVI | RVM | RVA | RVF | RVD | RVC | RVS | RVU
+};
+
 static void rv32_sifive_u_cpu_init(Object *obj)
 {
     RISCVCPU *cpu = RISCV_CPU(obj);
     CPURISCVState *env = &cpu->env;
-    set_misa(env, MXL_RV32, RVI | RVM | RVA | RVF | RVD | RVC | RVS | RVU);
     env->priv_ver = PRIV_VERSION_1_10_0;
 #ifndef CONFIG_USER_ONLY
     set_satp_mode_max_supported(RISCV_CPU(obj), VM_1_10_SV32);
@@ -564,12 +594,16 @@ static void rv32_sifive_u_cpu_init(Object *obj)
     cpu->cfg.pmp = true;
 }
 
+static const RISCVCPUClassData rv32_sifive_e_cpu_class_data = {
+    .misa_mxl_max = MXL_RV32,
+    .misa_ext_mask = RVI | RVM | RVA | RVC | RVU
+};
+
 static void rv32_sifive_e_cpu_init(Object *obj)
 {
     CPURISCVState *env = &RISCV_CPU(obj)->env;
     RISCVCPU *cpu = RISCV_CPU(obj);
 
-    set_misa(env, MXL_RV32, RVI | RVM | RVA | RVC | RVU);
     env->priv_ver = PRIV_VERSION_1_10_0;
 #ifndef CONFIG_USER_ONLY
     set_satp_mode_max_supported(cpu, VM_1_10_MBARE);
@@ -581,12 +615,16 @@ static void rv32_sifive_e_cpu_init(Object *obj)
     cpu->cfg.pmp = true;
 }
 
+static const RISCVCPUClassData rv32_ibex_cpu_class_data = {
+    .misa_mxl_max = MXL_RV32,
+    .misa_ext_mask = RVI | RVM | RVC | RVU
+};
+
 static void rv32_ibex_cpu_init(Object *obj)
 {
     CPURISCVState *env = &RISCV_CPU(obj)->env;
     RISCVCPU *cpu = RISCV_CPU(obj);
 
-    set_misa(env, MXL_RV32, RVI | RVM | RVC | RVU);
     env->priv_ver = PRIV_VERSION_1_11_0;
 #ifndef CONFIG_USER_ONLY
     set_satp_mode_max_supported(cpu, VM_1_10_MBARE);
@@ -599,12 +637,16 @@ static void rv32_ibex_cpu_init(Object *obj)
     cpu->cfg.pmp = true;
 }
 
+static const RISCVCPUClassData rv32_imafcu_nommu_cpu_class_data = {
+    .misa_mxl_max = MXL_RV32,
+    .misa_ext_mask = RVI | RVM | RVA | RVF | RVC | RVU
+};
+
 static void rv32_imafcu_nommu_cpu_init(Object *obj)
 {
     CPURISCVState *env = &RISCV_CPU(obj)->env;
     RISCVCPU *cpu = RISCV_CPU(obj);
 
-    set_misa(env, MXL_RV32, RVI | RVM | RVA | RVF | RVC | RVU);
     env->priv_ver = PRIV_VERSION_1_10_0;
 #ifndef CONFIG_USER_ONLY
     set_satp_mode_max_supported(cpu, VM_1_10_MBARE);
@@ -618,14 +660,17 @@ static void rv32_imafcu_nommu_cpu_init(Object *obj)
 #endif
 
 #if defined(CONFIG_KVM)
+static const RISCVCPUClassData riscv_host_cpu_class_data = {
+#if defined(TARGET_RISCV32)
+    .misa_mxl_max = MXL_RV32
+#elif defined(TARGET_RISCV64)
+    .misa_mxl_max = MXL_RV64
+#endif
+};
+
 static void riscv_host_cpu_init(Object *obj)
 {
     CPURISCVState *env = &RISCV_CPU(obj)->env;
-#if defined(TARGET_RISCV32)
-    set_misa(env, MXL_RV32, 0);
-#elif defined(TARGET_RISCV64)
-    set_misa(env, MXL_RV64, 0);
-#endif
     riscv_cpu_add_user_properties(obj);
 }
 #endif /* CONFIG_KVM */
@@ -869,7 +914,7 @@ static void riscv_cpu_reset_hold(Object *obj)
         mcc->parent_phases.hold(obj);
     }
 #ifndef CONFIG_USER_ONLY
-    env->misa_mxl = env->misa_mxl_max;
+    env->misa_mxl = mcc->misa_mxl_max;
     env->priv = PRV_M;
     env->mstatus &= ~(MSTATUS_MIE | MSTATUS_MPRV);
     if (env->misa_mxl > MXL_RV32) {
@@ -1049,7 +1094,7 @@ static void riscv_cpu_validate_misa_mxl(RISCVCPU *cpu, Error **errp)
     CPURISCVState *env = &cpu->env;
 
     /* Validate that MISA_MXL is set properly. */
-    switch (env->misa_mxl_max) {
+    switch (mcc->misa_mxl_max) {
 #ifdef TARGET_RISCV64
     case MXL_RV64:
     case MXL_RV128:
@@ -1063,7 +1108,7 @@ static void riscv_cpu_validate_misa_mxl(RISCVCPU *cpu, Error **errp)
         g_assert_not_reached();
     }
 
-    if (env->misa_mxl_max != env->misa_mxl) {
+    if (mcc->misa_mxl_max != env->misa_mxl) {
         error_setg(errp, "misa_mxl_max must be equal to misa_mxl");
         return;
     }
@@ -1075,6 +1120,7 @@ static void riscv_cpu_validate_misa_mxl(RISCVCPU *cpu, Error **errp)
  */
 void riscv_cpu_validate_set_extensions(RISCVCPU *cpu, Error **errp)
 {
+    RISCVCPUClass *mcc = RISCV_CPU_GET_CLASS(cpu);
     CPURISCVState *env = &cpu->env;
     Error *local_err = NULL;
 
@@ -1089,7 +1135,7 @@ void riscv_cpu_validate_set_extensions(RISCVCPU *cpu, Error **errp)
         cpu->cfg.ext_ifencei = true;
 
         env->misa_ext |= RVI | RVM | RVA | RVF | RVD;
-        env->misa_ext_mask |= RVI | RVM | RVA | RVF | RVD;
+        mcc->misa_ext_mask |= RVI | RVM | RVA | RVF | RVD;
     }
 
     if (riscv_has_ext(env, RVI) && riscv_has_ext(env, RVE)) {
@@ -1242,7 +1288,7 @@ void riscv_cpu_validate_set_extensions(RISCVCPU *cpu, Error **errp)
         cpu->cfg.ext_zcb = true;
         cpu->cfg.ext_zcmp = true;
         cpu->cfg.ext_zcmt = true;
-        if (riscv_has_ext(env, RVF) && env->misa_mxl_max == MXL_RV32) {
+        if (riscv_has_ext(env, RVF) && mcc->misa_mxl_max == MXL_RV32) {
             cpu->cfg.ext_zcf = true;
         }
     }
@@ -1250,7 +1296,7 @@ void riscv_cpu_validate_set_extensions(RISCVCPU *cpu, Error **errp)
     /* zca, zcd and zcf has a PRIV 1.12.0 restriction */
     if (riscv_has_ext(env, RVC) && env->priv_ver >= PRIV_VERSION_1_12_0) {
         cpu->cfg.ext_zca = true;
-        if (riscv_has_ext(env, RVF) && env->misa_mxl_max == MXL_RV32) {
+        if (riscv_has_ext(env, RVF) && mcc->misa_mxl_max == MXL_RV32) {
             cpu->cfg.ext_zcf = true;
         }
         if (riscv_has_ext(env, RVD)) {
@@ -1258,7 +1304,7 @@ void riscv_cpu_validate_set_extensions(RISCVCPU *cpu, Error **errp)
         }
     }
 
-    if (env->misa_mxl_max != MXL_RV32 && cpu->cfg.ext_zcf) {
+    if (mcc->misa_mxl_max != MXL_RV32 && cpu->cfg.ext_zcf) {
         error_setg(errp, "Zcf extension is only relevant to RV32");
         return;
     }
@@ -1649,10 +1695,17 @@ static void riscv_cpu_set_irq(void *opaque, int irq, int level)
 
 static void riscv_cpu_init(Object *obj)
 {
+    RISCVCPUClass *mcc = RISCV_CPU_GET_CLASS(obj);
+    RISCVCPU *cpu = RISCV_CPU(obj);
+    CPURISCVState *env = &cpu->env;
+
 #ifndef CONFIG_USER_ONLY
     qdev_init_gpio_in(DEVICE(obj), riscv_cpu_set_irq,
                       IRQ_LOCAL_MAX + IRQ_LOCAL_GUEST_MAX);
 #endif /* CONFIG_USER_ONLY */
+
+    env->misa_mxl = mcc->misa_mxl_max;
+    env->misa_ext = mcc->misa_ext_mask;
 }
 
 typedef struct RISCVCPUMisaExtConfig {
@@ -1667,6 +1720,7 @@ static void cpu_set_misa_ext_cfg(Object *obj, Visitor *v, const char *name,
 {
     const RISCVCPUMisaExtConfig *misa_ext_cfg = opaque;
     target_ulong misa_bit = misa_ext_cfg->misa_bit;
+    RISCVCPUClass *mcc = RISCV_CPU_GET_CLASS(obj);
     RISCVCPU *cpu = RISCV_CPU(obj);
     CPURISCVState *env = &cpu->env;
     bool value;
@@ -1677,10 +1731,10 @@ static void cpu_set_misa_ext_cfg(Object *obj, Visitor *v, const char *name,
 
     if (value) {
         env->misa_ext |= misa_bit;
-        env->misa_ext_mask |= misa_bit;
+        mcc->misa_ext_mask |= misa_bit;
     } else {
         env->misa_ext &= ~misa_bit;
-        env->misa_ext_mask &= ~misa_bit;
+        mcc->misa_ext_mask &= ~misa_bit;
     }
 }
 
@@ -2183,7 +2237,7 @@ static void cpu_get_marchid(Object *obj, Visitor *v, const char *name,
     visit_type_bool(v, name, &value, errp);
 }
 
-static void riscv_cpu_class_init(ObjectClass *c, void *data)
+static void riscv_cpu_common_class_init(ObjectClass *c, void *data)
 {
     RISCVCPUClass *mcc = RISCV_CPU_CLASS(c);
     CPUClass *cc = CPU_CLASS(c);
@@ -2224,6 +2278,15 @@ static void riscv_cpu_class_init(ObjectClass *c, void *data)
                               cpu_set_marchid, NULL, NULL);
 
     device_class_set_props(dc, riscv_cpu_properties);
+}
+
+static void riscv_cpu_class_init(ObjectClass *c, void *opaque)
+{
+    RISCVCPUClass *mcc = RISCV_CPU_CLASS(c);
+    const RISCVCPUClassData *data = opaque;
+
+    mcc->misa_mxl_max = data->misa_mxl_max;
+    mcc->misa_ext_mask = data->misa_ext_mask;
 }
 
 static void riscv_isa_string_ext(RISCVCPU *cpu, char **isa_str,
@@ -2291,18 +2354,22 @@ void riscv_cpu_list(void)
     g_slist_free(list);
 }
 
-#define DEFINE_CPU(type_name, initfn)      \
-    {                                      \
-        .name = type_name,                 \
-        .parent = TYPE_RISCV_CPU,          \
-        .instance_init = initfn            \
+#define DEFINE_CPU(type_name, class_data_value, initfn)         \
+    {                                                           \
+        .name = (type_name),                                    \
+        .parent = TYPE_RISCV_CPU,                               \
+        .instance_init = (initfn),                              \
+        .class_init = riscv_cpu_class_init,                     \
+        .class_data = (void *)&(class_data_value)               \
     }
 
-#define DEFINE_DYNAMIC_CPU(type_name, initfn) \
-    {                                         \
-        .name = type_name,                    \
-        .parent = TYPE_RISCV_DYNAMIC_CPU,     \
-        .instance_init = initfn               \
+#define DEFINE_DYNAMIC_CPU(type_name, class_data_value, initfn) \
+    {                                                           \
+        .name = (type_name),                                    \
+        .parent = TYPE_RISCV_DYNAMIC_CPU,                       \
+        .instance_init = (initfn),                              \
+        .class_init = riscv_cpu_class_init,                     \
+        .class_data = (void *)&(class_data_value)               \
     }
 
 static const TypeInfo riscv_cpu_type_infos[] = {
@@ -2314,31 +2381,46 @@ static const TypeInfo riscv_cpu_type_infos[] = {
         .instance_init = riscv_cpu_init,
         .abstract = true,
         .class_size = sizeof(RISCVCPUClass),
-        .class_init = riscv_cpu_class_init,
+        .class_init = riscv_cpu_common_class_init,
     },
     {
         .name = TYPE_RISCV_DYNAMIC_CPU,
         .parent = TYPE_RISCV_CPU,
         .abstract = true,
     },
-    DEFINE_DYNAMIC_CPU(TYPE_RISCV_CPU_ANY,      riscv_any_cpu_init),
+    DEFINE_DYNAMIC_CPU(TYPE_RISCV_CPU_ANY,
+                       riscv_any_cpu_class_data, riscv_any_cpu_init),
 #if defined(CONFIG_KVM)
-    DEFINE_CPU(TYPE_RISCV_CPU_HOST,             riscv_host_cpu_init),
+    DEFINE_CPU(TYPE_RISCV_CPU_HOST,
+               &riscv_host_cpu_class_data, riscv_host_cpu_init),
 #endif
 #if defined(TARGET_RISCV32)
-    DEFINE_DYNAMIC_CPU(TYPE_RISCV_CPU_BASE32,   rv32_base_cpu_init),
-    DEFINE_CPU(TYPE_RISCV_CPU_IBEX,             rv32_ibex_cpu_init),
-    DEFINE_CPU(TYPE_RISCV_CPU_SIFIVE_E31,       rv32_sifive_e_cpu_init),
-    DEFINE_CPU(TYPE_RISCV_CPU_SIFIVE_E34,       rv32_imafcu_nommu_cpu_init),
-    DEFINE_CPU(TYPE_RISCV_CPU_SIFIVE_U34,       rv32_sifive_u_cpu_init),
+    DEFINE_DYNAMIC_CPU(TYPE_RISCV_CPU_BASE32,
+                       rv32_base_cpu_class_data,
+                       rv32_base_cpu_init),
+    DEFINE_CPU(TYPE_RISCV_CPU_IBEX,
+               rv32_ibex_cpu_class_data, rv32_ibex_cpu_init),
+    DEFINE_CPU(TYPE_RISCV_CPU_SIFIVE_E31,
+               rv32_sifive_e_cpu_class_data, rv32_sifive_e_cpu_init),
+    DEFINE_CPU(TYPE_RISCV_CPU_SIFIVE_E34,
+               rv32_imafcu_nommu_cpu_class_data, rv32_imafcu_nommu_cpu_init),
+    DEFINE_CPU(TYPE_RISCV_CPU_SIFIVE_U34,
+               rv32_sifive_u_cpu_class_data, rv32_sifive_u_cpu_init),
 #elif defined(TARGET_RISCV64)
-    DEFINE_DYNAMIC_CPU(TYPE_RISCV_CPU_BASE64,   rv64_base_cpu_init),
-    DEFINE_CPU(TYPE_RISCV_CPU_SIFIVE_E51,       rv64_sifive_e_cpu_init),
-    DEFINE_CPU(TYPE_RISCV_CPU_SIFIVE_U54,       rv64_sifive_u_cpu_init),
-    DEFINE_CPU(TYPE_RISCV_CPU_SHAKTI_C,         rv64_sifive_u_cpu_init),
-    DEFINE_CPU(TYPE_RISCV_CPU_THEAD_C906,       rv64_thead_c906_cpu_init),
-    DEFINE_CPU(TYPE_RISCV_CPU_VEYRON_V1,        rv64_veyron_v1_cpu_init),
-    DEFINE_DYNAMIC_CPU(TYPE_RISCV_CPU_BASE128,  rv128_base_cpu_init),
+    DEFINE_DYNAMIC_CPU(TYPE_RISCV_CPU_BASE64,
+                       rv64_base_cpu_class_data, rv64_base_cpu_init),
+    DEFINE_CPU(TYPE_RISCV_CPU_SIFIVE_E51,
+               rv64_sifive_e_cpu_class_data, rv64_sifive_e_cpu_init),
+    DEFINE_CPU(TYPE_RISCV_CPU_SIFIVE_U54,
+               rv64_sifive_u_cpu_class_data, rv64_sifive_u_cpu_init),
+    DEFINE_CPU(TYPE_RISCV_CPU_SHAKTI_C,
+               rv64_sifive_u_cpu_class_data, rv64_sifive_u_cpu_init),
+    DEFINE_CPU(TYPE_RISCV_CPU_THEAD_C906,
+               rv64_thead_c906_cpu_class_data, rv64_thead_c906_cpu_init),
+    DEFINE_CPU(TYPE_RISCV_CPU_VEYRON_V1,
+               rv64_veyron_v1_cpu_class_data, rv64_veyron_v1_cpu_init),
+    DEFINE_DYNAMIC_CPU(TYPE_RISCV_CPU_BASE128,
+                       rv128_base_cpu_class_data, rv128_base_cpu_init),
 #endif
 };
 

@@ -155,9 +155,7 @@ struct CPUArchState {
 
     /* RISCVMXL, but uint32_t for vmstate migration */
     uint32_t misa_mxl;      /* current mxl */
-    uint32_t misa_mxl_max;  /* max mxl for this cpu */
     uint32_t misa_ext;      /* current extensions */
-    uint32_t misa_ext_mask; /* max ext for this cpu */
     uint32_t xl;            /* current xlen */
 
     /* 128-bit helpers upper part return value */
