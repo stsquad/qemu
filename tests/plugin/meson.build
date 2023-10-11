@@ -5,6 +5,11 @@ if get_option('plugins')
                        include_directories: '../../include/qemu',
                        dependencies: glib)
   endforeach
+  if 'cpp' in all_languages
+    t += shared_module('cc', files('cc.cc'),
+                       include_directories: '../../include/qemu',
+                       dependencies: glib)
+  endif
 endif
 if t.length() > 0
   alias_target('test-plugins', t)

@@ -283,6 +283,10 @@ run::
   160          1      0
   135          1      0
 
+- contrib/plugins/cc.cc
+
+A pure test plugin to ensure that the plugin API is compatible with C++.
+
 - contrib/plugins/hotblocks.c
 
 The hotblocks plugin allows you to examine the where hot paths of
