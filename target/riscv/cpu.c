@@ -1087,9 +1087,8 @@ static void riscv_cpu_disable_priv_spec_isa_exts(RISCVCPU *cpu)
     }
 }
 
-static void riscv_cpu_validate_misa_mxl(RISCVCPU *cpu)
+static void riscv_cpu_validate_misa_mxl(RISCVCPUClass *mcc)
 {
-    RISCVCPUClass *mcc = RISCV_CPU_GET_CLASS(cpu);
     CPUClass *cc = CPU_CLASS(mcc);
 
     /* Validate that MISA_MXL is set properly. */
@@ -1486,8 +1485,6 @@ static void riscv_cpu_realize_tcg(DeviceState *dev, Error **errp)
         error_setg(errp, "'host' CPU is not compatible with TCG acceleration");
         return;
     }
-
-    riscv_cpu_validate_misa_mxl(cpu);
 
     riscv_cpu_validate_priv_spec(cpu, &local_err);
     if (local_err != NULL) {
@@ -2277,6 +2274,8 @@ static void riscv_cpu_class_init(ObjectClass *c, void *opaque)
 
     mcc->misa_mxl_max = data->misa_mxl_max;
     mcc->misa_ext_mask = data->misa_ext_mask;
+
+    riscv_cpu_validate_misa_mxl(mcc);
 }
 
 static void riscv_isa_string_ext(RISCVCPU *cpu, char **isa_str,
