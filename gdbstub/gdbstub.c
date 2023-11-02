@@ -519,6 +519,29 @@ int gdb_find_feature_register(CPUState *cpu, int feature, const char *name)
     return -1;
 }
 
+GArray *gdb_find_registers(CPUState *cpu, const char *reg_pattern)
+{
+    g_autoptr(GPatternSpec) pat = g_pattern_spec_new(reg_pattern);
+    GArray *results = g_array_new(true, true, sizeof(GDBRegDesc));
+
+    for (int f = 0; f < cpu->gdb_regs->len; f++) {
+        GDBRegisterState *r = &g_array_index(cpu->gdb_regs, GDBRegisterState, f);
+        for (int i = 0; i < r->feature->num_regs; i++) {
+            const char *name = r->feature->regs[i];
+            if (name && g_pattern_match_string(pat, name)) {
+                GDBRegDesc desc = {
+                    r->base_reg + i,
+                    name,
+                    r->feature->name
+                };
+                g_array_append_val(results, desc);
+            }
+        }
+    }
+
+    return results;
+}
+
 int gdb_read_register(CPUState *cpu, GByteArray *buf, int reg)
 {
     CPUClass *cc = CPU_GET_CLASS(cpu);

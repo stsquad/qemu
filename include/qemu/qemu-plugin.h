@@ -710,4 +710,29 @@ int qemu_plugin_find_register(unsigned int vcpu_index, int file,
  */
 int qemu_plugin_read_register(GByteArray *buf, int reg);
 
+/* opaque handle for reading regsiters */
+typedef uint64_t qemu_plugin_reg_handle;
+
+/**
+ * typedef qemu_plugin_reg_descriptor - register descriptions
+ *
+ * @name: register name
+ * @handle: opaque handle for retrieving value with qemu_plugin_read_register
+ * @feature: optional feature descriptor, can be NULL
+ */
+typedef struct {
+    char name[32];
+    qemu_plugin_reg_handle handle;
+    const char *feature;
+} qemu_plugin_reg_descriptor;
+
+/**
+ * qemu_plugin_find_registers() - return register list
+ * @vcpu_index: vcpu to query
+ * @reg_pattern: register name pattern
+ *
+ * Returns a GArray of qemu_plugin_reg_descriptor or NULL. Caller frees.
+ */
+GArray * qemu_plugin_find_registers(unsigned int vcpu_index, const char *reg_pattern);
+
 #endif /* QEMU_QEMU_PLUGIN_H */

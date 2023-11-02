@@ -15,6 +15,10 @@
 
 #include <qemu-plugin.h>
 
+typedef struct {
+    GByteArray *last_value;
+} Register;
+
 typedef struct CPU {
     /* Store last executed instruction on each vCPU as a GString */
     GString *last_exec;

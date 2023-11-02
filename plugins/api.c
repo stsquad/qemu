@@ -455,3 +455,91 @@ int qemu_plugin_read_register(GByteArray *buf, int reg)
 {
     return gdb_read_register(current_cpu, buf, reg);
 }
+
+/*
+ * Register handles
+ *
+ * The plugin infrastructure keeps hold of these internal data
+ * structures which are presented to plugins as opaque handles. They
+ * are global to the system and therefor additions to the hash table
+ * must be protected by the @reg_handle_lock.
+ *
+ * In order to future proof for up-coming heterogeneous work we want
+ * different entries for each CPU type while sharing them in the
+ * common case of multiple cores of the same type.
+ */
+
+static QemuMutex reg_handle_lock;
+
+typedef struct {
+    const char *name;
+    int gdb_reg_num;
+} PluginReg;
+
+static GHashTable *reg_handles; /* hash table of PluginReg */
+
+/* Generate a stable key - would xxhash be overkill? */
+static gpointer cpu_plus_reg_to_key(CPUState *cs, int gdb_regnum)
+{
+    uintptr_t key = (uintptr_t) cs->cc;
+    key ^= gdb_regnum;
+    return GUINT_TO_POINTER(key);
+}
+
+/*
+ * Create register handles.
+ *
+ * We need to create a handle for each register so the plugin
+ * infrastructure can call gdbstub to read a register. We also
+ * construct a result array with those handles and some ancillary data
+ * the plugin might find useful.
+ */
+
+ static GArray * create_register_handles(CPUState *cs, GArray *gdbstub_regs) {
+    GArray *find_data = g_array_new(true, true, sizeof(qemu_plugin_reg_descriptor));
+
+    WITH_QEMU_LOCK_GUARD(&reg_handle_lock) {
+
+        if (!reg_handles) {
+            reg_handles = g_hash_table_new(g_direct_hash, g_direct_equal);
+        }
+
+        for (int i=0; i < gdbstub_regs->len; i++) {
+            GDBRegDesc *grd = &g_array_index(gdbstub_regs, GDBRegDesc, i);
+            gpointer key = cpu_plus_reg_to_key(cs, grd->gdb_reg);
+            PluginReg *val = g_hash_table_lookup(reg_handles, key);
+
+            /* Doesn't exist, create one */
+            if (!val) {
+                val = g_new0(PluginReg, 1);
+                val->gdb_reg_num = grd->gdb_reg;
+                val->name = grd->name;
+
+                g_hash_table_insert(reg_handles, key, val);
+            }
+
+            /* Create a record for the plugin */
+            qemu_plugin_reg_descriptor desc = {
+                .handle = GPOINTER_TO_UINT(val),
+                .feature = g_intern_string(grd->feature_name)
+            };
+            g_strlcpy(desc.name, val->name, sizeof(desc.name));
+            g_array_append_val(find_data, desc);
+        }
+    }
+
+    return find_data;
+}
+
+GArray * qemu_plugin_find_registers(unsigned int vcpu, const char *reg_pattern)
+{
+    CPUState *cs = qemu_get_cpu(vcpu);
+    g_autoptr(GArray) regs = gdb_find_registers(cs, reg_pattern);
+    return regs->len ? create_register_handles(cs, regs) : NULL;
+}
+
+static void __attribute__((__constructor__)) qemu_api_init(void)
+{
+    qemu_mutex_init(&reg_handle_lock);
+
+}
