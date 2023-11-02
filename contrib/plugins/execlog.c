@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2021, Alexandre Iooss <erdnaxe@crans.org>
  *
- * Log instruction execution with memory access.
+ * Log instruction execution with memory access and register changes
  *
  * License: GNU GPL, version 2 or later.
  *   See the COPYING file in the top-level directory.
@@ -16,15 +16,17 @@
 #include <qemu-plugin.h>
 
 typedef struct {
-    GByteArray *last_value;
+    qemu_plugin_reg_handle handle;
+    GByteArray *last;
+    GByteArray *new;
+    const char *name;
 } Register;
 
 typedef struct CPU {
     /* Store last executed instruction on each vCPU as a GString */
     GString *last_exec;
-    GByteArray *reg_history[2];
-
-    int reg;
+    /* Ptr array of Register */
+    GPtrArray *registers;
 } CPU;
 
 QEMU_PLUGIN_EXPORT int qemu_plugin_version = QEMU_PLUGIN_VERSION;
@@ -35,30 +37,7 @@ static GRWLock expand_array_lock;
 
 static GPtrArray *imatches;
 static GArray *amatches;
-
-static char *rfile_name;
-static char *reg_name;
-
-/*
- * Expand cpu array.
- *
- * As we could have multiple threads trying to do this we need to
- * serialise the expansion under a lock.
- */
-static void expand_cpu(int cpu_index)
-{
-    g_rw_lock_writer_lock(&expand_array_lock);
-    if (cpu_index >= num_cpus) {
-        cpus = g_realloc_n(cpus, cpu_index + 1, sizeof(*cpus));
-        while (cpu_index >= num_cpus) {
-            cpus[num_cpus].last_exec = g_string_new(NULL);
-            cpus[num_cpus].reg_history[0] = g_byte_array_new();
-            cpus[num_cpus].reg_history[1] = g_byte_array_new();
-            num_cpus++;
-        }
-    }
-    g_rw_lock_writer_unlock(&expand_array_lock);
-}
+static GArray *rmatches;
 
 /**
  * Add memory read or write information to current instruction log
@@ -97,30 +76,35 @@ static void vcpu_mem(unsigned int cpu_index, qemu_plugin_meminfo_t info,
  */
 static void vcpu_insn_exec(unsigned int cpu_index, void *udata)
 {
-    int n;
-    int i;
+    CPU *cpu;
 
     g_rw_lock_reader_lock(&expand_array_lock);
+    g_assert(cpu_index < num_cpus);
+    cpu = &cpus[cpu_index];
+    g_rw_lock_reader_unlock(&expand_array_lock);
 
     /* Print previous instruction in cache */
-    if (cpus[cpu_index].last_exec->len) {
-        if (cpus[cpu_index].reg >= 0) {
-            GByteArray *current = cpus[cpu_index].reg_history[0];
-            GByteArray *last = cpus[cpu_index].reg_history[1];
+    if (cpus->last_exec->len) {
+        if (cpus->registers) {
+            for (int n = 0; n < cpu->registers->len; n++) {
+                Register *reg = cpu->registers->pdata[n];
+                int sz;
 
-            g_byte_array_set_size(current, 0);
-            n = qemu_plugin_read_register(current, cpus[cpu_index].reg);
+                g_byte_array_set_size(reg->new, 0);
+                sz = qemu_plugin_read_register(cpu_index, reg->handle, reg->new);
+                g_assert(sz == reg->last->len);
 
-            if (n != last->len || memcmp(current->data, last->data, n)) {
-                g_string_append(cpus[cpu_index].last_exec, ", reg,");
-                for (i = 0; i < n; i++) {
-                    g_string_append_printf(cpus[cpu_index].last_exec, " %02x",
-                                           current->data[i]);
+                if (memcmp(reg->last->data, reg->new->data, sz)) {
+                    GByteArray *temp = reg->last;
+                    g_string_append_printf(cpu->last_exec, ", %s -> ", reg->name);
+                    for (int i = 0; i < n; i++) {
+                        g_string_append_printf(cpu->last_exec, "%02x",
+                                               reg->new->data[i]);
+                    }
+                    reg->last = reg->new;
+                    reg->new = temp;
                 }
             }
-
-            cpus[cpu_index].reg_history[0] = last;
-            cpus[cpu_index].reg_history[1] = current;
         }
 
         qemu_plugin_outs(cpus[cpu_index].last_exec->str);
@@ -131,8 +115,6 @@ static void vcpu_insn_exec(unsigned int cpu_index, void *udata)
     /* vcpu_mem will add memory access information to last_exec */
     g_string_printf(cpus[cpu_index].last_exec, "%u, ", cpu_index);
     g_string_append(cpus[cpu_index].last_exec, (char *)udata);
-
-    g_rw_lock_reader_unlock(&expand_array_lock);
 }
 
 /**
@@ -203,7 +185,7 @@ static void vcpu_tb_trans(qemu_plugin_id_t id, struct qemu_plugin_tb *tb)
             /* Register callback on instruction */
             qemu_plugin_register_vcpu_insn_exec_cb(
                 insn, vcpu_insn_exec,
-                rfile_name ? QEMU_PLUGIN_CB_R_REGS : QEMU_PLUGIN_CB_NO_REGS,
+                rmatches ? QEMU_PLUGIN_CB_R_REGS : QEMU_PLUGIN_CB_NO_REGS,
                 output);
 
             /* reset skip */
@@ -213,21 +195,56 @@ static void vcpu_tb_trans(qemu_plugin_id_t id, struct qemu_plugin_tb *tb)
     }
 }
 
+static Register *init_vcpu_register(int vcpu_index, int reg_index)
+{
+    qemu_plugin_reg_descriptor *desc = &g_array_index(rmatches,
+                                                      qemu_plugin_reg_descriptor,
+                                                      reg_index);
+    Register *reg = g_new0(Register, 1);
+    int r;
+
+    reg->handle = desc->handle;
+    reg->name = g_strdup(desc->name);
+    reg->last = g_byte_array_new();
+    reg->new = g_byte_array_new();
+
+    /* read the initial value */
+    r = qemu_plugin_read_register(vcpu_index, reg->handle, reg->last);
+    g_assert(r > 0);
+    return reg;
+}
+
+/*
+ * Initialise a new vcpu/thread with:
+ *   - last_exec tracking data
+ *   - list of tracked registers
+ *   - initial value of registers
+ *
+ * As we could have multiple threads trying to do this we need to
+ * serialise the expansion under a lock.
+ */
 static void vcpu_init(qemu_plugin_id_t id, unsigned int vcpu_index)
 {
-    int reg = -1;
+    g_rw_lock_writer_lock(&expand_array_lock);
 
-    expand_cpu(vcpu_index);
+    if (vcpu_index >= num_cpus) {
+        cpus = g_realloc_n(cpus, vcpu_index + 1, sizeof(*cpus));
+        while (vcpu_index >= num_cpus) {
+            cpus[num_cpus].last_exec = g_string_new(NULL);
 
-    if (rfile_name) {
-        int rfile = qemu_plugin_find_register_file(vcpu_index, rfile_name);
-        if (rfile >= 0) {
-            reg = qemu_plugin_find_register(vcpu_index, rfile, reg_name);
+            /* Any registers to track? */
+            if (rmatches->len) {
+                GPtrArray *registers = g_ptr_array_new();
+                for (int r = 0; r < rmatches->len; r++) {
+                    Register *reg = init_vcpu_register(vcpu_index, r);
+                    g_ptr_array_add(registers, reg);
+                }
+                cpus[num_cpus].registers = registers;
+            }
+            num_cpus++;
         }
     }
 
-    g_rw_lock_writer_lock(&expand_array_lock);
-    cpus[vcpu_index].reg = reg;
     g_rw_lock_writer_unlock(&expand_array_lock);
 }
 
@@ -264,6 +281,24 @@ static void parse_vaddr_match(char *match)
     g_array_append_val(amatches, v);
 }
 
+static bool parse_register(char *regpat)
+{
+    /* currently assumes vcpu0 has everything */
+    GArray *reg_list = qemu_plugin_find_registers(0, regpat);
+
+    if (!!reg_list) {
+        return false;
+    }
+
+    if (!rmatches) {
+        rmatches = g_array_new(false, true, sizeof(qemu_plugin_reg_descriptor));
+    }
+
+    g_array_append_vals(rmatches, reg_list->data, reg_list->len);
+
+    return true;
+}
+
 /**
  * Install the plugin
  */
@@ -286,22 +321,18 @@ QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id,
             parse_insn_match(tokens[1]);
         } else if (g_strcmp0(tokens[0], "afilter") == 0) {
             parse_vaddr_match(tokens[1]);
-        } else if (g_strcmp0(tokens[0], "rfile") == 0) {
-            rfile_name = g_strdup(tokens[1]);
         } else if (g_strcmp0(tokens[0], "reg") == 0) {
-            reg_name = g_strdup(tokens[1]);
+            if (!parse_register(tokens[1])) {
+                fprintf(stderr, "failed to parse: %s\n", tokens[1]);
+                return -1;
+            }
         } else {
             fprintf(stderr, "option parsing failed: %s\n", opt);
             return -1;
         }
     }
 
-    if ((!rfile_name) != (!reg_name)) {
-        fputs("file and reg need to be set at the same time\n", stderr);
-        return -1;
-    }
-
-    /* Register translation block and exit callbacks */
+    /* Register init, translation block and exit callbacks */
     qemu_plugin_register_vcpu_init_cb(id, vcpu_init);
     qemu_plugin_register_vcpu_tb_trans_cb(id, vcpu_tb_trans);
     qemu_plugin_register_atexit_cb(id, plugin_exit, NULL);
