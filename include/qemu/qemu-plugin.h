@@ -665,51 +665,6 @@ uint64_t qemu_plugin_end_code(void);
  */
 uint64_t qemu_plugin_entry_code(void);
 
-/**
- * qemu_plugin_find_register_file() - find register file
- *
- * @vcpu_index: the index of the vcpu context
- * @name: the name of the register file.
- *
- * Returns the identifier of the register file if it was found, and a negative
- * value otherwise.
- *
- * The names of register files are identical with names of GDB's standard
- * target features with some extensions. For details, see:
- * https://sourceware.org/gdb/onlinedocs/gdb/Standard-Target-Features.html
- */
-int qemu_plugin_find_register_file(unsigned int vcpu_index, const char *name);
-
-/**
- * qemu_plugin_find_register() - find register
- *
- * @vcpu_index: the index of the vcpu context
- * @file: the register file identifier determined with
- *        qemu_plugin_find_register_file().
- * @name: the name of the register.
- *
- * The names of register are identical with names used in GDB's standard
- * target features with some extensions. For details, see:
- * https://sourceware.org/gdb/onlinedocs/gdb/Standard-Target-Features.html
- */
-int qemu_plugin_find_register(unsigned int vcpu_index, int file,
-                              const char *name);
-
-/**
- * qemu_plugin_read_register() - read register
- *
- * @buf: the byte array to append the read register content to.
- * @reg: the register identifier determined with
- *       qemu_plugin_find_register().
- *
- * This function is only available in a context that register read access is
- * explicitly requested.
- *
- * Returns the size of the read register. The content of @buf is in target byte
- * order.
- */
-int qemu_plugin_read_register(GByteArray *buf, int reg);
-
 /* opaque handle for reading regsiters */
 typedef uint64_t qemu_plugin_reg_handle;
 
@@ -734,5 +689,21 @@ typedef struct {
  * Returns a GArray of qemu_plugin_reg_descriptor or NULL. Caller frees.
  */
 GArray * qemu_plugin_find_registers(unsigned int vcpu_index, const char *reg_pattern);
+
+/**
+ * qemu_plugin_read_register() - read register
+ *
+ * @vcpu: vcpu index
+ * @handle: a @qemu_plugin_reg_handle handle
+ * @buf: A GByteArray for the data owned by the plugin
+ *
+ * This function is only available in a context that register read access is
+ * explicitly requested.
+ *
+ * Returns the size of the read register. The content of @buf is in target byte
+ * order. On failure returns -1
+ */
+int qemu_plugin_read_register(unsigned int vcpu, qemu_plugin_reg_handle handle, GByteArray *buf);
+
 
 #endif /* QEMU_QEMU_PLUGIN_H */

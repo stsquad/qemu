@@ -438,24 +438,6 @@ uint64_t qemu_plugin_entry_code(void)
     return entry;
 }
 
-int qemu_plugin_find_register_file(unsigned int vcpu_index, const char *name)
-{
-    QEMU_IOTHREAD_LOCK_GUARD();
-    return gdb_find_feature(qemu_get_cpu(vcpu_index), name);
-}
-
-int qemu_plugin_find_register(unsigned int vcpu_index, int file,
-                              const char *name)
-{
-    QEMU_IOTHREAD_LOCK_GUARD();
-    return gdb_find_feature_register(qemu_get_cpu(vcpu_index), file, name);
-}
-
-int qemu_plugin_read_register(GByteArray *buf, int reg)
-{
-    return gdb_read_register(current_cpu, buf, reg);
-}
-
 /*
  * Register handles
  *
@@ -536,6 +518,14 @@ GArray * qemu_plugin_find_registers(unsigned int vcpu, const char *reg_pattern)
     CPUState *cs = qemu_get_cpu(vcpu);
     g_autoptr(GArray) regs = gdb_find_registers(cs, reg_pattern);
     return regs->len ? create_register_handles(cs, regs) : NULL;
+}
+
+int qemu_plugin_read_register(unsigned int vcpu, qemu_plugin_reg_handle handle, GByteArray *buf)
+{
+    PluginReg *reg = (PluginReg *)handle;
+    CPUState *cs = qemu_get_cpu(vcpu);
+    /* assert with debugging on? */
+    return gdb_read_register(cs, buf, reg->gdb_reg_num);
 }
 
 static void __attribute__((__constructor__)) qemu_api_init(void)
