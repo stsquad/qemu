@@ -665,8 +665,8 @@ uint64_t qemu_plugin_end_code(void);
  */
 uint64_t qemu_plugin_entry_code(void);
 
-/* opaque handle for reading regsiters */
-typedef uint64_t qemu_plugin_reg_handle;
+/** struct qemu_plugin_register - Opaque handle for a translated instruction */
+struct qemu_plugin_register;
 
 /**
  * typedef qemu_plugin_reg_descriptor - register descriptions
@@ -677,7 +677,7 @@ typedef uint64_t qemu_plugin_reg_handle;
  */
 typedef struct {
     char name[32];
-    qemu_plugin_reg_handle handle;
+    struct qemu_plugin_register *handle;
     const char *feature;
 } qemu_plugin_reg_descriptor;
 
@@ -686,7 +686,11 @@ typedef struct {
  * @vcpu_index: vcpu to query
  * @reg_pattern: register name pattern
  *
- * Returns a GArray of qemu_plugin_reg_descriptor or NULL. Caller frees.
+ * Returns a GArray of qemu_plugin_reg_descriptor or NULL. Caller
+ * frees. As the register set of a given vCPU is only available once
+ * the vCPU is initialised if you want to monitor registers from the
+ * start you should call this from a qemu_plugin_register_vcpu_init_cb()
+ * callback.
  */
 GArray * qemu_plugin_find_registers(unsigned int vcpu_index, const char *reg_pattern);
 
@@ -703,7 +707,9 @@ GArray * qemu_plugin_find_registers(unsigned int vcpu_index, const char *reg_pat
  * Returns the size of the read register. The content of @buf is in target byte
  * order. On failure returns -1
  */
-int qemu_plugin_read_register(unsigned int vcpu, qemu_plugin_reg_handle handle, GByteArray *buf);
+int qemu_plugin_read_register(unsigned int vcpu,
+                              struct qemu_plugin_register *handle,
+                              GByteArray *buf);
 
 
 #endif /* QEMU_QEMU_PLUGIN_H */

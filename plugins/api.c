@@ -8,6 +8,7 @@
  *
  *  qemu_plugin_tb
  *  qemu_plugin_insn
+ *  qemu_plugin_register
  *
  * Which can then be passed back into the API to do additional things.
  * As such all the public functions in here are exported in
@@ -453,10 +454,10 @@ uint64_t qemu_plugin_entry_code(void)
 
 static QemuMutex reg_handle_lock;
 
-typedef struct {
+struct qemu_plugin_register {
     const char *name;
     int gdb_reg_num;
-} PluginReg;
+};
 
 static GHashTable *reg_handles; /* hash table of PluginReg */
 
@@ -477,7 +478,7 @@ static gpointer cpu_plus_reg_to_key(CPUState *cs, int gdb_regnum)
  * the plugin might find useful.
  */
 
- static GArray * create_register_handles(CPUState *cs, GArray *gdbstub_regs) {
+static GArray * create_register_handles(CPUState *cs, GArray *gdbstub_regs) {
     GArray *find_data = g_array_new(true, true, sizeof(qemu_plugin_reg_descriptor));
 
     WITH_QEMU_LOCK_GUARD(&reg_handle_lock) {
@@ -489,11 +490,11 @@ static gpointer cpu_plus_reg_to_key(CPUState *cs, int gdb_regnum)
         for (int i=0; i < gdbstub_regs->len; i++) {
             GDBRegDesc *grd = &g_array_index(gdbstub_regs, GDBRegDesc, i);
             gpointer key = cpu_plus_reg_to_key(cs, grd->gdb_reg);
-            PluginReg *val = g_hash_table_lookup(reg_handles, key);
+            struct qemu_plugin_register *val = g_hash_table_lookup(reg_handles, key);
 
             /* Doesn't exist, create one */
             if (!val) {
-                val = g_new0(PluginReg, 1);
+                val = g_new0(struct qemu_plugin_register, 1);
                 val->gdb_reg_num = grd->gdb_reg;
                 val->name = grd->name;
 
@@ -502,7 +503,7 @@ static gpointer cpu_plus_reg_to_key(CPUState *cs, int gdb_regnum)
 
             /* Create a record for the plugin */
             qemu_plugin_reg_descriptor desc = {
-                .handle = GPOINTER_TO_UINT(val),
+                .handle = val,
                 .feature = g_intern_string(grd->feature_name)
             };
             g_strlcpy(desc.name, val->name, sizeof(desc.name));
@@ -516,13 +517,16 @@ static gpointer cpu_plus_reg_to_key(CPUState *cs, int gdb_regnum)
 GArray * qemu_plugin_find_registers(unsigned int vcpu, const char *reg_pattern)
 {
     CPUState *cs = qemu_get_cpu(vcpu);
-    g_autoptr(GArray) regs = gdb_find_registers(cs, reg_pattern);
-    return regs->len ? create_register_handles(cs, regs) : NULL;
+    if (cs) {
+        g_autoptr(GArray) regs = gdb_find_registers(cs, reg_pattern);
+        return regs->len ? create_register_handles(cs, regs) : NULL;
+    } else {
+        return NULL;
+    }
 }
 
-int qemu_plugin_read_register(unsigned int vcpu, qemu_plugin_reg_handle handle, GByteArray *buf)
+int qemu_plugin_read_register(unsigned int vcpu, struct qemu_plugin_register *reg, GByteArray *buf)
 {
-    PluginReg *reg = (PluginReg *)handle;
     CPUState *cs = qemu_get_cpu(vcpu);
     /* assert with debugging on? */
     return gdb_read_register(cs, buf, reg->gdb_reg_num);
