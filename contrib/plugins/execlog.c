@@ -16,7 +16,7 @@
 #include <qemu-plugin.h>
 
 typedef struct {
-    qemu_plugin_reg_handle handle;
+    struct qemu_plugin_register *handle;
     GByteArray *last;
     GByteArray *new;
     const char *name;
@@ -37,7 +37,7 @@ static GRWLock expand_array_lock;
 
 static GPtrArray *imatches;
 static GArray *amatches;
-static GArray *rmatches;
+static GPtrArray *rmatches;
 
 /**
  * Add memory read or write information to current instruction log
@@ -97,7 +97,8 @@ static void vcpu_insn_exec(unsigned int cpu_index, void *udata)
                 if (memcmp(reg->last->data, reg->new->data, sz)) {
                     GByteArray *temp = reg->last;
                     g_string_append_printf(cpu->last_exec, ", %s -> ", reg->name);
-                    for (int i = 0; i < n; i++) {
+                    /* TODO: handle BE properly */
+                    for (int i = sz; i >= 0; i--) {
                         g_string_append_printf(cpu->last_exec, "%02x",
                                                reg->new->data[i]);
                     }
@@ -195,11 +196,9 @@ static void vcpu_tb_trans(qemu_plugin_id_t id, struct qemu_plugin_tb *tb)
     }
 }
 
-static Register *init_vcpu_register(int vcpu_index, int reg_index)
+static Register *init_vcpu_register(int vcpu_index,
+                                    qemu_plugin_reg_descriptor *desc)
 {
-    qemu_plugin_reg_descriptor *desc = &g_array_index(rmatches,
-                                                      qemu_plugin_reg_descriptor,
-                                                      reg_index);
     Register *reg = g_new0(Register, 1);
     int r;
 
@@ -233,11 +232,22 @@ static void vcpu_init(qemu_plugin_id_t id, unsigned int vcpu_index)
             cpus[num_cpus].last_exec = g_string_new(NULL);
 
             /* Any registers to track? */
-            if (rmatches->len) {
+            if (rmatches && rmatches->len) {
                 GPtrArray *registers = g_ptr_array_new();
-                for (int r = 0; r < rmatches->len; r++) {
-                    Register *reg = init_vcpu_register(vcpu_index, r);
-                    g_ptr_array_add(registers, reg);
+
+                /* For each pattern add the register definitions */
+                for (int p = 0; p < rmatches->len; p++) {
+                    g_autoptr(GArray) reg_list =
+                        qemu_plugin_find_registers(vcpu_index, rmatches->pdata[p]);
+                    if (reg_list && reg_list->len) {
+                        for (int r = 0; r < reg_list->len; r++) {
+                            Register *reg =
+                                init_vcpu_register(vcpu_index,
+                                                   &g_array_index(reg_list,
+                                                                  qemu_plugin_reg_descriptor, r));
+                            g_ptr_array_add(registers, reg);
+                        }
+                    }
                 }
                 cpus[num_cpus].registers = registers;
             }
@@ -281,22 +291,16 @@ static void parse_vaddr_match(char *match)
     g_array_append_val(amatches, v);
 }
 
-static bool parse_register(char *regpat)
+/*
+ * We have to wait until vCPUs are started before we can check the
+ * patterns find anything.
+ */
+static void add_regpat(char *regpat)
 {
-    /* currently assumes vcpu0 has everything */
-    GArray *reg_list = qemu_plugin_find_registers(0, regpat);
-
-    if (!!reg_list) {
-        return false;
-    }
-
     if (!rmatches) {
-        rmatches = g_array_new(false, true, sizeof(qemu_plugin_reg_descriptor));
+        rmatches = g_ptr_array_new();
     }
-
-    g_array_append_vals(rmatches, reg_list->data, reg_list->len);
-
-    return true;
+    g_ptr_array_add(rmatches, g_strdup(regpat));
 }
 
 /**
@@ -322,10 +326,7 @@ QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id,
         } else if (g_strcmp0(tokens[0], "afilter") == 0) {
             parse_vaddr_match(tokens[1]);
         } else if (g_strcmp0(tokens[0], "reg") == 0) {
-            if (!parse_register(tokens[1])) {
-                fprintf(stderr, "failed to parse: %s\n", tokens[1]);
-                return -1;
-            }
+            add_regpat(tokens[1]);
         } else {
             fprintf(stderr, "option parsing failed: %s\n", opt);
             return -1;
