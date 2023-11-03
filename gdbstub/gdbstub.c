@@ -524,6 +524,11 @@ GArray *gdb_find_registers(CPUState *cpu, const char *reg_pattern)
     g_autoptr(GPatternSpec) pat = g_pattern_spec_new(reg_pattern);
     GArray *results = g_array_new(true, true, sizeof(GDBRegDesc));
 
+    /* registers are only available once the CPU is initialised */
+    if (!cpu->gdb_regs) {
+        return results;
+    }
+
     for (int f = 0; f < cpu->gdb_regs->len; f++) {
         GDBRegisterState *r = &g_array_index(cpu->gdb_regs, GDBRegisterState, f);
         for (int i = 0; i < r->feature->num_regs; i++) {
