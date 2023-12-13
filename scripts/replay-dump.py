@@ -127,33 +127,39 @@ def decode_plain(eid, name, _unused_dumpfile):
     print_event(eid, name, "no data")
     return True
 
-# Checkpoint decoder
-def swallow_async_qword(eid, name, dumpfile):
+def decode_eventid(eid, name, dumpfile):
     "Swallow a qword of data without looking at it"
     step_id = read_qword(dumpfile)
-    print("  %s(%d) @ %d" % (name, eid, step_id))
+    print("  %s(%d) id %x" % (name, eid, step_id))
     return True
 
-async_decode_table = [ Decoder(0, "REPLAY_ASYNC_EVENT_BH", swallow_async_qword),
-                       Decoder(1, "REPLAY_ASYNC_INPUT", decode_unimp),
-                       Decoder(2, "REPLAY_ASYNC_INPUT_SYNC", decode_unimp),
-                       Decoder(3, "REPLAY_ASYNC_CHAR_READ", decode_unimp),
-                       Decoder(4, "REPLAY_ASYNC_EVENT_BLOCK", decode_unimp),
-                       Decoder(5, "REPLAY_ASYNC_EVENT_NET", decode_unimp),
+def decode_network(eid, name, dumpfile):
+    "Consume the network event data"
+    event_id = read_byte(dumpfile)
+    event_flags = read_dword(dumpfile)
+    event_data = read_array(dumpfile)
+
+    print("  %s(%d) id %d flags %x %d bytes" % (name, eid, event_id,
+                                                event_flags,
+                                                len(event_data)))
+    return True
+
+async_decode_table = [ Decoder(0, "REPLAY_ASYNC_EVENT_BH", decode_eventid),
+                       Decoder(1, "REPLAY_ASYNC_EVENT_BH_ONESHOT", decode_eventid),
+                       Decoder(2, "REPLAY_ASYNC_INPUT", decode_unimp),
+                       Decoder(3, "REPLAY_ASYNC_INPUT_SYNC", decode_unimp),
+                       Decoder(4, "REPLAY_ASYNC_CHAR_READ", decode_unimp),
+                       Decoder(5, "REPLAY_ASYNC_EVENT_BLOCK", decode_eventid),
+                       Decoder(6, "REPLAY_ASYNC_EVENT_NET", decode_network),
 ]
+
 # See replay_read_events/replay_read_event
 def decode_async(eid, name, dumpfile):
     """Decode an ASYNC event"""
 
     print_event(eid, name)
 
-    async_event_kind = read_byte(dumpfile)
-    async_event_checkpoint = read_byte(dumpfile)
-
-    if async_event_checkpoint != replay_state.current_checkpoint:
-        print("  mismatch between checkpoint %d and async data %d" % (
-            replay_state.current_checkpoint, async_event_checkpoint))
-        return True
+    async_event_kind = eid - 3 # EVENT_ASYNC
 
     return call_decode(async_decode_table, async_event_kind, dumpfile)
 
