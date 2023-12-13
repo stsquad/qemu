@@ -742,7 +742,7 @@ static int virgl_make_context_current(void *opaque, int scanout_idx,
                                    qctx);
 }
 
-static void *virgl_get_egl_display(void *opaque)
+static void *TMP_virgl_get_egl_display(void *opaque)
 {
     return eglGetCurrentDisplay();
 }
@@ -828,8 +828,13 @@ int virtio_gpu_virgl_init(VirtIOGPU *g)
     flags |= VIRGL_RENDERER_RENDER_SERVER;
 #endif
 
+    /*
+     * FIXME:
+     * This might conflict with the code above
+     * Which should be prefered?
+     */
     if (eglGetCurrentDisplay())
-        virtio_gpu_3d_cbs.get_egl_display = virgl_get_egl_display;
+        virtio_gpu_3d_cbs.get_egl_display = TMP_virgl_get_egl_display;
 
     ret = virgl_renderer_init(g, flags, &virtio_gpu_3d_cbs);
     if (ret != 0) {
