@@ -835,9 +835,11 @@ static void virgl_cmd_set_scanout_blob(VirtIOGPU *g,
 #endif /* HAVE_VIRGL_RESOURCE_BLOB */
 
 void virtio_gpu_virgl_process_cmd(VirtIOGPU *g,
-                                      struct virtio_gpu_ctrl_command *cmd)
+                                  struct virtio_gpu_ctrl_command *cmd)
 {
     VIRTIO_GPU_FILL_CMD(cmd->cmd_hdr);
+
+    trace_virtio_gpu_virgl_process_command(cmd->cmd_hdr.type);
 
     virgl_renderer_force_ctx_0();
     switch (cmd->cmd_hdr.type) {

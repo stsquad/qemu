@@ -29,6 +29,9 @@ vmware_update_rect_delayed_flush(void) "display update FIFO full - forcing flush
 # virtio-gpu-base.c
 virtio_gpu_features(bool virgl) "virgl %d"
 
+# virtio-gpu-virgl
+virtio_gpu_virgl_process_command(uint32_t cmd) "cmd: 0x%x"
+
 # virtio-gpu-3d.c
 # virtio-gpu.c
 virtio_gpu_cmd_get_display_info(void) ""
