@@ -1559,6 +1559,9 @@ static void *virtqueue_split_pop(VirtQueue *vq, size_t sz)
             goto done;
         }
 
+#if 1
+	memset(&indirect_desc_cache, 0, sizeof(indirect_desc_cache));
+#endif
         /* loop over the indirect descriptor table */
         len = address_space_cache_init(&indirect_desc_cache, vdev->dma_as,
                                        desc.addr, desc.len, false);
