@@ -1213,8 +1213,12 @@ if not get_option('virglrenderer').auto() or have_system or have_vhost_user_gpu
                                          dependencies: virgl))
     config_host_data.set('HAVE_VIRGL_RESOURCE_BLOB',
                          cc.has_function('virgl_renderer_resource_create_blob',
-                                         prefix: '#include <virglrenderer.h>',
-                                         dependencies: virgl))
+                                          prefix: '#include <virglrenderer.h>',
+                                          dependencies: virgl)
+                         and
+                         cc.has_member('struct virgl_renderer_resource_info', 'fd',
+                                       prefix: '#include <virglrenderer.h>',
+                                       dependencies: virgl))
   endif
 endif
 rutabaga = not_found
