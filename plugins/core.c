@@ -347,17 +347,15 @@ static struct qemu_plugin_dyn_cb *plugin_get_dyn_cb(GArray **arr)
 void plugin_register_inline_op(GArray **arr,
                                enum qemu_plugin_mem_rw rw,
                                enum qemu_plugin_op op,
-                               void *ptr, size_t offset, size_t element_size,
-                               bool direct_ptr,
+                               qemu_plugin_u64_t entry,
                                uint64_t imm)
 {
     struct qemu_plugin_dyn_cb *dyn_cb;
 
     dyn_cb = plugin_get_dyn_cb(arr);
-    dyn_cb->userp = ptr;
-    dyn_cb->inline_element_size = element_size;
-    dyn_cb->inline_offset = offset;
-    dyn_cb->inline_direct_ptr = direct_ptr;
+    dyn_cb->userp = entry.score->data;
+    dyn_cb->inline_element_size = entry.score->element_size;
+    dyn_cb->inline_offset = entry.offset;
     dyn_cb->type = PLUGIN_CB_INLINE;
     dyn_cb->rw = rw;
     dyn_cb->inline_insn.op = op;
@@ -504,11 +502,8 @@ void qemu_plugin_flush_cb(void)
 
 void exec_inline_op(struct qemu_plugin_dyn_cb *cb, int cpu_index)
 {
-    char *ptr = cb->userp;
-    if (!cb->inline_direct_ptr) {
-        ptr = *(char **) cb->userp;
-    }
-    ptr += cb->inline_offset;
+    /* always dereference userp for inline operations */
+    char *ptr = (*(char **) cb->userp) + cb->inline_offset;
     uint64_t *val = (uint64_t *)(ptr + cpu_index * cb->inline_element_size);
 
     switch (cb->inline_insn.op) {

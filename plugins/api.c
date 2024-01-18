@@ -109,9 +109,7 @@ void qemu_plugin_register_vcpu_tb_exec_inline_per_vcpu(
 {
     if (!tb->mem_only) {
         plugin_register_inline_op(&tb->cbs[PLUGIN_CB_INLINE],
-                                  0, op, entry.score->data,
-                                  entry.offset, entry.score->element_size,
-                                  false, imm);
+                                  0, op, entry, imm);
     }
 }
 
@@ -138,9 +136,7 @@ void qemu_plugin_register_vcpu_insn_exec_inline_per_vcpu(
 {
     if (!insn->mem_only) {
         plugin_register_inline_op(&insn->cbs[PLUGIN_CB_INSN][PLUGIN_CB_INLINE],
-                                  0, op, entry.score->data,
-                                  entry.offset, entry.score->element_size,
-                                  false, imm);
+                                  0, op, entry, imm);
     }
 }
 
@@ -167,9 +163,7 @@ void qemu_plugin_register_vcpu_mem_inline_per_vcpu(
     uint64_t imm)
 {
     plugin_register_inline_op(&insn->cbs[PLUGIN_CB_MEM][PLUGIN_CB_INLINE],
-                              rw, op, entry.score->data,
-                              entry.offset, entry.score->element_size,
-                              false, imm);
+                              rw, op, entry, imm);
 }
 
 void qemu_plugin_register_vcpu_tb_trans_cb(qemu_plugin_id_t id,

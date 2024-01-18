@@ -439,11 +439,8 @@ static TCGOp *append_inline_cb(const struct qemu_plugin_dyn_cb *cb,
                                TCGOp *begin_op, TCGOp *op,
                                int *unused)
 {
-    char *ptr = cb->userp;
-    if (!cb->inline_direct_ptr) {
-        /* dereference userp once to get access to memory location */
-        ptr = *(char **)cb->userp;
-    }
+    /* always dereference userp for inline operations */
+    char *ptr = *(char **)cb->userp;
     op = copy_ld_i32(&begin_op, op);
     op = copy_mul_i32(&begin_op, op, cb->inline_element_size);
     op = copy_ext_i32_ptr(&begin_op, op);

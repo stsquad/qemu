@@ -71,8 +71,7 @@ struct qemu_plugin_ctx *plugin_id_to_ctx_locked(qemu_plugin_id_t id);
 void plugin_register_inline_op(GArray **arr,
                                enum qemu_plugin_mem_rw rw,
                                enum qemu_plugin_op op,
-                               void *ptr, size_t offset, size_t element_size,
-                               bool direct_ptr,
+                               qemu_plugin_u64_t entry,
                                uint64_t imm);
 
 void plugin_reset_uninstall(qemu_plugin_id_t id,
