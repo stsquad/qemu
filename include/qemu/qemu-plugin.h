@@ -220,6 +220,23 @@ void qemu_plugin_register_vcpu_resume_cb(qemu_plugin_id_t id,
 struct qemu_plugin_tb;
 /** struct qemu_plugin_insn - Opaque handle for a translated instruction */
 struct qemu_plugin_insn;
+/**
+ * struct qemu_plugin_scoreboard - Opaque handle for a scoreboard
+ *
+ * A scoreboard is an array of data, indexed by vcpu_index.
+ **/
+struct qemu_plugin_scoreboard;
+
+/**
+ * qemu_plugin_u64_t - uint64_t member of an entry in a scoreboard
+ *
+ * This field allows to access a specific uint64_t member in one given entry,
+ * located at a specified offset. Inline operations expect this as entry.
+ */
+typedef struct qemu_plugin_u64 {
+    struct qemu_plugin_scoreboard *score;
+    size_t offset;
+} qemu_plugin_u64_t;
 
 /**
  * enum qemu_plugin_cb_flags - type of callback
@@ -754,5 +771,63 @@ int qemu_plugin_read_register(unsigned int vcpu,
                               struct qemu_plugin_register *handle,
                               GByteArray *buf);
 
+/**
+ * qemu_plugin_scoreboard_new() - alloc a new scoreboard
+ *
+ * Returns a pointer to a new scoreboard. It must be freed using
+ * qemu_plugin_scoreboard_free.
+ */
+QEMU_PLUGIN_API
+struct qemu_plugin_scoreboard *qemu_plugin_scoreboard_new(size_t element_size);
+
+/**
+ * qemu_plugin_scoreboard_free() - free a scoreboard
+ * @score: scoreboard to free
+ */
+QEMU_PLUGIN_API
+void qemu_plugin_scoreboard_free(struct qemu_plugin_scoreboard *score);
+
+/**
+ * qemu_plugin_scoreboard_size() - return size of a scoreboard
+ * @score: scoreboard to query
+ */
+QEMU_PLUGIN_API
+size_t qemu_plugin_scoreboard_size(struct qemu_plugin_scoreboard *score);
+
+/**
+ * qemu_plugin_scoreboard_get() - access value from a scoreboard
+ * @score: scoreboard to query
+ * @vcpu_index: entry index
+ *
+ * Returns address of entry of a scoreboard matching a given vcpu_index. This
+ * address can be modified later if scoreboard is resized.
+ */
+QEMU_PLUGIN_API
+void *qemu_plugin_scoreboard_get(struct qemu_plugin_scoreboard *score,
+                                 unsigned int vcpu_index);
+
+/* Macros to define a qemu_plugin_u64_t */
+#define qemu_plugin_u64(score) \
+    (qemu_plugin_u64_t){score, 0}
+#define qemu_plugin_u64_struct(score, type, member) \
+    (qemu_plugin_u64_t){score, offsetof(type, member)}
+
+/**
+ * qemu_plugin_u64_get() - access specific uint64_t in a scoreboard
+ * @entry: entry to query
+ * @vcpu_index: entry index
+ *
+ * Returns address of a specific member in a scoreboard entry, matching a given
+ * vcpu_index.
+ */
+QEMU_PLUGIN_API
+uint64_t *qemu_plugin_u64_get(qemu_plugin_u64_t entry, unsigned int vcpu_index);
+
+/**
+ * qemu_plugin_u64_sum() - return sum of all values in a scoreboard
+ * @entry: entry to sum
+ */
+QEMU_PLUGIN_API
+uint64_t qemu_plugin_u64_sum(qemu_plugin_u64_t entry);
 
 #endif /* QEMU_QEMU_PLUGIN_H */

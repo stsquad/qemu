@@ -547,3 +547,42 @@ static void __attribute__((__constructor__)) qemu_api_init(void)
     qemu_mutex_init(&reg_handle_lock);
 
 }
+
+struct qemu_plugin_scoreboard *qemu_plugin_scoreboard_new(size_t element_size)
+{
+    return plugin_scoreboard_new(element_size);
+}
+
+void qemu_plugin_scoreboard_free(struct qemu_plugin_scoreboard *score)
+{
+    plugin_scoreboard_free(score);
+}
+
+size_t qemu_plugin_scoreboard_size(struct qemu_plugin_scoreboard *score)
+{
+    return score->size;
+}
+
+void *qemu_plugin_scoreboard_get(struct qemu_plugin_scoreboard *score,
+                                 unsigned int vcpu_index)
+{
+    g_assert(vcpu_index < qemu_plugin_scoreboard_size(score));
+    char *ptr = score->data->data;
+    return ptr + vcpu_index * score->element_size;
+}
+
+uint64_t *qemu_plugin_u64_get(qemu_plugin_u64_t entry,
+                                         unsigned int vcpu_index)
+{
+    char *ptr = (char *) qemu_plugin_scoreboard_get(entry.score, vcpu_index);
+    return (uint64_t *)(ptr + entry.offset);
+}
+
+uint64_t qemu_plugin_u64_sum(qemu_plugin_u64_t entry)
+{
+    uint64_t total = 0;
+    for (int i = 0; i < qemu_plugin_scoreboard_size(entry.score); ++i) {
+        total += *qemu_plugin_u64_get(entry, i);
+    }
+    return total;
+}
