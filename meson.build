@@ -1195,32 +1195,16 @@ if not get_option('zstd').auto() or have_block
                     required: get_option('zstd'),
                     method: 'pkg-config')
 endif
-virgl = not_found
 
 have_vhost_user_gpu = have_tools and host_os == 'linux' and pixman.found()
+
+virgl = not_found
 if not get_option('virglrenderer').auto() or have_system or have_vhost_user_gpu
   virgl = dependency('virglrenderer',
                      method: 'pkg-config',
                      required: get_option('virglrenderer'))
-  if virgl.found()
-    config_host_data.set('HAVE_VIRGL_D3D_INFO_EXT',
-                         cc.has_member('struct virgl_renderer_resource_info_ext', 'd3d_tex2d',
-                                       prefix: '#include <virglrenderer.h>',
-                                       dependencies: virgl))
-    config_host_data.set('HAVE_VIRGL_CONTEXT_CREATE_WITH_FLAGS',
-                         cc.has_function('virgl_renderer_context_create_with_flags',
-                                         prefix: '#include <virglrenderer.h>',
-                                         dependencies: virgl))
-    config_host_data.set('HAVE_VIRGL_RESOURCE_BLOB',
-                         cc.has_function('virgl_renderer_resource_create_blob',
-                                          prefix: '#include <virglrenderer.h>',
-                                          dependencies: virgl)
-                         and
-                         cc.has_member('struct virgl_renderer_resource_info', 'fd',
-                                       prefix: '#include <virglrenderer.h>',
-                                       dependencies: virgl))
-  endif
 endif
+
 rutabaga = not_found
 if not get_option('rutabaga_gfx').auto() or have_system or have_vhost_user_gpu
   rutabaga = dependency('rutabaga_gfx_ffi',
@@ -2272,6 +2256,18 @@ if virgl.found()
                        cc.has_member('struct virgl_renderer_resource_info_ext', 'd3d_tex2d',
                                      prefix: '#include <virglrenderer.h>',
                                      dependencies: virgl))
+    config_host_data.set('HAVE_VIRGL_CONTEXT_CREATE_WITH_FLAGS',
+                         cc.has_function('virgl_renderer_context_create_with_flags',
+                                         prefix: '#include <virglrenderer.h>',
+                                         dependencies: virgl))
+    config_host_data.set('HAVE_VIRGL_RESOURCE_BLOB',
+                         cc.has_function('virgl_renderer_resource_create_blob',
+                                          prefix: '#include <virglrenderer.h>',
+                                          dependencies: virgl)
+                         and
+                         cc.has_member('struct virgl_renderer_resource_info', 'fd',
+                                       prefix: '#include <virglrenderer.h>',
+                                       dependencies: virgl))
 endif
 config_host_data.set('CONFIG_VIRTFS', have_virtfs)
 config_host_data.set('CONFIG_VTE', vte.found())
