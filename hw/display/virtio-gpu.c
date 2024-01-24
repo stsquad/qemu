@@ -1551,6 +1551,8 @@ void virtio_gpu_device_realize(DeviceState *qdev, Error **errp)
 
     g->ctrl_vq = virtio_get_queue(vdev, 0);
     g->cursor_vq = virtio_get_queue(vdev, 1);
+
+    /* if virtio_gpu_virgl_init() fails later this will seg */
     g->ctrl_bh = qemu_bh_new_guarded(virtio_gpu_ctrl_bh, g,
                                      &qdev->mem_reentrancy_guard);
     g->cursor_bh = qemu_bh_new_guarded(virtio_gpu_cursor_bh, g,
