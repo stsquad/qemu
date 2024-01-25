@@ -99,6 +99,12 @@ static bool use_async_cb = true;
 static bool use_per_ctx_fence = true;
 static struct virgl_renderer_callbacks virtio_gpu_3d_cbs;
 static struct virgl_renderer_callbacks virtio_gpu_3d_cbs_egl;
+static void virgl_write_fence_cb(VirtIOGPU *g, uint32_t fence);
+
+struct virgl_aio_data {
+    struct VirtIOGPU *gpu;
+    uint32_t fence;
+};
 
 #if VIRGL_RENDERER_CALLBACKS_VERSION >= 4
 static void *
@@ -981,6 +987,8 @@ static int virtio_gpu_virgl_fence_write(VirtIOGPU *g, uint64_t value)
         return ret;
     }
 
+    virgl_write_fence_cb(g, value);
+
     return 0;
 }
 
@@ -1068,8 +1076,13 @@ virtio_gpu_virgl_read_context_fence(VirtIOGPU *g, uint32_t *ctx_id,
     return 0;
 }
 
-static void virgl_write_fence_async(VirtIOGPU *g, uint32_t fence)
+static void virgl_write_fence_async(void *opaque)
 {
+    struct virgl_aio_data *data = opaque;
+    VirtIOGPU *g = data->gpu;
+    uint32_t fence = data->fence;
+    g_free(data);
+
     if (use_per_ctx_fence)
         virtio_gpu_virgl_write_context_fence(g, 0, 0, fence, false);
     else
@@ -1079,10 +1092,24 @@ static void virgl_write_fence_async(VirtIOGPU *g, uint32_t fence)
 static void virgl_write_fence(void *opaque, uint32_t fence)
 {
     VirtIOGPU *g = opaque;
-    struct virtio_gpu_ctrl_command *cmd, *tmp;
+    struct virgl_aio_data *data;
 
-    if (use_async_cb)
-        return virgl_write_fence_async(g, fence);
+    if (use_async_cb) {
+        data = g_new0(struct virgl_aio_data, 1);
+        data->gpu = g;
+        data->fence = fence;
+        aio_bh_schedule_oneshot(qemu_get_aio_context(),
+                virgl_write_fence_async,
+                data);
+        return;
+    }
+
+    virgl_write_fence_cb(g, fence);
+}
+
+static void virgl_write_fence_cb(VirtIOGPU *g, uint32_t fence)
+{
+    struct virtio_gpu_ctrl_command *cmd, *tmp;
 
     QTAILQ_FOREACH_SAFE(cmd, &g->fenceq, next, tmp) {
         /*
