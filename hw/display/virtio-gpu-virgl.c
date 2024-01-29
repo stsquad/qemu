@@ -857,6 +857,7 @@ static void virgl_cmd_set_scanout_blob(VirtIOGPU *g,
     struct virtio_gpu_framebuffer fb = { 0 };
     struct virtio_gpu_virgl_resource *res;
     struct virtio_gpu_set_scanout_blob ss;
+    int transient_fd = -1;
     uint64_t fbend;
 
     VIRTIO_GPU_FILL_CMD(ss);
@@ -898,6 +899,16 @@ static void virgl_cmd_set_scanout_blob(VirtIOGPU *g,
         return;
     }
     if (res->base.dmabuf_fd < 0) {
+        uint32_t fd_type;
+        if (virgl_renderer_resource_export_blob(ss.resource_id, &fd_type, &transient_fd) == 0 &&
+            fd_type == VIRGL_RENDERER_BLOB_FD_TYPE_DMABUF) {
+            res->base.dmabuf_fd = transient_fd;
+        } else {
+            close(transient_fd);
+            transient_fd = -1;
+        }
+    }
+    if (res->base.dmabuf_fd < 0) {
         qemu_log_mask(LOG_GUEST_ERROR, "%s: resource not backed by dmabuf %d\n",
                       __func__, ss.resource_id);
         cmd->error = VIRTIO_GPU_RESP_ERR_UNSPEC;
@@ -933,10 +944,18 @@ static void virgl_cmd_set_scanout_blob(VirtIOGPU *g,
         qemu_log_mask(LOG_GUEST_ERROR, "%s: failed to update dmabuf\n",
                       __func__);
         cmd->error = VIRTIO_GPU_RESP_ERR_INVALID_PARAMETER;
+        if (res->base.dmabuf_fd == transient_fd) {
+            res->base.dmabuf_fd = -1;
+            close(transient_fd);
+        }
         return;
     }
 
     virtio_gpu_update_scanout(g, ss.scanout_id, &res->base, &fb, &ss.r);
+    if (res->base.dmabuf_fd == transient_fd) {
+        res->base.dmabuf_fd = -1;
+        close(transient_fd);
+    }
 }
 #endif
 
