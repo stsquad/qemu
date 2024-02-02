@@ -1219,8 +1219,12 @@ static int virgl_make_context_current(void *opaque, int scanout_idx,
                                    qctx);
 }
 
+static void *TMP_virgl_get_egl_display(void *opaque)
+{
+    return eglGetCurrentDisplay();
+}
+
 static struct virgl_renderer_callbacks virtio_gpu_3d_cbs = {
-    .version             = 1,
     .version             = 1,
     .write_fence         = virgl_write_fence,
     .create_gl_context   = virgl_create_context,
@@ -1337,6 +1341,14 @@ int virtio_gpu_virgl_init(VirtIOGPU *g)
 #ifdef VIRGL_RENDERER_VENUS
     flags |= VIRGL_RENDERER_VENUS | VIRGL_RENDERER_RENDER_SERVER;
 #endif
+
+    /*
+     * FIXME:
+     * This might conflict with the code above
+     * Which should be prefered?
+     */
+    if (eglGetCurrentDisplay())
+        virtio_gpu_3d_cbs.get_egl_display = TMP_virgl_get_egl_display;
 
     if (use_async_cb)
         flags |= VIRGL_RENDERER_ASYNC_FENCE_CB;
