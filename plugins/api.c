@@ -525,6 +525,7 @@ static GArray *create_register_handles(CPUState *cs, GArray *gdbstub_regs)
 GArray *qemu_plugin_get_registers(unsigned int vcpu)
 {
     CPUState *cs = qemu_get_cpu(vcpu);
+    g_assert(cs == current_cpu);
     if (cs) {
         g_autoptr(GArray) regs = gdb_get_register_list(cs);
         return regs->len ? create_register_handles(cs, regs) : NULL;
