@@ -778,55 +778,112 @@ bool memory_get_xlat_addr(IOMMUTLBEntry *iotlb, void **vaddr,
 typedef struct CoalescedMemoryRange CoalescedMemoryRange;
 typedef struct MemoryRegionIoeventfd MemoryRegionIoeventfd;
 
-/** MemoryRegion:
- *
- * A struct representing a memory region.
+/**
+ * struct MemoryRegion - represents a memory region
  */
 struct MemoryRegion {
+    /** @parent_obj: parent QOM object for the region */
     Object parent_obj;
 
     /* private: */
 
     /* The following fields should fit in a cache line */
+
+    /** @romd_mode: if true ROM devices accessed directly rather than
+     * with @ops */
     bool romd_mode;
+    /** @ram: true if a RAM-type device with a @ram_block */
     bool ram;
+    /** @subpage: true if region covers a subpage */
     bool subpage;
+    /** @readonly: true for RAM-type devices that are readonly */
     bool readonly; /* For RAM regions */
+    /** @nonvolatile: true for nonvolatile RAM-type devices (e.g.
+     * NVDIMM) */
     bool nonvolatile;
+    /** @rom_device: true for a ROM device, see also @romd_mode */
     bool rom_device;
+    /**
+     * @flush_coalesced_mmio: true to flush any queued coalesced MMIO
+     * operations before access
+     */
     bool flush_coalesced_mmio;
+    /**
+     * @unmergeable: this section should not get merged with adjacent
+     * sections
+     */
     bool unmergeable;
+    /**
+     * @dirty_log_mask: dirty events region cares about
+     * (see DIRTY_ flags)
+     */
     uint8_t dirty_log_mask;
+    /** @is_iommu: true if part of an IOMMU device */
     bool is_iommu;
+    /** @ram_block: backing @RamBlock if @ram is true */
     RAMBlock *ram_block;
+
+    /** @owner: base QOM object that owns this region */
     Object *owner;
-    /* owner as TYPE_DEVICE. Used for re-entrancy checks in MR access hotpath */
+    /**
+     * @dev: @owner as TYPE_DEVICE. Device that owns this region
+     * Used for re-entrancy checks in MR access hotpath
+     */
     DeviceState *dev;
 
+    /** @ops: access operations for MMIO or @romd_mode devices */
     const MemoryRegionOps *ops;
+    /** @opaque: @dev specific data, passed with @ops */
     void *opaque;
+    /** @container: parent `MemoryRegion` */
     MemoryRegion *container;
-    int mapped_via_alias; /* Mapped via an alias, container might be NULL */
+    /**
+     * @mapped_via_alias: number of times mapped via @alias,
+     * container might be NULL
+     */
+    int mapped_via_alias;
+    /** @size: size of @MemoryRegion */
     Int128 size;
+    /** @addr: physical hwaddr of @MemoryRegion */
     hwaddr addr;
+    /** @destructor: cleanup function when @MemoryRegion finalized */
     void (*destructor)(MemoryRegion *mr);
+    /** @align: alignment requirements for any physical backing store */
     uint64_t align;
+    /** @terminates: true if this @MemoryRegion is a leaf node */
     bool terminates;
+    /** @ram_device: true if @ram device should use @ops to access */
     bool ram_device;
+    /** @enabled: true once initialised, false once finalized */
     bool enabled;
+    /** @vga_logging_count: count of memory logging clients */
     uint8_t vga_logging_count;
+    /** @alias: link to aliased @MemoryRegion */
     MemoryRegion *alias;
+    /** @alias_offset: offset into aliased region */
     hwaddr alias_offset;
+    /** @priority: priority when resolving overlapping regions */
     int32_t priority;
+    /** @subregions: list of subregions in this region */
     QTAILQ_HEAD(, MemoryRegion) subregions;
+    /** @subregions_link: next subregion in the chain */
     QTAILQ_ENTRY(MemoryRegion) subregions_link;
+    /** @coalesced: list of coalesced memory ranges */
     QTAILQ_HEAD(, CoalescedMemoryRange) coalesced;
+    /** @name: name of memory region */
     const char *name;
+    /** @ioeventfd_nb: count of @ioeventfds for region */
     unsigned ioeventfd_nb;
+    /** @ioeventfds: ioevent notifiers for region */
     MemoryRegionIoeventfd *ioeventfds;
+    /** @rdm: if exists see #RamDiscardManager */
     RamDiscardManager *rdm; /* Only for RAM */
 
-    /* For devices designed to perform re-entrant IO into their own IO MRs */
+    /**
+     * @disable_reentrancy_guard: if true don't error if device
+     * accesses itself. Devices designed to perform re-entrant IO into
+     * their own IO MRs need to set this flag.
+     */
     bool disable_reentrancy_guard;
 };
 
