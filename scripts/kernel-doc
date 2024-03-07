@@ -1174,6 +1174,13 @@ sub dump_struct($$) {
 	$members =~ s/DEFINE_DMA_UNMAP_ADDR\s*\($args\)/dma_addr_t $1/gos;
 	#replace DEFINE_DMA_UNMAP_LEN
 	$members =~ s/DEFINE_DMA_UNMAP_LEN\s*\($args\)/__u32 $1/gos;
+
+	# QEMU Specific Macros
+	# replace QLIST_ENTRY with base type and variable name
+	$members =~ s/QLIST_ENTRY\(([^)]+)\)\s+([^;]+)/$1 \*$2/gos;
+	# replace QLIST_HEAD, optionally capturing an anonymous struct marker, and capture type and variable name
+	$members =~ s/QLIST_HEAD\(\s*,\s*([^)]+)\)\s+([^;]+)/struct { $1 *lh_first; } $2/gos;
+
 	my $declaration = $members;
 
 	# Split nested struct/union elements as newer ones
