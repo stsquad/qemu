@@ -12,6 +12,7 @@
 # guarantees a fresh repository on each job run.
 variables:
   GIT_STRATEGY: clone
+  GIT_FETCH_EXTRA_FLAGS: --no-tags --prune --quiet
 
 # All custom runners can extend this template to upload the testlog
 # data as an artifact and also feed the junit report
