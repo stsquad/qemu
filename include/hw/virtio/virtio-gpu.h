@@ -195,7 +195,6 @@ struct VirtIOGPU {
     uint64_t hostmem;
 
     bool processing_cmdq;
-    QEMUTimer *print_stats;
 
     uint32_t inflight;
     struct {
@@ -233,6 +232,7 @@ struct VirtIOGPUGL {
 
     QEMUBH *cmdq_resume_bh;
     QEMUTimer *fence_poll;
+    QEMUTimer *print_stats;
 };
 
 struct VhostUserGPU {
