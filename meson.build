@@ -1225,7 +1225,8 @@ have_vhost_user_gpu = have_tools and host_os == 'linux' and pixman.found()
 if not get_option('virglrenderer').auto() or have_system or have_vhost_user_gpu
   virgl = dependency('virglrenderer',
                      method: 'pkg-config',
-                     required: get_option('virglrenderer'))
+                     required: get_option('virglrenderer'),
+                     default_options: ['default_library=static', 'venus=true'])
 endif
 rutabaga = not_found
 if not get_option('rutabaga_gfx').auto() or have_system or have_vhost_user_gpu
@@ -2331,6 +2332,10 @@ config_host_data.set('CONFIG_VNC_SASL', sasl.found())
 if virgl.found()
   config_host_data.set('VIRGL_VERSION_MAJOR', virgl.version().split('.')[0])
 endif
+if virgl.type_name().contains('internal')
+  config_host_data.set('HAVE_BUNDLED_VIRGL_SERVER', 1)
+endif
+
 config_host_data.set('CONFIG_VIRTFS', have_virtfs)
 config_host_data.set('CONFIG_VTE', vte.found())
 config_host_data.set('CONFIG_XKBCOMMON', xkbcommon.found())
