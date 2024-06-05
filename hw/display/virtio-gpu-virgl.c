@@ -14,6 +14,7 @@
 #include "qemu/osdep.h"
 #include "qemu/error-report.h"
 #include "qemu/iov.h"
+#include "qemu/cutils.h"
 #include "trace.h"
 #include "hw/virtio/virtio.h"
 #include "hw/virtio/virtio-gpu.h"
@@ -1122,6 +1123,28 @@ void virtio_gpu_virgl_reset(VirtIOGPU *g)
     virgl_renderer_reset();
 }
 
+/*
+ * If we fail to spawn the render server things tend to hang so it is
+ * important to do our due diligence before then. If QEMU has bundled
+ * the virgl server we want to ensure we can run it from the build
+ * directory and if installed.
+ *
+ * The principle way we can override the libvirglrenders behaviour is
+ * by setting environment variables.
+ */
+static void virgl_set_render_env(void)
+{
+#ifdef HAVE_BUNDLED_VIRGL_SERVER
+    g_autofree char *file = get_relocated_path(CONFIG_QEMU_HELPERDIR "/virgl_render_server");
+    if (g_file_test(file, G_FILE_TEST_EXISTS | G_FILE_TEST_IS_EXECUTABLE)) {
+        if (!g_setenv("RENDER_SERVER_EXEC_PATH", file, false)) {
+            warn_report_once("failed to set RENDER_SERVER_EXEC_PATH, virgl may not work");
+        }
+    }
+#endif
+}
+
+
 int virtio_gpu_virgl_init(VirtIOGPU *g)
 {
     int ret;
@@ -1144,6 +1167,9 @@ int virtio_gpu_virgl_init(VirtIOGPU *g)
         flags |= VIRGL_RENDERER_VENUS | VIRGL_RENDERER_RENDER_SERVER;
     }
 #endif
+
+    /* Ensure we can find the render server */
+    virgl_set_render_env();
 
     ret = virgl_renderer_init(g, flags, &virtio_gpu_3d_cbs);
     if (ret != 0) {

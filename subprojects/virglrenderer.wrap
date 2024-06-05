@@ -1,0 +1,6 @@
+[wrap-git]
+url = https://gitlab.freedesktop.org/virgl/virglrenderer.git
+revision = virglrenderer-1.0.1
+
+[provide]
+virglrenderer = libvirglrenderer_dep
