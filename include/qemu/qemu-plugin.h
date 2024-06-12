@@ -670,6 +670,7 @@ void qemu_plugin_register_vcpu_mem_inline_per_vcpu(
  *
  * Returns an opaque handle or NULL if fails
  */
+QEMU_PLUGIN_API
 const void *qemu_plugin_request_time_control(void);
 
 /**
@@ -684,6 +685,7 @@ const void *qemu_plugin_request_time_control(void);
  *
  * Start time is 0.
  */
+QEMU_PLUGIN_API
 void qemu_plugin_update_ns(const void *handle, int64_t time);
 
 typedef void
