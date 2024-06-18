@@ -243,7 +243,11 @@ static void virgl_cmd_create_resource_2d(VirtIOGPU *g,
     args.last_level = 0;
     args.nr_samples = 0;
     args.flags = VIRTIO_GPU_RESOURCE_FLAG_Y_0_TOP;
-    virgl_renderer_resource_create(&args, NULL, 0);
+    int ret = virgl_renderer_resource_create(&args, NULL, 0);
+
+    if (ret != 0) {
+        fprintf(stderr, "%s: failed with %d (%s)\n", __func__, ret, strerror(ret));
+    }
 }
 
 static void virgl_cmd_create_resource_3d(VirtIOGPU *g,
@@ -252,6 +256,7 @@ static void virgl_cmd_create_resource_3d(VirtIOGPU *g,
     struct virtio_gpu_resource_create_3d c3d;
     struct virgl_renderer_resource_create_args args;
     struct virtio_gpu_virgl_resource *res;
+    int ret;
 
     VIRTIO_GPU_FILL_CMD(c3d);
     trace_virtio_gpu_cmd_res_create_3d(c3d.resource_id, c3d.format,
@@ -291,7 +296,12 @@ static void virgl_cmd_create_resource_3d(VirtIOGPU *g,
     args.last_level = c3d.last_level;
     args.nr_samples = c3d.nr_samples;
     args.flags = c3d.flags;
-    virgl_renderer_resource_create(&args, NULL, 0);
+
+    ret = virgl_renderer_resource_create(&args, NULL, 0);
+
+    if (ret != 0) {
+        fprintf(stderr, "%s: failed with %d (%s)\n", __func__, ret, strerror(ret));
+    }
 }
 
 static void virgl_cmd_resource_unref(VirtIOGPU *g,
@@ -567,6 +577,7 @@ static void virgl_resource_attach_backing(VirtIOGPU *g,
     ret = virtio_gpu_create_mapping_iov(g, att_rb.nr_entries, sizeof(att_rb),
                                         cmd, NULL, &res_iovs, &res_niov);
     if (ret != 0) {
+        fprintf(stderr, "%s: failed iov %d\n", __func__, ret);
         cmd->error = VIRTIO_GPU_RESP_ERR_UNSPEC;
         return;
     }
@@ -574,8 +585,10 @@ static void virgl_resource_attach_backing(VirtIOGPU *g,
     ret = virgl_renderer_resource_attach_iov(att_rb.resource_id,
                                              res_iovs, res_niov);
 
-    if (ret != 0)
+    if (ret != 0) {
+        fprintf(stderr, "%s: failed attach iov %d\n", __func__, ret);
         virtio_gpu_cleanup_mapping_iov(g, res_iovs, res_niov);
+    }
 }
 
 static void virgl_resource_detach_backing(VirtIOGPU *g,
