@@ -554,7 +554,7 @@ static void virgl_resource_attach_backing(VirtIOGPU *g,
     int ret;
 
     VIRTIO_GPU_FILL_CMD(att_rb);
-    trace_virtio_gpu_cmd_res_back_attach(att_rb.resource_id);
+    trace_virtio_gpu_cmd_res_back_attach(att_rb.resource_id, att_rb.nr_entries);
 
     ret = virtio_gpu_create_mapping_iov(g, att_rb.nr_entries, sizeof(att_rb),
                                         cmd, NULL, &res_iovs, &res_niov);

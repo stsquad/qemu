@@ -920,7 +920,7 @@ virtio_gpu_resource_attach_backing(VirtIOGPU *g,
 
     VIRTIO_GPU_FILL_CMD(ab);
     virtio_gpu_bswap_32(&ab, sizeof(ab));
-    trace_virtio_gpu_cmd_res_back_attach(ab.resource_id);
+    trace_virtio_gpu_cmd_res_back_attach(ab.resource_id, ab.nr_entries);
 
     res = virtio_gpu_find_resource(g, ab.resource_id);
     if (!res) {

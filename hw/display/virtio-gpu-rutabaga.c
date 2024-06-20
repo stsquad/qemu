@@ -458,7 +458,7 @@ rutabaga_cmd_attach_backing(VirtIOGPU *g, struct virtio_gpu_ctrl_command *cmd)
     VirtIOGPURutabaga *vr = VIRTIO_GPU_RUTABAGA(g);
 
     VIRTIO_GPU_FILL_CMD(att_rb);
-    trace_virtio_gpu_cmd_res_back_attach(att_rb.resource_id);
+    trace_virtio_gpu_cmd_res_back_attach(att_rb.resource_id, att_rb.nr_entries);
 
     res = virtio_gpu_find_resource(g, att_rb.resource_id);
     CHECK(res, cmd);
