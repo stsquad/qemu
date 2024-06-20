@@ -1923,7 +1923,7 @@ static void ram_block_add(RAMBlock *new_block, Error **errp)
     } else { /* list is empty */
         QLIST_INSERT_HEAD_RCU(&ram_list.blocks, new_block, next);
     }
-    ram_list.mru_block = NULL;
+    qatomic_rcu_set(&ram_list.mru_block, NULL);
 
     /* Write list before version */
     smp_wmb();
