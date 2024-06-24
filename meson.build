@@ -1226,7 +1226,8 @@ if not get_option('virglrenderer').auto() or have_system or have_vhost_user_gpu
   virgl = dependency('virglrenderer',
                      method: 'pkg-config',
                      required: get_option('virglrenderer'),
-                     default_options: ['default_library=static', 'venus=true'])
+                     default_options: ['default_library=static',
+                                       'venus=true', 'minigbm_allocation=true'])
 endif
 rutabaga = not_found
 if not get_option('rutabaga_gfx').auto() or have_system or have_vhost_user_gpu
