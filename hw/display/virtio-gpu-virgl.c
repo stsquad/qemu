@@ -524,8 +524,10 @@ static void virgl_cmd_submit_3d(VirtIOGPU *g,
         g->stats.bytes_3d += cs.size;
     }
 
+#ifdef VIRGL_RENDERER_UNSTABLE_APIS
     virgl_renderer_submit_cmd2(buf, cs.hdr.ctx_id, cs.size / 4,
                                in_fences, cs.num_in_fences);
+#endif
 
 out:
     g_free(in_fences);
