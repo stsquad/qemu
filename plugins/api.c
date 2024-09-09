@@ -681,3 +681,21 @@ void qemu_plugin_update_ns(const void *handle, int64_t new_time)
     }
 #endif
 }
+
+/*
+ * gdbstub hooks
+ */
+
+static bool gdbstub_callbacks;
+
+void qemu_plugin_register_gdb_cb(qemu_plugin_id_t id,
+                                 qemu_plugin_udata_cb_t cb,
+                                 void *udata)
+{
+    plugin_register_cb_udata(id, QEMU_PLUGIN_EV_GDBSTUB, cb, udata);
+
+    if (!gdbstub_callbacks) {
+        plugin_register_gdbstub_commands();
+        gdbstub_callbacks = true;
+    }
+}

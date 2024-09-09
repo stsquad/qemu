@@ -66,8 +66,7 @@ static gint addr_order(gconstpointer a, gconstpointer b)
     return na->region_address > nb->region_address ? 1 : -1;
 }
 
-
-static void plugin_exit(qemu_plugin_id_t id, void *p)
+static void plugin_report(qemu_plugin_id_t id, void *p)
 {
     g_autoptr(GString) out = g_string_new("");
 
@@ -81,6 +80,7 @@ static void plugin_exit(qemu_plugin_id_t id, void *p)
     }
     qemu_plugin_outs(out->str);
 
+    g_mutex_lock(&lock);
 
     if (do_region_summary) {
         GList *counts = g_hash_table_get_values(regions);
@@ -105,6 +105,12 @@ static void plugin_exit(qemu_plugin_id_t id, void *p)
         qemu_plugin_outs(out->str);
     }
 
+    g_mutex_unlock(&lock);
+}
+
+static void plugin_exit(qemu_plugin_id_t id, void *p)
+{
+    plugin_report(id, p);
     qemu_plugin_scoreboard_free(counts);
 }
 
@@ -378,6 +384,7 @@ QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id,
         counts, CPUCount, mem_count);
     io_count = qemu_plugin_scoreboard_u64_in_struct(counts, CPUCount, io_count);
     qemu_plugin_register_vcpu_tb_trans_cb(id, vcpu_tb_trans);
+    qemu_plugin_register_gdb_cb(id, plugin_report, NULL);
     qemu_plugin_register_atexit_cb(id, plugin_exit, NULL);
     return 0;
 }

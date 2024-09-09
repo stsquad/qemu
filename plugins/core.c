@@ -23,6 +23,7 @@
 #include "qemu/xxhash.h"
 #include "qemu/rcu.h"
 #include "hw/core/cpu.h"
+#include "gdbstub/commands.h"
 
 #include "exec/exec-all.h"
 #include "exec/tb-flush.h"
@@ -147,6 +148,7 @@ static void plugin_cb__udata(enum qemu_plugin_event ev)
 
     switch (ev) {
     case QEMU_PLUGIN_EV_ATEXIT:
+    case QEMU_PLUGIN_EV_GDBSTUB:
         QLIST_FOREACH_SAFE_RCU(cb, &plugin.cb_lists[ev], entry, next) {
             qemu_plugin_udata_cb_t func = cb->f.udata;
 
@@ -767,4 +769,39 @@ void plugin_scoreboard_free(struct qemu_plugin_scoreboard *score)
 
     g_array_free(score->data, TRUE);
     g_free(score);
+}
+
+/*
+ * gdbstub integration
+ */
+
+static void handle_plugin_cb(GArray *params, void *user_ctx)
+{
+    plugin_cb__udata(QEMU_PLUGIN_EV_GDBSTUB);
+    gdb_put_packet("OK");
+}
+
+enum Command {
+    PluginCallback,
+    NUM_GDB_CMDS
+};
+
+static const GdbCmdParseEntry cmd_handler_table[NUM_GDB_CMDS] = {
+    [PluginCallback] = {
+        .handler = handle_plugin_cb,
+        .cmd_startswith = true,
+        .cmd = "qemu.plugin_cb",
+        .schema = "s?",
+    },
+};
+
+void plugin_register_gdbstub_commands(void)
+{
+    g_autoptr(GPtrArray) set_table = g_ptr_array_new();
+
+    for (int i = 0; i < NUM_GDB_CMDS; i++) {
+        g_ptr_array_add(set_table, (gpointer) &cmd_handler_table[PluginCallback]);
+    }
+
+    gdb_extend_set_table(set_table);
 }

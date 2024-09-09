@@ -118,4 +118,13 @@ struct qemu_plugin_scoreboard *plugin_scoreboard_new(size_t element_size);
 
 void plugin_scoreboard_free(struct qemu_plugin_scoreboard *score);
 
+/**
+ * plugin_register_gdbstub_commands - register gdbstub commands
+ *
+ * This should only be called once to register gdbstub commands so we
+ * can trigger callbacks if needed.
+ */
+void plugin_register_gdbstub_commands(void);
+
+
 #endif /* PLUGIN_H */

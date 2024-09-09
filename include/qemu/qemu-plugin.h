@@ -802,6 +802,22 @@ QEMU_PLUGIN_API
 void qemu_plugin_register_atexit_cb(qemu_plugin_id_t id,
                                     qemu_plugin_udata_cb_t cb, void *userdata);
 
+
+/**
+ * qemu_plugin_register_gdb_cb() - register a gdb callback
+ * @id: plugin ID
+ * @cb: callback
+ * @userdata: user data for callback
+ *
+ * When using the gdbstub to debug a guest you can send a command that
+ * will trigger the callback. This is useful if you want the plugin to
+ * print out collected state at particular points when debugging a
+ * program.
+ */
+QEMU_PLUGIN_API
+void qemu_plugin_register_gdb_cb(qemu_plugin_id_t id,
+                                 qemu_plugin_udata_cb_t cb, void *userdata);
+
 /* returns how many vcpus were started at this point */
 int qemu_plugin_num_vcpus(void);
 
