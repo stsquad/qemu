@@ -9,10 +9,23 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <endian.h>
 #include <stdio.h>
 #include <glib.h>
 
+/*
+ * plugins should not include anything from QEMU aside from the
+ * API header. However the bswap.h header is mostly self
+ * contained that we include it here to avoid code duplication.
+ */
+#define HOST_BIG_ENDIAN (__BYTE_ORDER__ == __ORDER_BIG_ENDIAN__)
+#define HOST_LONG_BITS (__SIZEOF_POINTER__ * 8)
+#ifndef glue
+#define xglue(x, y) x ## y
+#define glue(x, y) xglue(x, y)
+#define stringify(s) tostring(s)
+#define tostring(s) #s
+#endif
+#include <bswap.h>
 #include <qemu-plugin.h>
 
 QEMU_PLUGIN_EXPORT int qemu_plugin_version = QEMU_PLUGIN_VERSION;
@@ -154,33 +167,45 @@ static void update_region_info(uint64_t region, uint64_t offset,
     case QEMU_PLUGIN_MEM_VALUE_U16:
     {
         uint16_t *p = (uint16_t *) &ri->data[offset];
-        uint16_t val = be ? htobe16(value.data.u16) : htole16(value.data.u16);
         if (is_store) {
-            *p = val;
-        } else if (*p != val) {
-            unseen_data = true;
+            if (be) {
+                stw_be_p(p, value.data.u16);
+            } else {
+                stw_le_p(p, value.data.u16);
+            }
+        } else {
+            uint16_t val = be ? lduw_be_p(p) : lduw_le_p(p);
+            unseen_data = val != value.data.u16;
         }
         break;
     }
     case QEMU_PLUGIN_MEM_VALUE_U32:
     {
         uint32_t *p = (uint32_t *) &ri->data[offset];
-        uint32_t val = be ? htobe32(value.data.u32) : htole32(value.data.u32);
         if (is_store) {
-            *p = val;
-        } else if (*p != val) {
-            unseen_data = true;
+            if (be) {
+                stl_be_p(p, value.data.u32);
+            } else {
+                stl_le_p(p, value.data.u32);
+            }
+        } else {
+            uint32_t val = be ? ldl_be_p(p) : ldl_le_p(p);
+            unseen_data = val != value.data.u32;
         }
         break;
     }
     case QEMU_PLUGIN_MEM_VALUE_U64:
     {
         uint64_t *p = (uint64_t *) &ri->data[offset];
-        uint64_t val = be ? htobe64(value.data.u64) : htole64(value.data.u64);
         if (is_store) {
-            *p = val;
-        } else if (*p != val) {
-            unseen_data = true;
+            if (be) {
+                stq_be_p(p, value.data.u64);
+            } else {
+                stq_le_p(p, value.data.u64);
+            }
+        } else {
+            uint64_t val = be ? ldq_be_p(p) : ldq_le_p(p);
+            unseen_data = val != value.data.u64;
         }
         break;
     }
