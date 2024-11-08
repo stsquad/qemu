@@ -15,8 +15,12 @@ fn main() {
     let file = format!("{}/bindings.rs.inc", path);
     if !Path::new(&file).exists() {
         panic!(concat!(
-            "No generated C bindings found! If you want to run `cargo`, start a subshell\n",
-            "with `meson devenv`, or point MESON_BUILD_ROOT to the top of the build tree."
+            "\n",
+            "    No generated C bindings found! To run clippy or rustfmt, you can use\n",
+            "    `make clippy` or `make rustfmt`.\n",
+            "\n",
+            "    For other uses of `cargo`, start a subshell with `meson devenv`, or\n",
+            "    point MESON_BUILD_ROOT to the top of the build tree."
         ));
     }
 
