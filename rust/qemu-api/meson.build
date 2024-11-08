@@ -5,7 +5,7 @@ if rustc.version().version_compare('>=1.77.0')
 endif
 
 _qemu_api_cfg += run_command(rustc_args,
-  '--config-headers', config_host_h,
+  '--config-headers', config_host_h, files('Cargo.toml'),
   capture: true, check: true).stdout().strip().split()
 
 _qemu_api_rs = static_library(
