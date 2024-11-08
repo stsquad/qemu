@@ -120,11 +120,13 @@ if have_rust
 endif
 
 if have_rust
-  rustc_args = find_program('scripts/rust/rustc_args.py')
+  rustc_args = [find_program('scripts/rust/rustc_args.py'),
+    '--workspace', meson.project_source_root() / 'rust']
   rustfmt = find_program('rustfmt', required: false)
 
-  # Prohibit code that is forbidden in Rust 2024
-  rustc_lint_args = ['-D', 'unsafe_op_in_unsafe_fn']
+  rustc_lint_args = run_command(rustc_args,
+     '--lints', files('rust/Cargo.toml'),
+     capture: true, check: true).stdout().strip().splitlines()
 
   # Occasionally, we may need to silence warnings and clippy lints that
   # were only introduced in newer Rust compiler versions.  Do not croak
