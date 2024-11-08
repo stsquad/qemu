@@ -142,6 +142,20 @@ check-system-fedora:
     IMAGE: fedora
     MAKE_CHECK_ARGS: check
 
+check-rust-fedora-rust-nightly:
+  extends: .rust_test_job_template
+  needs:
+    - job: build-system-fedora-rust-nightly
+      artifacts: true
+  variables:
+    IMAGE: fedora-rust-nightly
+    MAKE_CHECK_ARGS: check
+  artifacts:
+    when: on_success
+    expire_in: 2 days
+    paths:
+      - rust/target/doc
+
 functional-system-fedora:
   extends: .functional_test_job_template
   needs:

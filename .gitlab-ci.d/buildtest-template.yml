@@ -79,6 +79,20 @@
     - $MAKE NINJA=":" $MAKE_CHECK_ARGS
     - section_end test
 
+.rust_test_job_template:
+  extends: .base_job_template
+  stage: test
+  image: $CI_REGISTRY_IMAGE/qemu/$IMAGE:$QEMU_CI_CONTAINER_TAG
+  script:
+    - source scripts/ci/gitlab-ci-section
+    - section_start test "Running Rust code checks"
+    - cd build
+    - pyvenv/bin/meson devenv -w ../rust ${CARGO-cargo} fmt --check
+    - make clippy
+    - pyvenv/bin/meson devenv -w ../rust ${CARGO-cargo} doc --no-deps
+    - pyvenv/bin/meson devenv -w ../rust ${CARGO-cargo} test --doc
+    - section_end test
+
 .native_test_job_template:
   extends: .common_test_job_template
   artifacts:
