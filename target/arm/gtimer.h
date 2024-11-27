@@ -15,7 +15,9 @@ enum {
     GTIMER_HYP      = 2, /* EL2 physical timer */
     GTIMER_SEC      = 3, /* EL3 physical timer */
     GTIMER_HYPVIRT  = 4, /* EL2 virtual timer */
-#define NUM_GTIMERS   5
+    GTIMER_SEC_PEL2 = 5, /* Secure EL2 physical timer */
+    GTIMER_SEC_VEL2 = 6, /* Secure EL2 virtual timer */
+#define NUM_GTIMERS   7
 };
 
 #endif
