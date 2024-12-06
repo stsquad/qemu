@@ -170,10 +170,10 @@ void qvirtio_wait_queue_isr(QTestState *qts, QVirtioDevice *d,
     gint64 start_time = g_get_monotonic_time();
 
     for (;;) {
-        qtest_clock_step(qts, 100);
         if (d->bus->get_queue_isr_status(d, vq)) {
             return;
         }
+        qtest_clock_step(qts, 100);
         g_assert(g_get_monotonic_time() - start_time <= timeout_us);
     }
 }
@@ -192,8 +192,8 @@ uint8_t qvirtio_wait_status_byte_no_isr(QTestState *qts, QVirtioDevice *d,
     uint8_t val;
 
     while ((val = qtest_readb(qts, addr)) == 0xff) {
-        qtest_clock_step(qts, 100);
         g_assert(!d->bus->get_queue_isr_status(d, vq));
+        qtest_clock_step(qts, 100);
         g_assert(g_get_monotonic_time() - start_time <= timeout_us);
     }
     return val;
@@ -219,7 +219,6 @@ void qvirtio_wait_used_elem(QTestState *qts, QVirtioDevice *d,
     for (;;) {
         uint32_t got_desc_idx;
 
-        qtest_clock_step(qts, 100);
 
         if (d->bus->get_queue_isr_status(d, vq) &&
             qvirtqueue_get_buf(qts, vq, &got_desc_idx, len)) {
@@ -227,6 +226,7 @@ void qvirtio_wait_used_elem(QTestState *qts, QVirtioDevice *d,
             return;
         }
 
+        qtest_clock_step(qts, 100);
         g_assert(g_get_monotonic_time() - start_time <= timeout_us);
     }
 }
