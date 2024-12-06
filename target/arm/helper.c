@@ -2465,16 +2465,27 @@ static void gt_recalc_timer(ARMCPU *cpu, int timeridx)
     ARMGenericTimer *gt = &cpu->env.cp15.c14_timer[timeridx];
 
     if (gt->ctl & 1) {
+        uint64_t count = gt_get_countervalue(&cpu->env);
+        uint64_t offset;
+        uint64_t nexttick;
+        int istatus;
+
         /*
          * Timer enabled: calculate and set current ISTATUS, irq, and
          * reset timer to when ISTATUS next has to change
          */
-        uint64_t offset = timeridx == GTIMER_VIRT ?
-            cpu->env.cp15.cntvoff_el2 : gt_phys_raw_cnt_offset(&cpu->env);
-        uint64_t count = gt_get_countervalue(&cpu->env);
+        switch (timeridx) {
+        case GTIMER_VIRT:
+        case GTIMER_HYPVIRT:
+            offset = cpu->env.cp15.cntvoff_el2;
+            break;
+        default:
+            offset =gt_phys_raw_cnt_offset(&cpu->env);
+            break;
+        }
+
         /* Note that this must be unsigned 64 bit arithmetic: */
-        int istatus = count - offset >= gt->cval;
-        uint64_t nexttick;
+        istatus = count - offset >= gt->cval;
 
         gt->ctl = deposit32(gt->ctl, 2, 1, istatus);
 
